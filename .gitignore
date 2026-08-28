@@ -1,0 +1,36 @@
+# --- common ---
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+*.iml
+
+# --- backend (java/gradle) ---
+backend/build/
+backend/.gradle/
+backend/out/
+
+# --- ai (python) ---
+ai/.venv/
+ai/__pycache__/
+ai/**/__pycache__/
+ai/.pytest_cache/
+ai/*.egg-info/
+
+# --- web / mobile (node) ---
+web/node_modules/
+web/dist/
+mobile/node_modules/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/.gradle/
+mobile/ios/Pods/
+mobile/ios/build/
+mobile/vendor/
+mobile/.bundle/
+mobile/*.keystore
+!mobile/debug.keystore
