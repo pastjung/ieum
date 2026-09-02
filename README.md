@@ -177,3 +177,9 @@ flowchart TB
 ## 데이터 출처
 
 > 국립국어원(2025). *국립국어원 묵자-점자 병렬 말뭉치 2025* (버전 1.0). 2026-06-30 공개. [국립국어원 모두의 말뭉치](https://kli.korean.go.kr/corpus)
+
+## 협업 규칙
+
+- [저장소 폴더 구조](./docs/conventions/repository-structure.md)
+- [Git 브랜치 전략](./docs/conventions/git-branch-strategy.md)
+- [Git 커밋 전략](./docs/conventions/git-commit-convention.md)
