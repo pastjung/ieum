@@ -65,6 +65,10 @@ S15P21B201/
 │
 ├─ docs/
 │  ├─ conventions/
+│  │  ├─ repository-structure.md
+│  │  ├─ git-branch-strategy.md
+│  │  ├─ git-commit-convention.md
+│  │  └─ gitlab-settings.md
 │  └─ images/
 │
 ├─ .editorconfig
@@ -99,7 +103,7 @@ GitLab에서 템플릿을 인식하려면 해당 파일이 기본 브랜치에 �
 
 ### `docs/`
 
-- `conventions`: 폴더, 브랜치, 커밋 등 팀 규칙
+- `conventions`: 폴더, 브랜치, 커밋, GitLab 프로젝트 설정 등 팀 규칙
 - `images`: 문서에서 사용하는 이미지
 
 ## 4. 루트 파일 원칙

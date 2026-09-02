@@ -89,7 +89,7 @@ dev
 1. `dev`에서 `feat/450-user`를 생성한다.
 2. 상위 브랜치에서 각 하위 작업 브랜치를 생성한다.
 3. 하위 작업은 `feat/450-user`를 대상으로 MR을 생성한다.
-4. MR 승인과 검증이 끝나면 하위 브랜치를 병합하고 즉시 삭제한다.
+4. MR 리뷰와 검증이 끝나면 하위 브랜치를 병합하고 즉시 삭제한다.
 5. 모든 하위 작업이 완료되면 `feat/450-user`를 `dev`로 병합한다.
 6. 상위 브랜치도 병합 직후 삭제한다.
 
@@ -173,20 +173,19 @@ main
 
 ## 9. 보호 및 병합 규칙
 
-| 대상 | 병합 권한 | push 권한 | 최소 검토 |
-| --- | --- | --- | --- |
-| `main` | Maintainer | No one | 2명 |
-| `dev` | Developer + Maintainer | No one | 1명 |
-| `release/*` | Maintainer 또는 릴리스 담당자 | No one | 1명 이상 |
-| `v*`, `app-v*` 태그 | Maintainer | Maintainer | 릴리스 확인 |
+| 대상 | Allowed to merge | Allowed to push and merge | Force push |
+| --- | --- | --- | :---: |
+| `main` | Maintainers | No one | 사용하지 않음 |
+| `dev` | Developers + Maintainers | No one | 사용하지 않음 |
+| `release/*` | Maintainers | No one | 사용하지 않음 |
 
-GitLab 버전이나 라이선스에서 승인 인원 강제를 지원하지 않으면 같은 기준을 팀 규칙으로 적용한다.
+현재 GitLab 환경에서는 Merge Request Approvals 기능을 제공하지 않으므로 승인 인원을 시스템으로 강제하지 않는다. 리뷰어가 변경 사항을 확인하고 모든 리뷰 스레드를 해결한 후 병합한다. 세부 GitLab 설정은 [GitLab 프로젝트 설정](./gitlab-settings.md)을 따른다.
 
 MR 병합 전 다음 조건을 확인한다.
 
 - 이슈 기반 작업이면 관련 이슈가 연결되어 있다.
 - 테스트 또는 파이프라인이 성공했다.
-- 리뷰어 승인이 완료되었다.
+- 리뷰어가 변경 사항을 확인했고 미해결 스레드가 없다.
 - 충돌이 해결되었다.
 - 필요한 문서와 테스트가 변경 사항에 포함되어 있다.
 - `Delete source branch`가 선택되어 있다.
