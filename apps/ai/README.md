@@ -7,11 +7,12 @@
 ```bash
 python -m venv .venv
 .venv\Scripts\activate          # Windows  (mac/linux: source .venv/bin/activate)
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # 운영 의존성(requirements.txt) + pytest 등 개발 도구
 uvicorn app.main:app --reload --port 8000
 ```
 
 - Swagger: `http://localhost:8000/docs`
+- 전체 스택 통합 실행(컨테이너): 루트에서 `docker compose up --build --watch` — [docs/infra/docker.md](../../docs/infra/docker.md)
 - Health: `GET /api/v1/health`
 - 변환: `POST /api/v1/convert/braille` `{ "text": "가나다" }`
 
