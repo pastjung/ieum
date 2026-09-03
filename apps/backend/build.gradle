@@ -39,6 +39,9 @@ dependencies {
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
+    // dev: 클래스패스 변경 시 자동 재시작. developmentOnly라 bootJar(운영 이미지)에는 포함되지 않는다
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
     // test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
