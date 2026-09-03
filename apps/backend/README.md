@@ -14,6 +14,8 @@
 ./gradlew bootRun --args='--spring.profiles.active=prod'
 ```
 
+- spring-boot-devtools 적용: 코드 재컴파일 시 애플리케이션 자동 재시작 (IntelliJ에서는 Build Project(Ctrl+F9) 시 반영)
+- 전체 스택 통합 실행(컨테이너): 루트에서 `docker compose up --build --watch` — [docs/infra/docker.md](../../docs/infra/docker.md)
 - Health check: `GET http://localhost:8080/api/v1/health`
 - 회원가입 예시: `POST http://localhost:8080/api/v1/auth/signup`
 - H2 콘솔(local): `http://localhost:8080/api/v1/h2-console`

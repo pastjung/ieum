@@ -10,6 +10,8 @@ npm run dev        # http://localhost:5173  (/api → localhost:8080 프록시)
 npm run build      # 타입체크 + 프로덕션 빌드
 ```
 
+전체 스택 통합 실행(컨테이너): 루트에서 `docker compose up --build --watch` — [docs/infra/docker.md](../../docs/infra/docker.md)
+
 ## DDD 지향 구조
 
 ```
