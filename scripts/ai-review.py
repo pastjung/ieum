@@ -103,13 +103,14 @@ def review(diff: str, conventions: str) -> str:
         "규칙: diff에 보이는 것만 근거로 삼고 추측은 추측이라고 표시한다. 사소한 스타일 지적은 3개 이하로 제한한다."
     )
     body = {
-        "model": os.environ.get("GMS_MODEL", "gpt-4o"),
+        "model": os.environ.get("GMS_MODEL", "gpt-5.4-mini"),
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": f"MR diff:\n\n{diff}"},
         ],
-        "temperature": 0.2,
-        "max_tokens": 1500,
+        # GPT-5 계열은 max_tokens를 거부하고 max_completion_tokens를 요구하며,
+        # temperature도 기본값 외에는 거부한다 — 그래서 temperature는 지정하지 않는다.
+        "max_completion_tokens": 2000,
     }
     req = urllib.request.Request(
         os.environ["GMS_URI"],
@@ -117,8 +118,13 @@ def review(diff: str, conventions: str) -> str:
         headers={"Authorization": f"Bearer {os.environ['GMS_API_KEY']}", "Content-Type": "application/json"},
         data=json.dumps(body).encode(),
     )
-    with urllib.request.urlopen(req, timeout=120) as res:
-        data = json.loads(res.read())
+    try:
+        with urllib.request.urlopen(req, timeout=120) as res:
+            data = json.loads(res.read())
+    except urllib.error.HTTPError as e:
+        # 원인 진단을 위해 에러 응답 본문을 로그에 남긴다
+        print(f"GMS 에러 {e.code}: {e.read().decode('utf-8', 'replace')[:1000]}", file=sys.stderr)
+        raise
     return data["choices"][0]["message"]["content"]
 
 
