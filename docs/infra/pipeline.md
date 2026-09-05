@@ -65,6 +65,8 @@ git diff --name-only origin/<대상브랜치>...HEAD | grep -q '^apps/backend/'
 | Ignore WIP Merge Requests | **해제** | Draft MR도 검증 대상 (기본값은 켜짐 — 아래 트러블슈팅) |
 | Target Branch Regex | `^(dev\|main\|release\/.+)$` | dev·main·release 대상 MR만 검증. 하위 작업 → 상위 feat MR은 제외 (자원 절약, dev 진입 시 재검증됨) |
 
+표의 `\|`는 마크다운 표 렌더링을 위한 이스케이프다 — Jenkins에 실제로 입력하는 값은 `^(dev|main|release\/.+)$` (파이프 문자 그대로).
+
 GitLab 쪽: Webhook(Merge request events만, Secret token 포함) + 커밋 상태 회신용 GitLab 연결(`ssafy-gitlab`, Manage Jenkins → System).
 
 ### 2.5 Credentials (jenkins.md 6절의 계약 표 참조)
