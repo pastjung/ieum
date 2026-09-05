@@ -15,7 +15,6 @@ pipeline {
     agent any
 
     options {
-        gitLabConnection('ssafy-gitlab')
         disableConcurrentBuilds()            // 배포 중 배포 금지 (.env/inc 동시 수정 방지)
         timestamps()
         timeout(time: 40, unit: 'MINUTES')
@@ -79,13 +78,49 @@ pipeline {
 
                     env.DEPLOY_SERVICES = services.join(' ')
                     currentBuild.description = "${env.DEPLOY_TAG} → [${env.DEPLOY_SERVICES}]"
-                    updateGitlabCommitStatus name: 'deploy', state: 'running'
                     echo "배포 계획: [${env.DEPLOY_SERVICES}] 태그 ${env.DEPLOY_TAG}"
                 }
             }
         }
 
-        // ── 2. 이미지 빌드 (호스트 Docker 저장소에 남는다 = 롤백 지점) ──
+        // ── 2. 인프라 파일 동기화 — repo가 원본, 서버 사본을 매 배포마다 갱신 ──
+        //    제외: .env(비밀값, 서버가 원본), nginx/inc(활성 슬롯 상태, 서버가 원본),
+        //          deploy/jenkins(배포 중 자기 재생성 불가 — 수동 반영)
+        stage('Sync') {
+            when { expression { env.DEPLOY_SERVICES } }
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-deploy-key',
+                                                   keyFileVariable: 'SSH_KEY',
+                                                   usernameVariable: 'SSH_USER')]) {
+                    sh """
+                        scp -i "\$SSH_KEY" -o StrictHostKeyChecking=accept-new \\
+                            deploy/docker-compose.prod.yml \\
+                            "\$SSH_USER"@${DEPLOY_HOST}:/home/ubuntu/app/
+                        scp -i "\$SSH_KEY" scripts/deploy.sh scripts/cleanup-images.sh \\
+                            "\$SSH_USER"@${DEPLOY_HOST}:/home/ubuntu/app/scripts/
+                        scp -i "\$SSH_KEY" deploy/nginx/itda.conf deploy/nginx/connection-upgrade.conf \\
+                            "\$SSH_USER"@${DEPLOY_HOST}:/tmp/
+                        ssh -i "\$SSH_KEY" "\$SSH_USER"@${DEPLOY_HOST} '
+                            set -e
+                            chmod +x /home/ubuntu/app/scripts/*.sh
+                            sudo cp /etc/nginx/sites-available/itda /tmp/itda.rollback
+                            sudo cp /tmp/itda.conf /etc/nginx/sites-available/itda
+                            sudo cp /tmp/connection-upgrade.conf /etc/nginx/conf.d/connection-upgrade.conf
+                            if sudo nginx -t; then
+                                sudo systemctl reload nginx
+                            else
+                                echo "[sync] nginx 설정 오류 — 이전 설정으로 복원하고 배포를 중단한다"
+                                sudo cp /tmp/itda.rollback /etc/nginx/sites-available/itda
+                                exit 1
+                            fi
+                            rm -f /tmp/itda.conf /tmp/connection-upgrade.conf /tmp/itda.rollback
+                        '
+                    """
+                }
+            }
+        }
+
+        // ── 3. 이미지 빌드 (호스트 Docker 저장소에 남는다 = 롤백 지점) ──
         stage('Build') {
             when { expression { env.DEPLOY_SERVICES } }
             steps {
@@ -97,7 +132,7 @@ pipeline {
             }
         }
 
-        // ── 3. 자기 호스트에 SSH로 접속해 deploy.sh 실행 (blue-green) ──
+        // ── 4. 자기 호스트에 SSH로 접속해 deploy.sh 실행 (blue-green) ──
         stage('Deploy') {
             when { expression { env.DEPLOY_SERVICES } }
             steps {
@@ -116,17 +151,28 @@ pipeline {
                 }
             }
         }
+
+        // ── 5. 이미지 보존 정책 집행 (rc/v* 각 최근 3개 유지) ──────────
+        //    실패해도 배포는 이미 끝났으므로 빌드를 실패시키지 않는다.
+        stage('Cleanup') {
+            when { expression { env.DEPLOY_SERVICES } }
+            steps {
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'ec2-deploy-key',
+                                                       keyFileVariable: 'SSH_KEY',
+                                                       usernameVariable: 'SSH_USER')]) {
+                        sh """
+                            ssh -i "\$SSH_KEY" -o StrictHostKeyChecking=accept-new \\
+                                "\$SSH_USER"@${DEPLOY_HOST} \\
+                                /home/ubuntu/app/scripts/cleanup-images.sh
+                        """
+                    }
+                }
+            }
+        }
     }
 
-    post {
-        success {
-            script { if (env.DEPLOY_SERVICES) updateGitlabCommitStatus name: 'deploy', state: 'success' }
-        }
-        failure {
-            script { if (env.DEPLOY_SERVICES) updateGitlabCommitStatus name: 'deploy', state: 'failed' }
-        }
-        aborted {
-            script { if (env.DEPLOY_SERVICES) updateGitlabCommitStatus name: 'deploy', state: 'canceled' }
-        }
-    }
+    // 참고: GitLab 커밋 상태 회신은 하지 않는다 — 보호 브랜치/태그에는 현재 토큰
+    // 권한(Developer)으로 기록할 수 없고(403), 배포 이력의 원본은 Jenkins 빌드
+    // 기록이다. 결과 알림은 Mattermost 스테이지가 담당한다 (post 블록에 추가 예정).
 }
