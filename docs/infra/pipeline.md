@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-이 문서는 Jenkins 파이프라인의 구성과 동작, 설정 방법을 정의한다. 현재 구현된 것은 MR 검증 파이프라인이며, AI 코드리뷰·배포·롤백 파이프라인은 구현되는 대로 이 문서에 추가한다.
+이 문서는 Jenkins 파이프라인의 구성과 동작, 설정 방법을 정의한다. MR 검증(+AI 코드리뷰)·배포·롤백 파이프라인이 모두 운영 중이며, 처음부터 재현하는 절차는 7절에 있다.
 
 전체 트리거 설계 (계획 포함):
 
@@ -23,7 +23,7 @@ MR 생성/커밋 추가 (GitLab)
   → Jenkins 잡 itda-mr-verify
       1. Changes  : MR 대상 브랜치와의 git diff로 변경 서비스 판별
       2. Verify   : 변경된 서비스만 병렬로 docker build --target test
-      3. (예정) AI Review
+      3. AI Review : GMS 코드리뷰 → MR 코멘트 (비차단, 4절)
   → 결과를 GitLab 커밋 상태 'verify'로 회신 → MR 화면에 ✅/❌ 표시
 ```
 
@@ -63,7 +63,7 @@ git diff --name-only origin/<대상브랜치>...HEAD | grep -q '^apps/backend/'
 | Lightweight checkout | 해제 | 변수 브랜치와 궁합 문제 방지 |
 | Trigger | Opened MR Events + Rebuild on push to source branch | MR 생성·커밋 추가 시 실행 |
 | Ignore WIP Merge Requests | **해제** | Draft MR도 검증 대상 (기본값은 켜짐 — 아래 트러블슈팅) |
-| Target Branch Regex | `^(dev|main|release\/.+)$` | dev·main·release 대상 MR만 검증. 하위 작업 → 상위 feat MR은 제외 (자원 절약, dev 진입 시 재검증됨) |
+| Target Branch Regex | `^(dev\|main\|release\/.+)$` | dev·main·release 대상 MR만 검증. 하위 작업 → 상위 feat MR은 제외 (자원 절약, dev 진입 시 재검증됨) |
 
 GitLab 쪽: Webhook(Merge request events만, Secret token 포함) + 커밋 상태 회신용 GitLab 연결(`ssafy-gitlab`, Manage Jenkins → System).
 
@@ -217,3 +217,53 @@ GitLab Webhook(`jenkins-deploy`): Push events(Wildcard `release/*`) + Tag push e
 | --- | --- | --- |
 | 배포 직후 문제 발견 | 서버에서 Nginx 포트 되돌리기 (대기 슬롯 즉시 복귀) | 수 초 |
 | 며칠 뒤 / 몇 버전 전으로 | `itda-rollback` 잡 (또는 서버에서 deploy.sh 직접) | 1~2분 |
+
+
+## 7. 처음부터 재현하는 순서 (체크리스트)
+
+Jenkins가 완전히 초기화됐거나 새로 구축할 때, 이 순서대로 하면 파이프라인 전체가 복원된다. 전제: jenkins.md의 설치(컨테이너 기동 + 초기 설정 + GitLab 플러그인)와 deploy.md 5절의 서버 초기 배치가 끝난 상태.
+
+### 7.1 GitLab 토큰 발급 (GitLab → Settings → Access tokens)
+
+| 토큰 이름 | scope | role | 쓰이는 곳 |
+| --- | --- | --- | --- |
+| `jenkins-repository-read` | read_repository | Developer | Jenkins checkout |
+| `jenkins-api` | api | Developer | 커밋 상태 회신, AI 리뷰 코멘트 |
+
+만료일(최대 4주 후)을 팀 일정에 기록한다. 만료 증상: Jenkins checkout 인증 실패 / MR에 verify가 안 붙음.
+
+### 7.2 Jenkins Credentials 등록 (Manage Jenkins → Credentials → System → Global)
+
+jenkins.md 6절의 계약 표대로 5개를 등록한다. ID가 Jenkinsfile과의 계약이므로 철자까지 정확해야 한다: `gitlab-repository-read`(Username with password, username `oauth2`), `gitlab-api-token`(GitLab API token), `gitlab-api-token-text`(Secret text, 같은 값), `gms-api-key`(Secret text), `ec2-deploy-key`(SSH Username with private key, username `ubuntu` — 발급 절차는 5.3절).
+
+### 7.3 GitLab 연결 (Manage Jenkins → System → GitLab)
+
+Connection name `ssafy-gitlab`, URL `https://lab.ssafy.com`, Credentials `gitlab-api-token`. Test Connection의 403은 무시하고 저장한다 (트러블슈팅 참조).
+
+### 7.4 잡 3개 생성 (New Item → Pipeline)
+
+공통: Pipeline script from SCM · Git · URL `https://lab.ssafy.com/s15-bigdata-recom-sub1/S15P21B201.git` · Credentials `gitlab-repository-read` · Lightweight checkout 해제.
+
+| 잡 이름 | Branch Specifier | Script Path | 트리거 |
+| --- | --- | --- | --- |
+| `itda-mr-verify` | `origin/${gitlabSourceBranch}` | `Jenkinsfile.mr` | Opened MR Events + Rebuild on push to source branch, Ignore WIP 해제, Target Branch Regex `^(dev\|main\|release\/.+)$`, Secret token Generate |
+| `itda-deploy` | `${gitlabBranch}` | `Jenkinsfile` | Push Events만, Secret token Generate |
+| `itda-rollback` | `origin/dev` | `Jenkinsfile.rollback` | 없음 (수동 전용) |
+
+itda-rollback은 생성 후 "지금 빌드"를 한 번 실행해 파라미터 정의를 잡에 반영시킨다 (첫 실행은 태그 목록 출력 후 실패가 정상).
+
+### 7.5 GitLab 웹훅 2개 (Settings → Webhooks)
+
+| 이름 | URL | Trigger | Secret token |
+| --- | --- | --- | --- |
+| `jenkins-mr-verify` | `https://j15b201.p.ssafy.io/jenkins/project/itda-mr-verify` | Merge request events | itda-mr-verify의 것 |
+| `jenkins-deploy` | `https://j15b201.p.ssafy.io/jenkins/project/itda-deploy` | Push events (Wildcard `release/*`) + Tag push events | itda-deploy의 것 |
+
+각 웹훅 저장 후 Test → Push events로 200 확인. 403이면 Secret token 불일치(트러블슈팅 참조).
+
+### 7.6 동작 확인
+
+1. 아무 브랜치에서 dev 대상 MR 생성 → MR에 verify 상태가 붙는가
+2. 웹 UI에서 release 브랜치 생성 → itda-deploy가 돌고 서비스가 배포되는가
+3. itda-rollback을 TAG 비운 채 실행 → 태그 목록이 출력되는가
+
