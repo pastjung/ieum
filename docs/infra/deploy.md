@@ -158,7 +158,7 @@ EC2의 앱 디렉토리 구조. repo의 `deploy/`, `scripts/`가 원본이고, E
 ├── .env                        # 서버에만 존재 (태그, RDS 접속 정보 — Git 금지)
 ├── nginx/inc/                  # blue/green 활성 포트 (deploy.sh가 갱신)
 │   ├── web.inc  backend.inc  ai.inc
-└── scripts/deploy.sh           # repo scripts/ 사본
+└── scripts/                    # repo scripts/ 사본 (deploy.sh, cleanup-images.sh)
 ```
 
 호스트 Nginx 쪽 파일 두 개는 root 영역에 배치한다.
@@ -177,7 +177,7 @@ mkdir -p /home/ubuntu/app/nginx/inc /home/ubuntu/app/scripts
 # 본인 PC의 repo 루트에서 — 파일 전송
 scp -i <pem> deploy/docker-compose.prod.yml ubuntu@j15b201.p.ssafy.io:/home/ubuntu/app/
 scp -i <pem> deploy/nginx/inc/*.inc ubuntu@j15b201.p.ssafy.io:/home/ubuntu/app/nginx/inc/
-scp -i <pem> scripts/deploy.sh ubuntu@j15b201.p.ssafy.io:/home/ubuntu/app/scripts/
+scp -i <pem> scripts/deploy.sh scripts/cleanup-images.sh ubuntu@j15b201.p.ssafy.io:/home/ubuntu/app/scripts/
 scp -i <pem> deploy/nginx/itda.conf deploy/nginx/connection-upgrade.conf ubuntu@j15b201.p.ssafy.io:/home/ubuntu/
 
 # EC2에서 — Nginx 설정 배치 (certbot이 만든 임시 설정을 최종본으로 교체)
@@ -185,7 +185,7 @@ sudo mv ~/connection-upgrade.conf /etc/nginx/conf.d/
 sudo cp ~/itda.conf /etc/nginx/sites-available/itda
 sudo nginx -t                    # 반드시 통과 확인 후
 sudo systemctl reload nginx
-chmod +x /home/ubuntu/app/scripts/deploy.sh
+chmod +x /home/ubuntu/app/scripts/*.sh
 ```
 
 이 시점에 `https://j15b201.p.ssafy.io`는 **502를 반환하는 것이 정상**이다 — 라우팅은 동작하지만 컨테이너가 아직 없는 상태이며, 6절의 첫 배포로 해소된다.
@@ -215,7 +215,7 @@ sudo systemctl reload nginx      # 무중단 반영
 
 `nginx -t`가 안전장치다. 새 설정이 잘못돼도 검증에서 걸리고 기존 설정으로 계속 동작하며, reload는 진행 중인 연결을 끊지 않는다.
 
-**자동화 계획 (4단계):** Jenkins 배포 파이프라인에 `deploy/nginx/**` 변경 감지 조건을 추가해 위 반영 절차(복사 → 검증 → reload)를 자동 수행하게 한다. 그러면 "repo 수정 → 병합 → 자동 반영"으로 닫혀 사람이 반영을 잊어 생기는 드리프트가 구조적으로 사라진다. 설정을 무엇으로 바꿀지는 그때도 여전히 MR이 통제하며, 자동화되는 것은 기계적인 반영 절차뿐이다.
+**자동화 완료 (4단계):** Jenkins 배포 파이프라인의 Sync 스테이지가 매 배포마다 위 반영 절차(복사 → `nginx -t` 검증 → reload, 실패 시 이전 설정 복원)를 자동 수행한다 — compose·scripts도 함께 동기화된다 (pipeline.md 5.1절). "repo 수정 → 병합 → release 배포 시 자동 반영"으로 닫혀 사람이 반영을 잊어 생기는 드리프트가 구조적으로 사라졌다. 설정을 무엇으로 바꿀지는 여전히 MR이 통제하며, 자동화된 것은 기계적인 반영 절차뿐이다. 이 절의 수동 절차는 최초 배치와 비상시(Jenkins 장애)용으로 유지한다.
 
 ## 6. 첫 수동 배포
 

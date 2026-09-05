@@ -10,8 +10,8 @@
 | --- | --- | --- | --- |
 | MR 검증 (`itda-mr-verify`) | MR 생성·갱신 (대상: dev/main/release) | 변경 서비스만 테스트, 결과를 MR에 회신 | ✅ 운영 중 |
 | AI 코드리뷰 | MR 검증 파이프라인의 스테이지 | GMS로 diff 리뷰, MR 코멘트 작성 (비차단) | ✅ 운영 중 |
-| 배포 | `release/*` push, `v*` tag | 변경 서비스 빌드 → blue-green 배포 | 예정 |
-| 롤백 | 수동 (서비스, 태그 파라미터) | 보관된 이미지로 재배포 | 예정 |
+| 배포 (`itda-deploy`) | `release/*` push, `v*` tag | 변경 서비스 빌드 → blue-green 배포 | ✅ 운영 중 |
+| 롤백 (`itda-rollback`) | 수동 (서비스, 태그 파라미터) | 보관된 이미지로 재배포 | ✅ 운영 중 |
 
 ## 2. MR 검증 파이프라인 (`Jenkinsfile.mr`)
 
@@ -89,6 +89,12 @@ GitLab 쪽: Webhook(Merge request events만, Secret token 포함) + 커밋 상�
 
 **Jenkins 설정 폼에서 "No valid crumb" 403** → CSRF 토큰 만료. 새로고침 후 재시도, 반복되면 Security 설정의 "Enable proxy compatibility".
 
+**웹훅이 403 "anonymous is missing the Job/Build permission"** → 웹훅의 Secret token과 잡 트리거 설정의 Secret token 불일치(또는 미생성). 잡 구성 → 트리거 고급 → Secret token을 Generate/복사해 GitLab 웹훅에 다시 넣고, Recent events에서 Resend Request로 재시도.
+
+**release 브랜치 push가 "protected branch" 사유로 거부** → release/*는 보호 브랜치 패턴이라 ① 기반이 보호 브랜치(dev)여야 하고 ② 생성 자체가 웹 UI/API로만 가능하다. 정식 절차(5.1.1)대로 웹에서 생성하면 생성 이벤트로 배포도 정상 트리거된다.
+
+**배포 잡의 updateGitlabCommitStatus가 403** → 보호 브랜치/태그 커밋에는 Developer 권한 토큰이 상태를 기록할 수 없다. 배포 잡은 상태 회신을 하지 않는 것으로 정리 (5.4절).
+
 ## 4. AI 코드리뷰 (`scripts/ai-review.py`)
 
 MR 검증 파이프라인의 마지막 스테이지. 테스트가 게이트라면 AI 리뷰는 권고다 — `catchError`로 감싸 리뷰가 실패해도 빌드는 성공을 유지한다(비차단). 따라서 **빌드가 passed여도 AI 리뷰는 실패했을 수 있다** — 코멘트가 안 달렸으면 빌드의 Stages에서 AI Review 상태를 확인한다.
@@ -110,11 +116,14 @@ MR 검증 파이프라인의 마지막 스테이지. 테스트가 게이트라�
 release/* push  또는  v* 태그 push (GitLab)
   → Webhook (Push events: release/* 필터 / Tag push events)
   → Jenkins 잡 itda-deploy
-      1. Plan   : 무엇을 어떤 태그로 배포할지 결정 (아래 표)
-      2. Build  : 대상 서비스 이미지 빌드 (호스트 Docker 저장소에 저장 = 롤백 지점)
-      3. Deploy : 자기 호스트에 SSH → 서비스마다 deploy.sh 실행 (blue-green)
-  → 결과를 GitLab 커밋 상태 'deploy'로 회신
+      1. Plan    : 무엇을 어떤 태그로 배포할지 결정 (아래 표)
+      2. Sync    : 인프라 파일(compose·scripts·nginx 설정)을 서버로 동기화
+      3. Build   : 대상 서비스 이미지 빌드 (호스트 Docker 저장소에 저장 = 롤백 지점)
+      4. Deploy  : 자기 호스트에 SSH → 서비스마다 deploy.sh 실행 (blue-green)
+      5. Cleanup : 이미지 보존 정책 집행 (rc/v* 각 최근 3개)
 ```
+
+Sync 스테이지가 있어 **인프라 파일의 서버 반영도 자동이다** — repo에서 `deploy/docker-compose.prod.yml`, `scripts/*.sh`, `deploy/nginx/itda.conf`를 고치면 다음 배포에 실려 서버에 반영된다 (nginx 설정은 `nginx -t` 통과 시에만 reload, 실패 시 이전 설정 복원 후 배포 중단). 동기화하지 **않는** 것: `.env`(비밀값 — 서버가 원본), `nginx/inc/*.inc`(활성 슬롯 상태 — 서버가 원본), `deploy/jenkins/*`(Jenkins가 배포 중 자기 자신을 재생성할 수 없어 수동 반영). 최초 1회 배치(deploy.md 5절)만 수동이고, 이후 변경은 전부 이 스테이지가 처리한다.
 
 | 트리거 | 대상 서비스 | 이미지 태그 | 의미 |
 | --- | --- | --- | --- |
@@ -122,7 +131,18 @@ release/* push  또는  v* 태그 push (GitLab)
 | `v1.2.0` 태그 push | **세 서비스 전부** | `v1.2.0` (태그명 그대로) | 릴리스 확정 |
 | `app-v*` 태그, 브랜치 삭제, 그 외 ref | 없음 — Plan에서 스킵 | - | 서버 배포 대상 아님 |
 
-핵심 원칙 재확인: **dev/main 병합은 배포를 일으키지 않는다.** 서버로 나가는 유일한 경로는 release 브랜치와 v* 태그이고, **release 브랜치는 반드시 dev에서 생성한다.**
+핵심 원칙 재확인: **dev/main 병합은 배포를 일으키지 않는다.** 서버로 나가는 유일한 경로는 release 브랜치와 v* 태그다.
+
+### 5.1.1 정식 릴리스 절차 (사이클 전체)
+
+1. **릴리스 시작** — GitLab 웹 UI에서 dev 기준으로 `release/X.Y.Z` 생성 (Repository → Branches → New branch). release/*는 보호 브랜치 패턴이라 **CLI push로는 만들 수 없다** — 기반이 보호 브랜치여야 하고, 생성은 웹/API로만 허용된다. 생성 즉시 그 시점의 dev가 첫 rc로 자동 배포된다.
+2. **릴리스 기간 수정** — 수정 브랜치 → **MR (대상: release/X.Y.Z)** → verify 통과 → 병합. **병합 = push 이벤트 = 변경 서비스만 rc 재배포.** 직접 push는 보호 설정이 막으므로, 서버에 나가는 모든 코드는 MR 검증을 통과했음이 보장된다.
+3. **릴리스 확정** — release → main MR 병합 후 **main에 `vX.Y.Z` 태그** 생성 (Code → Tags → New tag, 웹 UI) → 전체 서비스가 태그명으로 배포. release → dev MR로 수정분 역병합.
+4. **정리** — release 브랜치 삭제 (웹 UI). 삭제 이벤트는 파이프라인이 무시한다(가드 검증 완료).
+
+### 5.1.2 태그의 역할
+
+태그는 특정 커밋에 고정되는 영구 이름표로, 이 프로젝트에서 세 역할을 맡는다: **릴리스 선언**(어떤 코드가 나갔는지의 공식 기록), **배포 트리거**(태그 생성 = 릴리스 확정 배포), **롤백 지점**. 특히 **Git 태그명 = Docker 이미지 태그명** 규칙으로 코드↔이미지↔배포 이력이 이름 하나로 연결된다 — `itda-backend:v1.0.0`이 무슨 코드인지는 Git에서 `v1.0.0`을 찾으면 된다. v* 태그 배포가 변경 감지 없이 전체 재빌드인 이유: "vX.Y.Z라는 이미지 세트는 완전하고 일관된 하나"임을 보장하기 위해서다. `v*`는 보호 태그라 생성·삭제 권한이 제한된다.
 
 ### 5.2 Plan — 변경 감지와 태그 결정
 
@@ -169,12 +189,31 @@ rm /tmp/jenkins-deploy-key /tmp/jenkins-deploy-key.pub
 
 GitLab Webhook(`jenkins-deploy`): Push events(Wildcard `release/*`) + Tag push events, Secret token. GitLab이 1차로 거르고 Plan 스테이지가 2차로 거르는 이중 필터 — 웹훅 필터가 실수로 풀려도 Plan의 ref 검사가 막는다.
 
+배포 잡은 MR 잡과 달리 **GitLab 커밋 상태를 회신하지 않는다.** 보호 브랜치/태그의 커밋에 상태를 기록하려면 그 ref에 대한 권한이 필요한데 우리 토큰(Developer)에는 없어 403이 나고, 애초에 커밋 상태의 역할은 MR 병합 게이트(verify)다. 배포 이력의 원본은 Jenkins 빌드 기록이고, 결과 통지는 Mattermost 알림이 담당한다.
+
 ### 5.5 배포 확인과 실패 시
 
 - 빌드 콘솔에 `배포 계획: [서비스...] 태그 ...`부터 서비스별 헬스체크·Nginx 전환 로그가 순서대로 남는다. 빌드 설명(description)에도 태그와 대상이 표시된다.
+- 배포 후 Cleanup 스테이지가 `scripts/cleanup-images.sh`로 보존 정책(서비스별 rc/v* 각 최근 3개)을 집행한다. 사용 중(활성·대기 슬롯) 이미지는 docker가 삭제를 거부하므로 안전하며, 정리 실패는 빌드 결과에 영향을 주지 않는다.
 - 헬스체크 실패 시 deploy.sh가 해당 서비스 배포를 자체 취소하므로(deploy.md 7절) 실패한 빌드가 있어도 서비스는 직전 상태 그대로다.
 - Jenkins 장애 시에도 EC2에서 같은 스크립트를 직접 실행하면 배포·롤백 가능: `./scripts/deploy.sh backend <태그>`
 
-## 6. 롤백 파이프라인
+## 6. 롤백 파이프라인 (`Jenkinsfile.rollback`)
 
-(구현되는 대로 작성 — 현재는 deploy.md 7.3절의 수동 롤백 절차 사용)
+트리거 없음 — Jenkins에서 `itda-rollback` 잡을 **Build with Parameters**로 수동 실행한다.
+
+| 파라미터 | 의미 |
+| --- | --- |
+| SERVICE | 롤백할 서비스 (web/backend/ai 중 선택) |
+| TAG | 되돌릴 이미지 태그. **비워두고 실행하면 보관된 태그 목록만 출력**하고 중단 — 뭘로 되돌릴지 모를 때 먼저 목록 조회용으로 실행 |
+
+동작: 서버에 해당 태그 이미지가 있는지 확인한 뒤(없으면 목록과 함께 실패), 배포와 **같은 경로**(SSH → deploy.sh)로 재배포한다. deploy.sh에게 롤백은 "이전 태그로의 배포"일 뿐이라 별도 롤백 로직이 없다 — 롤백 절차가 매 배포마다 함께 검증되는 구조다.
+
+잡 설정(`itda-rollback`): Pipeline from SCM, Branch Specifier `origin/dev`, Script Path `Jenkinsfile.rollback`, 트리거 없음. 파라미터는 Jenkinsfile의 `parameters` 블록이 첫 실행 후 잡에 자동 반영된다 (첫 실행은 파라미터 없이 시작될 수 있음 — 한 번 실행해 반영시킨다).
+
+두 가지 롤백의 사용 구분 (deploy.md 7.3절과 연결):
+
+| 상황 | 수단 | 소요 |
+| --- | --- | --- |
+| 배포 직후 문제 발견 | 서버에서 Nginx 포트 되돌리기 (대기 슬롯 즉시 복귀) | 수 초 |
+| 며칠 뒤 / 몇 버전 전으로 | `itda-rollback` 잡 (또는 서버에서 deploy.sh 직접) | 1~2분 |
