@@ -15,6 +15,11 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '30'))
     }
 
+    environment {
+        GMS_URI   = 'https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions'
+        GMS_MODEL = 'gpt-5.4-mini'   // 리뷰 품질/비용 균형. 조정은 이 한 줄 (모델 ID는 GMS 카탈로그 표기 확인)
+    }
+
     stages {
         stage('Changes') {
             steps {
@@ -51,7 +56,26 @@ pipeline {
             }
         }
 
-        // stage('AI Review')  — 4-C에서 추가 (GMS 코드리뷰, 비차단)
+        stage('AI Review') {
+            when { expression { env.gitlabMergeRequestIid } }
+            steps {
+                // 리뷰 실패(GMS 장애 등)는 스테이지만 실패로 표시하고 빌드는 성공 유지 (비차단 원칙)
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    withCredentials([
+                        string(credentialsId: 'gms-api-key', variable: 'GMS_API_KEY'),
+                        string(credentialsId: 'gitlab-api-token', variable: 'GITLAB_TOKEN'),
+                    ]) {
+                        // 스크립트를 stdin으로 주입 — 볼륨 마운트 불필요(DooD 경로 문제 회피), 표준 라이브러리만 사용
+                        sh '''docker run --rm -i \
+                              -e GITLAB_URL=https://lab.ssafy.com \
+                              -e PROJECT_PATH=s15-bigdata-recom-sub1/S15P21B201 \
+                              -e MR_IID=$gitlabMergeRequestIid \
+                              -e GITLAB_TOKEN -e GMS_API_KEY -e GMS_URI -e GMS_MODEL \
+                              python:3.12-slim python - < scripts/ai-review.py'''
+                    }
+                }
+            }
+        }
     }
 
     post {
