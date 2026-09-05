@@ -59,6 +59,13 @@ pipeline {
                         def base    = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT
                         def hasBase = base && sh(returnStatus: true,
                                                  script: "git cat-file -e ${base} 2>/dev/null") == 0
+                        if (!hasBase) {
+                            // 브랜치 첫 빌드 등 기준이 없으면 마지막 릴리스(v* 태그)와 비교
+                            base = sh(returnStdout: true,
+                                      script: "git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true").trim()
+                            hasBase = base as boolean
+                        }
+                        echo "변경 비교 기준: ${hasBase ? base : '(없음 — 전체 배포)'}"
                         if (hasBase) {
                             services = ['web', 'backend', 'ai'].findAll { svc ->
                                 sh(returnStatus: true,
@@ -113,7 +120,8 @@ pipeline {
                                 sudo cp /tmp/itda.rollback /etc/nginx/sites-available/itda
                                 exit 1
                             fi
-                            rm -f /tmp/itda.conf /tmp/connection-upgrade.conf /tmp/itda.rollback
+                            rm -f /tmp/itda.conf /tmp/connection-upgrade.conf
+                            sudo rm -f /tmp/itda.rollback
                         '
                     """
                 }

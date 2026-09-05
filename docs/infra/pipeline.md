@@ -63,6 +63,8 @@ git diff --name-only origin/<대상브랜치>...HEAD | grep -q '^apps/backend/'
 | Lightweight checkout | 해제 | 변수 브랜치와 궁합 문제 방지 |
 | Trigger | Opened MR Events + Rebuild on push to source branch | MR 생성·커밋 추가 시 실행 |
 | Ignore WIP Merge Requests | **해제** | Draft MR도 검증 대상 (기본값은 켜짐 — 아래 트러블슈팅) |
+| Build only if new commits were pushed to MR | **체크** | 커밋 없는 MR 갱신 이벤트(병합·상태 변경)로는 재검증하지 않음 |
+| Approved Merge Requests (EE-only) | **해제** (기본값은 켜짐) | 승인은 코드 변경이 아니므로 재검증 불필요. 켜두면 승인 직후 병합 시 이미 삭제된 소스 브랜치를 체크아웃하려는 헛빌드가 생긴다 (아래 트러블슈팅) |
 | Target Branch Regex | `^(dev\|main\|release\/.+)$` | dev·main·release 대상 MR만 검증. 하위 작업 → 상위 feat MR은 제외 (자원 절약, dev 진입 시 재검증됨) |
 
 표의 `\|`는 마크다운 표 렌더링을 위한 이스케이프다 — Jenkins에 실제로 입력하는 값은 `^(dev|main|release\/.+)$` (파이프 문자 그대로).
@@ -96,6 +98,8 @@ GitLab 쪽: Webhook(Merge request events만, Secret token 포함) + 커밋 상�
 **release 브랜치 push가 "protected branch" 사유로 거부** → release/*는 보호 브랜치 패턴이라 ① 기반이 보호 브랜치(dev)여야 하고 ② 생성 자체가 웹 UI/API로만 가능하다. 정식 절차(5.1.1)대로 웹에서 생성하면 생성 이벤트로 배포도 정상 트리거된다.
 
 **배포 잡의 updateGitlabCommitStatus가 403** → 보호 브랜치/태그 커밋에는 Developer 권한 토큰이 상태를 기록할 수 없다. 배포 잡은 상태 회신을 하지 않는 것으로 정리 (5.4절).
+
+**병합 직후 verify가 "Couldn't find any revision to build"로 실패** → 승인(Approve) 이벤트가 재검증을 트리거했는데, 몇 초 뒤 병합으로 소스 브랜치가 삭제되어 체크아웃할 대상이 사라진 것. 실제 검증은 그 전 빌드에서 이미 통과한 상태라 무시해도 되지만, 잡 설정에서 "Approved Merge Requests (EE-only)"를 해제하면 재발하지 않는다 (2.4절).
 
 ## 4. AI 코드리뷰 (`scripts/ai-review.py`)
 
@@ -248,7 +252,7 @@ Connection name `ssafy-gitlab`, URL `https://lab.ssafy.com`, Credentials `gitlab
 
 | 잡 이름 | Branch Specifier | Script Path | 트리거 |
 | --- | --- | --- | --- |
-| `itda-mr-verify` | `origin/${gitlabSourceBranch}` | `Jenkinsfile.mr` | Opened MR Events + Rebuild on push to source branch, Ignore WIP 해제, Target Branch Regex `^(dev\|main\|release\/.+)$`, Secret token Generate |
+| `itda-mr-verify` | `origin/${gitlabSourceBranch}` | `Jenkinsfile.mr` | Opened MR Events + Build only if new commits 체크 + Rebuild on push to source branch, Ignore WIP·Approved MR 해제, Target Branch Regex `^(dev\|main\|release\/.+)$`, Secret token Generate |
 | `itda-deploy` | `${gitlabBranch}` | `Jenkinsfile` | Push Events만, Secret token Generate |
 | `itda-rollback` | `origin/dev` | `Jenkinsfile.rollback` | 없음 (수동 전용) |
 
