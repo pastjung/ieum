@@ -10,6 +10,10 @@ Thumbs.db
 *.ipr
 
 # Environment variables and secrets
+*.pem
+*.key
+*.p12
+*.pfx
 .env
 .env.*
 **/.env
