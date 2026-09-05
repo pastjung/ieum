@@ -13,7 +13,8 @@
 name: itda
 
 x-backend-env: &backend-env
-  SPRING_PROFILES_ACTIVE: prod
+  # RDS 연결 전까지 local(H2)로 운용. RDS 연결 시 .env에서 BACKEND_PROFILE=prod로 전환
+  SPRING_PROFILES_ACTIVE: ${BACKEND_PROFILE:-prod}
   DB_URL: ${DB_URL:?DB_URL is required}
   DB_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
   DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}

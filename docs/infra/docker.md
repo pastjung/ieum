@@ -70,12 +70,11 @@ docker compose up --build --watch
 `deploy/docker-compose.prod.yml`은 이미지 태그만 참조하며, 값은 같은 폴더의 `.env`에서 주입된다.
 
 ```bash
-# EC2 초기 1회
-cp deploy/.env.example deploy/.env   # 실제 값 기입, Git에 커밋 금지
-
 # 기동은 서비스 단위로만 한다 (scripts/deploy.sh가 수행)
-docker compose -f deploy/docker-compose.prod.yml up -d backend-green
+docker compose -f docker-compose.prod.yml up -d backend-green
 ```
+
+EC2의 `.env` 작성 절차와 값의 의미는 deploy.md 6.2절을 따른다. `.env.example`은 필요한 키 목록의 원본이며 실제 값은 서버에만 존재한다 (Git 커밋 금지).
 
 - 인자 없이 `up -d`를 실행하지 않는다 — blue/green 6개 컨테이너가 전부 뜬다
 - `REGISTRY_PREFIX`는 현재 빈 값(로컬 이미지 저장소). 레지스트리 도입 시 이 값만 변경한다
