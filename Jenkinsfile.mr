@@ -1,0 +1,61 @@
+// =========================================================================
+// MR 검증 파이프라인 — GitLab Merge Request 이벤트로 실행된다.
+// 변경된 서비스만 테스트하고 결과를 MR 커밋 상태로 회신한다. 배포는 하지 않는다.
+// 잡 설정: Pipeline from SCM, Script Path = Jenkinsfile.mr,
+//          Branch Specifier = origin/${gitlabSourceBranch}
+// =========================================================================
+pipeline {
+    agent any
+
+    options {
+        gitLabConnection('ssafy-gitlab')          // Manage Jenkins → System 의 GitLab 연결 이름
+        disableConcurrentBuilds()
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+    }
+
+    stages {
+        stage('Changes') {
+            steps {
+                updateGitlabCommitStatus name: 'verify', state: 'running'
+                script {
+                    // MR 대상 브랜치(dev 등)와의 diff로 변경된 서비스를 판별한다.
+                    // (changeset 조건은 브랜치 첫 빌드에서 빈 결과가 나오는 함정이 있어 사용하지 않음)
+                    def target = env.gitlabTargetBranch ?: 'dev'
+                    sh "git fetch origin ${target}"
+                    def base = "origin/${target}"
+                    env.CH_BACKEND = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/backend/'") == 0 ? 'true' : 'false'
+                    env.CH_WEB     = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/web/'")     == 0 ? 'true' : 'false'
+                    env.CH_AI      = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/ai/'")      == 0 ? 'true' : 'false'
+                    echo "변경 감지 → backend=${env.CH_BACKEND}, web=${env.CH_WEB}, ai=${env.CH_AI}"
+                }
+            }
+        }
+
+        stage('Verify') {
+            parallel {
+                stage('backend') {
+                    when { environment name: 'CH_BACKEND', value: 'true' }
+                    steps { sh 'docker build --target test apps/backend' }   // 테스트 실패 = 빌드 실패
+                }
+                stage('web') {
+                    when { environment name: 'CH_WEB', value: 'true' }
+                    steps { sh 'docker build apps/web' }                     // tsc 타입체크 포함 풀빌드
+                }
+                stage('ai') {
+                    when { environment name: 'CH_AI', value: 'true' }
+                    steps { sh 'docker build --target test apps/ai' }        // pytest 실행
+                }
+            }
+        }
+
+        // stage('AI Review')  — 4-C에서 추가 (GMS 코드리뷰, 비차단)
+    }
+
+    post {
+        success { updateGitlabCommitStatus name: 'verify', state: 'success' }
+        failure { updateGitlabCommitStatus name: 'verify', state: 'failed' }
+        aborted { updateGitlabCommitStatus name: 'verify', state: 'canceled' }
+    }
+}
