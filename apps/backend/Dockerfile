@@ -9,6 +9,14 @@ COPY gradle gradle
 COPY build.gradle settings.gradle ./
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 
+# ---------- test: MR 검증 파이프라인용 (docker build --target test) ----------
+# BuildKit 캐시 마운트로 Gradle 캐시를 빌드 간 재사용한다.
+FROM base AS test
+
+COPY src src
+
+RUN --mount=type=cache,target=/root/.gradle ./gradlew test --no-daemon
+
 # ---------- dev: 로컬 개발용 (루트 docker-compose.yml이 target: dev로 사용) ----------
 # 소스는 compose가 볼륨 마운트한다. build --continuous가 변경을 감지해 재컴파일하고,
 # bootRun에 올라간 devtools가 바뀐 클래스를 감지해 애플리케이션만 빠르게 재시작한다.

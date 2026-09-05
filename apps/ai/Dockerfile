@@ -22,6 +22,17 @@ COPY app app
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
+# ---------- test: MR 검증 파이프라인용 (docker build --target test) ----------
+FROM base AS test
+
+COPY requirements-dev.txt .
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements-dev.txt
+
+COPY app app
+COPY tests tests
+
+RUN python -m pytest
+
 # ---------- runtime: 운영 이미지 (기본 빌드 대상) ----------
 FROM base AS runtime
 
