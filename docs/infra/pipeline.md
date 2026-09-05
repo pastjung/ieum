@@ -9,7 +9,7 @@
 | 파이프라인 | 트리거 | 동작 | 상태 |
 | --- | --- | --- | --- |
 | MR 검증 (`itda-mr-verify`) | MR 생성·갱신 (대상: dev/main/release) | 변경 서비스만 테스트, 결과를 MR에 회신 | ✅ 운영 중 |
-| AI 코드리뷰 | MR 검증 파이프라인의 스테이지 | GMS로 diff 리뷰, MR 코멘트 작성 (비차단) | 구현 중 |
+| AI 코드리뷰 | MR 검증 파이프라인의 스테이지 | GMS로 diff 리뷰, MR 코멘트 작성 (비차단) | ✅ 운영 중 |
 | 배포 | `release/*` push, `v*` tag | 변경 서비스 빌드 → blue-green 배포 | 예정 |
 | 롤백 | 수동 (서비스, 태그 파라미터) | 보관된 이미지로 재배포 | 예정 |
 
@@ -83,8 +83,25 @@ GitLab 쪽: Webhook(Merge request events만, Secret token 포함) + 커밋 상�
 
 **파이프라인에서 `git fetch`가 "could not read Username"으로 실패** → sh 단계에는 git 자격증명이 주입되지 않는다 (2.3절). checkout이 이미 모든 브랜치를 가져오므로 fetch 자체가 불필요.
 
+**GMS 호출이 400 Bad Request** → GPT-5 계열 모델은 `max_tokens`를 거부하고 `max_completion_tokens`를 요구하며, `temperature`도 기본값 외에는 거부한다. 스크립트가 에러 응답 본문을 로그에 출력하므로 정확한 원인은 로그에서 확인.
+
+**withCredentials에서 "is of type 'GitLab API token' where ... expected"** → GitLab 플러그인 전용 credential 타입은 string 바인딩과 호환되지 않는다. 같은 값을 Secret text 타입(`gitlab-api-token-text`)으로 별도 등록해 참조한다.
+
 **Jenkins 설정 폼에서 "No valid crumb" 403** → CSRF 토큰 만료. 새로고침 후 재시도, 반복되면 Security 설정의 "Enable proxy compatibility".
 
-## 4. AI 코드리뷰 / 5. 배포 파이프라인 / 6. 롤백
+## 4. AI 코드리뷰 (`scripts/ai-review.py`)
+
+MR 검증 파이프라인의 마지막 스테이지. 테스트가 게이트라면 AI 리뷰는 권고다 — `catchError`로 감싸 리뷰가 실패해도 빌드는 성공을 유지한다(비차단). 따라서 **빌드가 passed여도 AI 리뷰는 실패했을 수 있다** — 코멘트가 안 달렸으면 빌드의 Stages에서 AI Review 상태를 확인한다.
+
+동작:
+
+1. GitLab API로 MR diff 수집 — lock·생성 파일 제외, 파일당 4천자·전체 1.6만자 상한
+2. 변경된 서비스의 README(컨벤션 문서)를 MR 소스 브랜치 기준으로 읽어 시스템 프롬프트에 주입 (문서를 못 읽으면 기본 규칙으로 폴백)
+3. GMS 호출 (`gpt-5.4-mini`, 모델·엔드포인트는 Jenkinsfile 환경변수로 조정)
+4. 결과를 MR 코멘트로 upsert — 숨은 마커(`<!-- itda-ai-review -->`)로 기존 코멘트를 찾아 갱신하므로 MR당 리뷰 코멘트는 항상 1개
+
+실행 방식: `python:3.12-slim` 컨테이너에 스크립트를 stdin으로 주입(`docker run -i ... python - < scripts/ai-review.py`). 볼륨 마운트가 없어 DooD 경로 문제가 없고, 표준 라이브러리만 사용해 pip 설치가 없다. 시크릿은 `withCredentials`가 셸 환경변수로 주입하고 `docker run -e 이름` 형태(값 없이 이름만)로 상속시켜 콘솔 로그에 값이 노출되지 않는다.
+
+## 5. 배포 파이프라인 / 6. 롤백
 
 (구현되는 대로 작성)
