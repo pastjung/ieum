@@ -36,11 +36,14 @@ def gitlab(method: str, path: str, body: dict | None = None):
         return json.loads(res.read() or "null")
 
 
-def collect_diff() -> str:
+def collect_diff() -> tuple[str, set]:
     diffs = gitlab("GET", f"/projects/{PROJECT}/merge_requests/{MR_IID}/diffs?per_page=100")
-    parts, total, skipped = [], 0, []
+    parts, total, skipped, services = [], 0, [], set()
     for d in diffs:
         path = d.get("new_path") or d.get("old_path") or ""
+        for svc in ("backend", "web", "ai"):
+            if path.startswith(f"apps/{svc}/"):
+                services.add(svc)
         if d.get("generated_file") or any(p in path for p in SKIP_PATTERNS):
             skipped.append(path)
             continue
@@ -55,14 +58,44 @@ def collect_diff() -> str:
         total += len(chunk)
     if skipped:
         parts.append(f"\n(리뷰 제외: {', '.join(skipped[:10])})")
-    return "\n".join(parts)
+    return "\n".join(parts), services
 
 
-def review(diff: str) -> str:
+def repo_file(path: str) -> str | None:
+    """MR 소스 브랜치 기준으로 repo 파일 내용을 가져온다 (없으면 None)."""
+    ref = os.environ.get("SOURCE_BRANCH", "dev")
+    encoded = urllib.parse.quote(path, safe="")
+    try:
+        req = urllib.request.Request(
+            f"{GITLAB}/api/v4/projects/{PROJECT}/repository/files/{encoded}/raw?ref={urllib.parse.quote(ref)}",
+            headers={"PRIVATE-TOKEN": GL_TOKEN},
+        )
+        with urllib.request.urlopen(req, timeout=30) as res:
+            return res.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+
+
+def conventions_for(services: set) -> str:
+    """변경된 서비스의 README(팀 컨벤션이 정의된 문서)를 프롬프트용으로 수집한다."""
+    parts = []
+    for svc in sorted(services):
+        text = repo_file(f"apps/{svc}/README.md")
+        if text:
+            parts.append(f"[apps/{svc}/README.md]\n{text[:3000]}")
+    return "\n\n".join(parts)
+
+
+def review(diff: str, conventions: str) -> str:
+    conv_section = (
+        f"팀 컨벤션 문서 발췌 — 리뷰 기준으로 삼을 것:\n{conventions}\n"
+        if conventions
+        else "팀 규칙: DDD 계층 구조(domain은 프레임워크 비의존, Repository 인터페이스는 domain에), "
+             "엔티티에 setter 금지, presentation DTO와 application Command 분리.\n"
+    )
     system = (
         "당신은 이 팀의 시니어 코드 리뷰어다. 아래 Merge Request diff를 리뷰하라.\n"
-        "팀 규칙: DDD 계층 구조(domain은 프레임워크 비의존, Repository 인터페이스는 domain에), "
-        "엔티티에 setter 금지, presentation DTO와 application Command 분리.\n"
+        + conv_section +
         "출력 형식(한국어, 마크다운):\n"
         "## 요약 — 이 변경이 무엇을 하는지 1~2문장\n"
         "## 지적 사항 — 심각도(🔴버그 가능/🟡개선 권장/🔵취향) 순으로, `파일명` 인용과 함께. 없으면 '없음'\n"
@@ -102,12 +135,13 @@ def upsert_comment(text: str) -> None:
 
 
 def main() -> int:
-    diff = collect_diff()
+    diff, services = collect_diff()
     if not diff.strip():
         print("리뷰할 diff가 없어 종료")
         return 0
-    print(f"diff {len(diff)}자 수집, GMS 호출...")
-    upsert_comment(review(diff))
+    conventions = conventions_for(services)
+    print(f"diff {len(diff)}자 수집, 컨벤션 문서 {len(conventions)}자, GMS 호출...")
+    upsert_comment(review(diff, conventions))
     return 0
 
 

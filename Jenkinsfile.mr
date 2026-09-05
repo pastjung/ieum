@@ -70,6 +70,7 @@ pipeline {
                               -e GITLAB_URL=https://lab.ssafy.com \
                               -e PROJECT_PATH=s15-bigdata-recom-sub1/S15P21B201 \
                               -e MR_IID=$gitlabMergeRequestIid \
+                              -e SOURCE_BRANCH=$gitlabSourceBranch \
                               -e GITLAB_TOKEN -e GMS_API_KEY -e GMS_URI -e GMS_MODEL \
                               python:3.12-slim python - < scripts/ai-review.py'''
                     }
