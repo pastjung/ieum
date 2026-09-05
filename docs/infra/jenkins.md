@@ -71,8 +71,9 @@ Credentials는 Manage Jenkins → Credentials → System → Global에 등록하
 | ID | Kind | 내용 | 상태 |
 | --- | --- | --- | --- |
 | `gitlab-repository-read` | Username with password (`oauth2` / 토큰) | Jenkins checkout용 GitLab 읽기 토큰 (`jenkins-repository-read`, read_repository) | ✅ 등록됨 |
-| `gitlab-api-token` | Secret text | AI 코드리뷰가 MR에 코멘트를 달기 위한 api scope 토큰 | 4단계에서 등록 |
-| `gms-api-key` | Secret text | AI 코드리뷰의 GMS(LLM) 호출 키 | 4단계에서 등록 |
+| `gitlab-api-token` | GitLab API token | ssafy-gitlab 연결(커밋 상태 회신)용 api scope 토큰 | ✅ 등록됨 |
+| `gitlab-api-token-text` | Secret text | 같은 토큰 값 — AI 리뷰 스크립트의 string 바인딩용 (플러그인 타입은 string 바인딩 불가) | ✅ 등록됨 |
+| `gms-api-key` | Secret text | AI 코드리뷰의 GMS(LLM) 호출 키 | ✅ 등록됨 |
 | `mattermost-webhook` | Secret text | 빌드·배포 알림 Webhook URL | 4단계에서 등록 |
 
 GitLab 토큰은 만료일이 있다 — 발급 시 만료일을 팀 일정에 기록하고, 만료 증상(Jenkins checkout 인증 실패)을 기억해둘 것.
