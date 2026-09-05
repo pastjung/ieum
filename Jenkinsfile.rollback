@@ -13,6 +13,18 @@
 // 참고: 배포 직후의 즉시 롤백(수 초)은 서버에서 Nginx 포트를 되돌리는
 //   방법이 더 빠르다 (deploy.md 7.3절). 이 잡은 태그 단위 롤백용.
 // =========================================================================
+// Mattermost 알림 — 전송 실패는 로그만 남기고 빌드 결과에 영향을 주지 않는다
+def notifyMM(String text) {
+    try {
+        withCredentials([string(credentialsId: 'mattermost-webhook', variable: 'MM_URL')]) {
+            writeFile file: '.mm-payload.json', text: groovy.json.JsonOutput.toJson([text: text])
+            sh 'curl -sf -X POST -H "Content-Type: application/json" -d @.mm-payload.json "$MM_URL" >/dev/null; rm -f .mm-payload.json'
+        }
+    } catch (e) {
+        echo "Mattermost 알림 실패(무시): ${e}"
+    }
+}
+
 pipeline {
     agent any
 
@@ -62,8 +74,20 @@ pipeline {
                         }
 
                         currentBuild.description = "rollback ${params.SERVICE} → ${params.TAG}"
+                        env.ROLLBACK_STARTED = '1'   // 실패 알림 가드 (태그 목록 조회 실패는 알리지 않음)
                         sh "${SSH} '${DEPLOY_SCRIPT} ${params.SERVICE} ${params.TAG}'"
+                        notifyMM("↩️ **롤백 실행** — ${params.SERVICE} → `${params.TAG}`\n[빌드 로그](${env.BUILD_URL}console)")
                     }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            script {
+                if (env.ROLLBACK_STARTED) {
+                    notifyMM("🔴 **롤백 실패** — ${params.SERVICE} → `${params.TAG}`\n수동 조치가 필요할 수 있습니다 (deploy.md 7.3절).\n[빌드 로그](${env.BUILD_URL}console)")
                 }
             }
         }

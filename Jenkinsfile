@@ -11,6 +11,18 @@
 //   자기 호스트에 SSH(ec2-deploy-key)로 접속해 실행한다.
 //   → 사람이 수동 배포할 때와 100% 같은 스크립트, 같은 경로.
 // =========================================================================
+// Mattermost 알림 — 전송 실패는 로그만 남기고 빌드 결과에 영향을 주지 않는다
+def notifyMM(String text) {
+    try {
+        withCredentials([string(credentialsId: 'mattermost-webhook', variable: 'MM_URL')]) {
+            writeFile file: '.mm-payload.json', text: groovy.json.JsonOutput.toJson([text: text])
+            sh 'curl -sf -X POST -H "Content-Type: application/json" -d @.mm-payload.json "$MM_URL" >/dev/null; rm -f .mm-payload.json'
+        }
+    } catch (e) {
+        echo "Mattermost 알림 실패(무시): ${e}"
+    }
+}
+
 pipeline {
     agent any
 
@@ -53,6 +65,9 @@ pipeline {
                         }
                         env.DEPLOY_TAG = tag
                         services = ['web', 'backend', 'ai']
+                        // 알림용 비교 기준: 직전 릴리스 태그 (새 태그가 걸린 HEAD는 제외)
+                        env.DEPLOY_BASE = sh(returnStdout: true,
+                            script: "git describe --tags --match 'v*' --abbrev=0 HEAD~1 2>/dev/null || true").trim()
                     } else if (ref.startsWith('release/')) {
                         // release/* push: rc 태그 — 마지막 성공 배포 이후 변경된 서비스만
                         env.DEPLOY_TAG = "${ref - 'release/'}-rc.${env.BUILD_NUMBER}-${shortSha}"
@@ -66,6 +81,7 @@ pipeline {
                             hasBase = base as boolean
                         }
                         echo "변경 비교 기준: ${hasBase ? base : '(없음 — 전체 배포)'}"
+                        env.DEPLOY_BASE = hasBase ? base : ''
                         if (hasBase) {
                             services = ['web', 'backend', 'ai'].findAll { svc ->
                                 sh(returnStatus: true,
@@ -182,5 +198,28 @@ pipeline {
 
     // 참고: GitLab 커밋 상태 회신은 하지 않는다 — 보호 브랜치/태그에는 현재 토큰
     // 권한(Developer)으로 기록할 수 없고(403), 배포 이력의 원본은 Jenkins 빌드
-    // 기록이다. 결과 알림은 Mattermost 스테이지가 담당한다 (post 블록에 추가 예정).
+    // 기록이다. 결과 통지는 아래 Mattermost 알림이 담당한다.
+    post {
+        success {
+            script {
+                if (env.DEPLOY_SERVICES) {
+                    def changes = ''
+                    if (env.DEPLOY_BASE) {
+                        changes = sh(returnStdout: true,
+                            script: "git log --no-merges --pretty=format:'• %s (%an)' ${env.DEPLOY_BASE}..HEAD | head -15").trim()
+                    }
+                    def body = changes ? "\n**`${env.DEPLOY_BASE}` 이후 변경:**\n${changes}"
+                                       : "\n(변경 내역 비교 기준 없음 — 첫 배포)"
+                    notifyMM("✅ **배포 완료** — `${env.DEPLOY_TAG}` → ${env.DEPLOY_SERVICES.replace(' ', ', ')}${body}\n[빌드 로그](${env.BUILD_URL}console)")
+                }
+            }
+        }
+        failure {
+            script {
+                if (env.DEPLOY_SERVICES) {
+                    notifyMM("🔴 **배포 실패** — `${env.DEPLOY_TAG}` (${env.DEPLOY_SERVICES.replace(' ', ', ')})\n헬스체크 실패 시 자동 취소되므로 서비스는 직전 버전으로 유지 중입니다.\n[빌드 로그](${env.BUILD_URL}console)")
+                }
+            }
+        }
+    }
 }

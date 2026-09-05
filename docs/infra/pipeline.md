@@ -99,6 +99,8 @@ GitLab 쪽: Webhook(Merge request events만, Secret token 포함) + 커밋 상�
 
 **배포 잡의 updateGitlabCommitStatus가 403** → 보호 브랜치/태그 커밋에는 Developer 권한 토큰이 상태를 기록할 수 없다. 배포 잡은 상태 회신을 하지 않는 것으로 정리 (5.4절).
 
+**역병합 MR(release → dev)에서 "Checking pipeline status" 스피너가 안 멈춤** → verify는 정상 실행·통과했지만(Jenkins에서 확인), 소스가 보호 브랜치라 Developer 토큰이 그 커밋에 상태를 기록하지 못해(403) GitLab이 결과를 못 받는 것. 담긴 커밋들은 원래 MR에서 이미 검증된 것들이므로 Jenkins 성공 확인 후 드롭다운의 **Merge immediately**로 병합한다 (Set to auto-merge는 영영 오지 않을 상태를 기다리므로 금지).
+
 **병합 직후 verify가 "Couldn't find any revision to build"로 실패** → 승인(Approve) 이벤트가 재검증을 트리거했는데, 몇 초 뒤 병합으로 소스 브랜치가 삭제되어 체크아웃할 대상이 사라진 것. 실제 검증은 그 전 빌드에서 이미 통과한 상태라 무시해도 되지만, 잡 설정에서 "Approved Merge Requests (EE-only)"를 해제하면 재발하지 않는다 (2.4절).
 
 ## 4. AI 코드리뷰 (`scripts/ai-review.py`)
@@ -204,6 +206,18 @@ GitLab Webhook(`jenkins-deploy`): Push events(Wildcard `release/*`) + Tag push e
 - 헬스체크 실패 시 deploy.sh가 해당 서비스 배포를 자체 취소하므로(deploy.md 7절) 실패한 빌드가 있어도 서비스는 직전 상태 그대로다.
 - Jenkins 장애 시에도 EC2에서 같은 스크립트를 직접 실행하면 배포·롤백 가능: `./scripts/deploy.sh backend <태그>`
 
+### 5.6 Mattermost 알림
+
+배포·롤백 결과가 팀 Mattermost 채널로 통지된다 (Incoming Webhook, credential `mattermost-webhook`):
+
+| 사건 | 알림 내용 |
+| --- | --- |
+| 배포 성공 | ✅ 태그·대상 서비스 + **이전 배포(비교 기준) 이후 변경 커밋 목록**(최대 15건) + 빌드 로그 링크 |
+| 배포 실패 | 🔴 태그·서비스 + "서비스는 직전 버전 유지 중" 안내 + 로그 링크 |
+| 롤백 실행/실패 | ↩️/🔴 서비스·태그 + 로그 링크 (태그 목록 조회용 실행은 알리지 않음) |
+
+알림 전송은 비차단이다 — Mattermost 장애로 알림이 실패해도 배포 결과에는 영향이 없다(로그에만 남음). 웹훅 URL 재발급 시 credential 값만 교체하면 된다.
+
 ## 6. 롤백 파이프라인 (`Jenkinsfile.rollback`)
 
 트리거 없음 — Jenkins에서 `itda-rollback` 잡을 **Build with Parameters**로 수동 실행한다.
@@ -240,7 +254,7 @@ Jenkins가 완전히 초기화됐거나 새로 구축할 때, 이 순서대로 �
 
 ### 7.2 Jenkins Credentials 등록 (Manage Jenkins → Credentials → System → Global)
 
-jenkins.md 6절의 계약 표대로 5개를 등록한다. ID가 Jenkinsfile과의 계약이므로 철자까지 정확해야 한다: `gitlab-repository-read`(Username with password, username `oauth2`), `gitlab-api-token`(GitLab API token), `gitlab-api-token-text`(Secret text, 같은 값), `gms-api-key`(Secret text), `ec2-deploy-key`(SSH Username with private key, username `ubuntu` — 발급 절차는 5.3절).
+jenkins.md 6절의 계약 표대로 6개를 등록한다. ID가 Jenkinsfile과의 계약이므로 철자까지 정확해야 한다: `gitlab-repository-read`(Username with password, username `oauth2`), `gitlab-api-token`(GitLab API token), `gitlab-api-token-text`(Secret text, 같은 값), `gms-api-key`(Secret text), `ec2-deploy-key`(SSH Username with private key, username `ubuntu` — 발급 절차는 5.3절), `mattermost-webhook`(Secret text — Mattermost 채널 → Integrations → Incoming Webhooks에서 발급한 URL).
 
 ### 7.3 GitLab 연결 (Manage Jenkins → System → GitLab)
 
