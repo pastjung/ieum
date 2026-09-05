@@ -36,6 +36,8 @@ pipeline {
     environment {
         DEPLOY_HOST   = 'host.docker.internal'            // Jenkins 컨테이너에서 본 자기 호스트
         DEPLOY_SCRIPT = '/home/ubuntu/app/scripts/deploy.sh'
+        GMS_URI       = 'https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions'
+        GMS_MODEL     = 'gpt-5.4-mini'                    // 배포 알림의 변경 요약용
     }
 
     stages {
@@ -203,13 +205,30 @@ pipeline {
         success {
             script {
                 if (env.DEPLOY_SERVICES) {
-                    def changes = ''
+                    def body = "\n(변경 내역 비교 기준 없음 — 첫 배포)"
                     if (env.DEPLOY_BASE) {
-                        changes = sh(returnStdout: true,
-                            script: "git log --no-merges --pretty=format:'• %s (%an)' ${env.DEPLOY_BASE}..HEAD | head -15").trim()
+                        // 1순위: 커밋 로그를 GMS로 한국어 요약 (팀원이 읽는 변경 요약)
+                        def summary = ''
+                        try {
+                            withCredentials([string(credentialsId: 'gms-api-key', variable: 'GMS_API_KEY')]) {
+                                summary = sh(returnStdout: true, script: """
+                                    export CHANGES="\$(git log --no-merges --pretty=format:'%s%n%b' ${env.DEPLOY_BASE}..HEAD | head -c 8000)"
+                                    docker run --rm -i -e CHANGES -e GMS_API_KEY -e GMS_URI -e GMS_MODEL \\
+                                        python:3.12-slim python - < scripts/deploy-summary.py
+                                """).trim()
+                            }
+                        } catch (e) {
+                            echo "변경 요약 실패(무시): ${e}"
+                        }
+                        // 2순위(폴백): 커밋 제목 목록 — 알림은 항상 나간다
+                        if (!summary) {
+                            summary = sh(returnStdout: true,
+                                script: "git log --no-merges --pretty=format:'• %s (%an)' ${env.DEPLOY_BASE}..HEAD | head -15").trim()
+                        }
+                        if (summary) {
+                            body = "\n**변경 요약** (`${env.DEPLOY_BASE}` 이후):\n${summary}"
+                        }
                     }
-                    def body = changes ? "\n**`${env.DEPLOY_BASE}` 이후 변경:**\n${changes}"
-                                       : "\n(변경 내역 비교 기준 없음 — 첫 배포)"
                     notifyMM("✅ **배포 완료** — `${env.DEPLOY_TAG}` → ${env.DEPLOY_SERVICES.replace(' ', ', ')}${body}\n[빌드 로그](${env.BUILD_URL}console)")
                 }
             }
