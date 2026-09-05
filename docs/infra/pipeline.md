@@ -102,6 +102,79 @@ MR 검증 파이프라인의 마지막 스테이지. 테스트가 게이트라�
 
 실행 방식: `python:3.12-slim` 컨테이너에 스크립트를 stdin으로 주입(`docker run -i ... python - < scripts/ai-review.py`). 볼륨 마운트가 없어 DooD 경로 문제가 없고, 표준 라이브러리만 사용해 pip 설치가 없다. 시크릿은 `withCredentials`가 셸 환경변수로 주입하고 `docker run -e 이름` 형태(값 없이 이름만)로 상속시켜 콘솔 로그에 값이 노출되지 않는다.
 
-## 5. 배포 파이프라인 / 6. 롤백
+## 5. 배포 파이프라인 (`Jenkinsfile`)
 
-(구현되는 대로 작성)
+### 5.1 동작 흐름
+
+```text
+release/* push  또는  v* 태그 push (GitLab)
+  → Webhook (Push events: release/* 필터 / Tag push events)
+  → Jenkins 잡 itda-deploy
+      1. Plan   : 무엇을 어떤 태그로 배포할지 결정 (아래 표)
+      2. Build  : 대상 서비스 이미지 빌드 (호스트 Docker 저장소에 저장 = 롤백 지점)
+      3. Deploy : 자기 호스트에 SSH → 서비스마다 deploy.sh 실행 (blue-green)
+  → 결과를 GitLab 커밋 상태 'deploy'로 회신
+```
+
+| 트리거 | 대상 서비스 | 이미지 태그 | 의미 |
+| --- | --- | --- | --- |
+| `release/1.2.0` push | 마지막 성공 배포 이후 **변경된 서비스만** | `1.2.0-rc.<빌드번호>-<sha>` | 검증 배포 (release 기간 반복) |
+| `v1.2.0` 태그 push | **세 서비스 전부** | `v1.2.0` (태그명 그대로) | 릴리스 확정 |
+| `app-v*` 태그, 브랜치 삭제, 그 외 ref | 없음 — Plan에서 스킵 | - | 서버 배포 대상 아님 |
+
+핵심 원칙 재확인: **dev/main 병합은 배포를 일으키지 않는다.** 서버로 나가는 유일한 경로는 release 브랜치와 v* 태그이고, **release 브랜치는 반드시 dev에서 생성한다.**
+
+### 5.2 Plan — 변경 감지와 태그 결정
+
+release push에서는 `GIT_PREVIOUS_SUCCESSFUL_COMMIT`(이 잡의 마지막 성공 빌드 커밋)과의 diff로 변경 서비스를 판별한다. MR 검증(2.3절)이 "대상 브랜치와의 diff"인 것과 달리 여기는 "마지막으로 서버에 나간 코드와의 diff"가 올바른 기준이기 때문. 비교 기준이 없으면(잡의 첫 빌드 등) 안전하게 전체를 배포한다.
+
+rc 태그에 빌드번호+sha를 넣는 이유: release 기간 중 같은 브랜치에 여러 번 push되므로 각 배포를 유일하게 식별해야 롤백 대상을 지정할 수 있다.
+
+### 5.3 Deploy — 왜 SSH인가
+
+이미지 빌드는 docker.sock으로 호스트 Docker에서 수행되지만, `deploy.sh`는 `sudo nginx reload` 등 **호스트에서만 실행 가능한 명령**을 포함하므로 컨테이너 안에서 돌릴 수 없다. 그래서 Jenkins가 자기 호스트에 SSH로 접속해 실행한다:
+
+```text
+Jenkins 컨테이너 → ssh ubuntu@host.docker.internal → /home/ubuntu/app/scripts/deploy.sh <svc> <tag>
+```
+
+- `host.docker.internal`은 Jenkins compose의 `extra_hosts: host-gateway`가 부여한 "자기 호스트" 주소
+- 사람이 수동 배포할 때와 **100% 같은 스크립트, 같은 경로** — 자동/수동 배포가 다르게 동작하는 사고가 구조적으로 불가능
+- 배포 중 배포 금지: `disableConcurrentBuilds`로 동시 실행을 차단 (.env·inc 파일 동시 수정 방지)
+
+SSH 키 준비 (1회):
+
+```bash
+# EC2에서 — 키쌍 생성 + 공개키를 authorized_keys에 등록
+ssh-keygen -t ed25519 -f /tmp/jenkins-deploy-key -N "" -C "jenkins-deploy"
+cat /tmp/jenkins-deploy-key.pub >> ~/.ssh/authorized_keys
+cat /tmp/jenkins-deploy-key          # 출력 전체를 Jenkins Credentials에 등록
+
+# Jenkins: Credentials → SSH Username with private key, ID ec2-deploy-key, Username ubuntu
+
+# 등록 확인 후 임시 키 파일 삭제 (키는 이제 Jenkins 금고에만 존재)
+rm /tmp/jenkins-deploy-key /tmp/jenkins-deploy-key.pub
+```
+
+### 5.4 Jenkins 잡 설정 (`itda-deploy`)
+
+| 항목 | 값 | 이유 |
+| --- | --- | --- |
+| 타입 | Pipeline (script from SCM) | |
+| Script Path | `Jenkinsfile` (root) | `.mr`과 별개 파일 |
+| Branch Specifier | `${gitlabBranch}` | push된 브랜치/태그를 그대로 체크아웃 (태그 push 시 `refs/tags/v*`가 들어옴) |
+| Refspec | **비움** | 기본 동작이 모든 브랜치+태그 fetch — 명시하면 이 버전 검증기가 거부 |
+| Lightweight checkout | 해제 | |
+| Trigger | Push Events만 (MR 계열 전부 해제) + Secret token | 태그 push도 Push Events로 수신됨 |
+
+GitLab Webhook(`jenkins-deploy`): Push events(Wildcard `release/*`) + Tag push events, Secret token. GitLab이 1차로 거르고 Plan 스테이지가 2차로 거르는 이중 필터 — 웹훅 필터가 실수로 풀려도 Plan의 ref 검사가 막는다.
+
+### 5.5 배포 확인과 실패 시
+
+- 빌드 콘솔에 `배포 계획: [서비스...] 태그 ...`부터 서비스별 헬스체크·Nginx 전환 로그가 순서대로 남는다. 빌드 설명(description)에도 태그와 대상이 표시된다.
+- 헬스체크 실패 시 deploy.sh가 해당 서비스 배포를 자체 취소하므로(deploy.md 7절) 실패한 빌드가 있어도 서비스는 직전 상태 그대로다.
+- Jenkins 장애 시에도 EC2에서 같은 스크립트를 직접 실행하면 배포·롤백 가능: `./scripts/deploy.sh backend <태그>`
+
+## 6. 롤백 파이프라인
+
+(구현되는 대로 작성 — 현재는 deploy.md 7.3절의 수동 롤백 절차 사용)
