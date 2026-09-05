@@ -22,8 +22,9 @@ pipeline {
                 script {
                     // MR 대상 브랜치(dev 등)와의 diff로 변경된 서비스를 판별한다.
                     // (changeset 조건은 브랜치 첫 빌드에서 빈 결과가 나오는 함정이 있어 사용하지 않음)
+                    // checkout이 +refs/heads/* refspec으로 모든 브랜치를 이미 가져오므로
+                    // origin/<target>은 추가 fetch 없이 존재한다 (sh에는 git 자격증명이 없어 fetch 불가)
                     def target = env.gitlabTargetBranch ?: 'dev'
-                    sh "git fetch origin ${target}"
                     def base = "origin/${target}"
                     env.CH_BACKEND = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/backend/'") == 0 ? 'true' : 'false'
                     env.CH_WEB     = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/web/'")     == 0 ? 'true' : 'false'
