@@ -70,11 +70,21 @@ docker build -t itda-backend:<태그> apps/backend   # repo 클론 후
 /home/ubuntu/app/scripts/deploy.sh backend <태그>   # 파이프라인과 100% 같은 스크립트
 ```
 
+### 3.5 운영 설정(.env.config) 변경 — DB 접속 정보, 프로필 등
+
+운영 설정의 원본은 서버가 아니라 **Jenkins의 Secret file credential `itda-env-config`**다. 변경 절차:
+
+1. Jenkins → Manage Jenkins → Credentials → `itda-env-config` → Update → 새 파일 업로드 (기존 내용에서 필요한 값만 바꾼 파일)
+2. 재배포로 반영 — 환경변수는 컨테이너 시작 시 읽히므로, `itda-rollback` 잡에 **현재 태그 그대로** 넣어 실행하면 코드는 그대로인 채 새 설정으로 무중단 재기동된다
+3. 항목(키)이 추가·삭제됐으면 repo `deploy/.env.config.example`도 MR로 갱신 (값 말고 구조의 원본은 repo)
+
+서버의 `.env.config`를 직접 고치면 **다음 배포 때 Jenkins 원본으로 덮여 사라진다.** `.env.tags`(배포 태그 상태)는 deploy.sh 전용이니 사람이 절대 건드리지 않는다.
+
 ## 4. 하지 말 것 (사고 방지 규칙)
 
 - **서버의 Nginx 설정·compose를 직접 수정하지 않는다** — 원본은 repo이고 배포 때마다 자동 동기화되어 서버 수정은 조용히 사라진다. 수정은 repo → MR로
 - **`docker image prune -a` 금지** — 롤백 지점이 전멸한다 (정리는 파이프라인이 자동으로)
-- **`.env`·인증키를 Git에 올리지 않는다** — .gitignore가 막고 있지만 우회하지 말 것
+- **환경 파일·인증키를 Git에 올리지 않는다** — .gitignore가 막고 있지만 우회하지 말 것. 운영 설정 변경은 서버 편집이 아니라 3.5절 절차로
 - **release/main/dev에 직접 push하지 않는다** — 보호 설정이 막고 있고, 모든 변경은 MR로
 
 ## 5. 지금까지의 작업 이력 (요약)

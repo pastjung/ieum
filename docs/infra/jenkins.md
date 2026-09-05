@@ -76,6 +76,7 @@ Credentials는 Manage Jenkins → Credentials → System → Global에 등록하
 | `gms-api-key` | Secret text | AI 코드리뷰의 GMS(LLM) 호출 키 | ✅ 등록됨 |
 | `ec2-deploy-key` | SSH Username with private key (`ubuntu`) | 배포 파이프라인이 자기 호스트에 SSH 접속해 deploy.sh를 실행하기 위한 키 (발급 절차: pipeline.md 5.3) | ✅ 등록됨 |
 | `mattermost-webhook` | Secret text | 배포·롤백 알림용 Mattermost Incoming Webhook URL | ✅ 등록됨 |
+| `itda-env-config` | **Secret file** | 운영 설정 `.env.config`의 원본 — Sync 스테이지가 서버로 배포. 값 변경 = 이 파일 교체 + 재배포 | ✅ 등록됨 |
 
 참고: Jenkins compose에는 `extra_hosts: host.docker.internal:host-gateway`가 설정되어 있다 — 배포 파이프라인이 SSH로 접속할 "자기 호스트"의 주소다. 이 설정이 빠지면 배포 스테이지가 호스트를 찾지 못한다 (변경 시 컨테이너 재생성 필요: `docker compose up -d`).
 

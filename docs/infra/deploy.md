@@ -150,12 +150,13 @@ systemctl status certbot.timer --no-pager   # active (waiting) 확인
 
 ## 5. 배포 파일 배치
 
-EC2의 앱 디렉토리 구조. repo의 `deploy/`, `scripts/`가 원본이고, EC2에는 그 사본 + 서버에만 존재하는 `.env`가 있다.
+EC2의 앱 디렉토리 구조. repo의 `deploy/`, `scripts/`가 원본이고, EC2에는 그 사본 + 운영 설정/상태 파일이 있다.
 
 ```text
 /home/ubuntu/app/
 ├── docker-compose.prod.yml     # repo deploy/ 사본
-├── .env                        # 서버에만 존재 (태그, RDS 접속 정보 — Git 금지)
+├── .env.config                 # 운영 설정 (원본: Jenkins Secret file 'itda-env-config' — Sync가 배포)
+├── .env.tags                   # 배포 태그 상태 (deploy.sh가 갱신 — 서버가 원본)
 ├── nginx/inc/                  # blue/green 활성 포트 (deploy.sh가 갱신)
 │   ├── web.inc  backend.inc  ai.inc
 └── scripts/                    # repo scripts/ 사본 (deploy.sh, cleanup-images.sh)
@@ -231,25 +232,40 @@ git clone -b dev https://oauth2:<토큰>@lab.ssafy.com/s15-bigdata-recom-sub1/S1
 
 토큰은 `~/src/.git/config`에 저장되므로 read 전용 토큰만 사용한다.
 
-### 6.2 .env 작성
+### 6.2 환경 파일 작성 (.env.config / .env.tags)
+
+환경 파일은 **설정과 상태로 분리**되어 있다:
+
+| 파일 | 내용 | 원본 |
+| --- | --- | --- |
+| `.env.config` | REGISTRY_PREFIX, BACKEND_PROFILE, DB_*, AI_BASE_URL | **Jenkins Secret file `itda-env-config`** — Sync 스테이지가 매 배포마다 서버로 반영. 서버에서 직접 수정하면 다음 배포 때 사라진다 (변경 절차: README 3.5절) |
+| `.env.tags` | WEB/BACKEND/AI_TAG (현재 배포 태그) | **서버** — deploy.sh가 배포마다 갱신. 사람이 편집하지 않는다 |
+
+최초 배치(파이프라인 구축 전 수동 배포) 시에만 둘 다 손으로 만든다:
 
 ```bash
-cat > /home/ubuntu/app/.env <<'EOF'
+# .env.config — deploy/.env.config.example을 참고해 실제 값으로 작성
+cat > /home/ubuntu/app/.env.config <<'EOF'
 REGISTRY_PREFIX=
-WEB_TAG=none
-BACKEND_TAG=none
-AI_TAG=none
 BACKEND_PROFILE=local
 DB_URL=pending
 DB_USERNAME=pending
 DB_PASSWORD=pending
 AI_BASE_URL=http://host.docker.internal:9100/api/v1
 EOF
-chmod 600 /home/ubuntu/app/.env
+
+# .env.tags — 자리 채우기 값으로 시작 (deploy.sh가 실제 값으로 갱신)
+cat > /home/ubuntu/app/.env.tags <<'EOF'
+WEB_TAG=none
+BACKEND_TAG=none
+AI_TAG=none
+EOF
+chmod 600 /home/ubuntu/app/.env.config /home/ubuntu/app/.env.tags
 ```
 
-- `none`/`pending`은 자리 채우기 값이다. compose가 파일 전체의 필수 변수를 파싱 시점에 검사하므로, 사용하지 않는 서비스의 값도 존재는 해야 한다. 태그는 deploy.sh가 실제 값으로 갱신한다.
-- `.env`는 점(.)으로 시작하는 숨김 파일이라 `ls -a`로만 보인다. 권한은 600(소유자만)을 유지한다.
+- `none`/`pending`은 자리 채우기 값이다. compose가 두 파일의 필수 변수를 파싱 시점에 검사하므로, 사용하지 않는 값도 존재는 해야 한다.
+- 점(.)으로 시작하는 숨김 파일이라 `ls -a`로만 보인다. 권한은 600(소유자만)을 유지한다.
+- 파이프라인 구축 후에는 같은 내용을 Jenkins Secret file `itda-env-config`로도 등록해야 한다 — 그때부터 Jenkins 쪽이 원본이 된다.
 
 ### 6.3 backend의 임시 H2 운용 (RDS 연결 전)
 
@@ -258,7 +274,7 @@ chmod 600 /home/ubuntu/app/.env
 1. 인메모리라 재배포·재시작마다 데이터가 전부 사라진다.
 2. blue/green 두 슬롯이 각자 별도의 인메모리 DB를 가진다 — 전환 시 데이터가 이어지지 않는다.
 
-즉 API 동작 확인용이지 데이터를 쌓는 용도가 아니다. RDS 연결 시 전환 방법: `.env`에서 `BACKEND_PROFILE=prod`로 바꾸고 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`에 실제 값을 넣은 뒤 backend를 재배포한다. 이때 프로필을 잘못 설정하면 기동 로그에 `Unable to determine Dialect without JDBC metadata` 에러가 나며 헬스체크에서 자동 취소된다.
+즉 API 동작 확인용이지 데이터를 쌓는 용도가 아니다. RDS 연결 시 전환 방법: Jenkins Secret file `itda-env-config`를 `BACKEND_PROFILE=prod` + 실제 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`로 교체하고 backend를 재배포한다(README 3.5절). 이때 프로필을 잘못 설정하면 기동 로그에 `Unable to determine Dialect without JDBC metadata` 에러가 나며 헬스체크에서 자동 취소된다.
 
 ### 6.4 빌드와 배포
 
@@ -313,7 +329,7 @@ docker ps
 `./deploy.sh <service> <tag>` 한 번은 다음 4단계를 수행한다.
 
 1. **활성 슬롯 판별** — `nginx/inc/<service>.inc`의 현재 포트를 읽어 반대 슬롯을 배포 대상으로 정한다.
-2. **새 버전 기동** — `.env`의 태그를 갱신하고 대상 슬롯 컨테이너를 기동한다. 이 동안 기존 슬롯이 모든 트래픽을 계속 받는다.
+2. **새 버전 기동** — `.env.tags`의 태그를 갱신하고 대상 슬롯 컨테이너를 기동한다. 이 동안 기존 슬롯이 모든 트래픽을 계속 받는다.
 3. **헬스체크 폴링** — 대상 슬롯의 헬스 엔드포인트를 3초 간격, 기본 90초까지 확인한다. **실패하면 대상 컨테이너의 로그를 출력하고 정지시킨 뒤 배포를 취소한다 — 운영 트래픽은 무영향.** (AI 모델 로딩이 길어지면 `HEALTH_TIMEOUT=300 ./deploy.sh ai <tag>` 처럼 조정)
 4. **트래픽 전환** — inc 파일 포트를 바꾸고 `nginx -t` 검증 후 reload. reload는 기존 연결을 끊지 않는다. **이전 슬롯은 정지하지 않고 유지한다** (즉시 롤백용, 다음 배포 때 교체됨).
 
@@ -369,6 +385,6 @@ RDS 연결 후에는 두 슬롯이 같은 DB를 공유하므로 이 방식은 �
 | 4.2 certbot | `/etc/letsencrypt/live/<도메인>/` 인증서 일체 | certbot | certbot.timer가 자동 갱신 |
 | 5 초기 배치 | `/home/ubuntu/app/` 전체 (compose, inc, deploy.sh), `/etc/nginx/conf.d/connection-upgrade.conf`, `sites-available/itda` 교체 | 사람 (repo에서 복사) | itda·compose·deploy.sh는 repo 변경 시 재반영(5.1), inc는 아래 |
 | 6.1 클론 | `~/src/` (소스 저장소) | git | `git pull`로 갱신 |
-| 6.2 .env | `/home/ubuntu/app/.env` | 사람 (서버에만 존재) | 태그는 deploy.sh가, DB·프로필 값은 사람이 갱신 |
+| 6.2 환경 파일 | `/home/ubuntu/app/.env.config`, `.env.tags` | 최초만 사람 | config는 Jenkins(itda-env-config)가 원본·Sync가 반영, tags는 deploy.sh가 갱신 |
 | 6.4 빌드 | 로컬 Docker 이미지 (`itda-*:<태그>`) | docker build | 보존 정책(docker.md 5절)에 따라 정리 |
 | 배포·롤백 시마다 | `nginx/inc/*.inc` (한 줄 상태 파일) | deploy.sh 또는 사람(롤백) | 매 전환마다 덮어써짐 |
