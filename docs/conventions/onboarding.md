@@ -16,10 +16,12 @@
 
   ```bash
   python -m pip install --user pre-commit
-  pre-commit install --hook-type pre-commit --hook-type commit-msg
+  python -m pre_commit install --hook-type pre-commit --hook-type commit-msg
   ```
 
   `--hook-type commit-msg`까지 해야 커밋 메시지 검사가 켜진다.
+  `python`이 Microsoft Store 안내를 띄우면: `winget install Python.Python.3.12` 후 터미널을 새로 연다.
+  (모듈 이름은 `pre_commit` — 언더스코어. `pre-commit: command not found`는 PATH 문제이므로 모듈 방식이면 무관하다)
 - [ ] `.env.example`을 복사해 `.env` 작성 — 실제 값은 팀 보안 채널에서 받는다 (절대 커밋 금지)
 
 ## 3. 파트별 의존성
