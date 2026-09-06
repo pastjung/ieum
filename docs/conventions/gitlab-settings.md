@@ -80,23 +80,16 @@ Merge commit을 사용하여 기능, 개발, 릴리스 브랜치의 병합 지�
 - 모든 스레드가 해결되고 병합 전 확인 목록을 충족한 후 병합한다.
 - `main`과 `release/*` 병합은 Maintainer가 수행한다.
 
-## 7. Jenkins 연동
+## 7. Jenkins 연동 (연동 완료)
 
-Jenkins가 GitLab에 빌드 상태를 전달하기 전에는 `Pipelines must succeed`를 사용하지 않는다. 파이프라인이 없는 MR까지 병합이 차단될 수 있기 때문이다.
+MR 검증 파이프라인이 운영 중이다: MR 생성과 새 커밋 push가 Jenkins 검증(`verify`)을 실행하고, 결과가 MR에 ✅/❌로 표시된다. 변경된 애플리케이션이 없는 MR(문서만 수정 등)도 테스트를 스킵한 채 `success`를 회신한다. 구성 상세는 [docs/infra/pipeline.md](../infra/pipeline.md).
 
-다음 조건을 모두 충족하면 `Pipelines must succeed`를 활성화한다.
-
-- MR 생성과 새 커밋 push가 Jenkins 검증을 실행한다.
-- Jenkins가 GitLab Commit Status에 `pending`, `success`, `failed` 상태를 전달한다.
-- 실패한 Jenkins 빌드가 MR 병합을 차단한다.
-- 변경된 애플리케이션이 없어 개별 작업을 실행하지 않더라도 전체 검증 상태를 `success`로 전달한다.
-- Jenkins 장애와 애플리케이션 테스트 실패를 구분할 수 있다.
-
-경로 기반 Jenkins 파이프라인은 변경된 애플리케이션만 빌드하고 배포하되, MR에는 전체 검증 결과를 항상 하나 이상 전달한다. `Skipped pipelines are considered successful`은 사용하지 않는다.
+`Pipelines must succeed`는 연동 후에도 **사용하지 않는다** — 이유가 바뀌었다: 소스가 보호 브랜치인 MR(릴리스 역병합 등)은 권한 제약으로 검증 상태가 GitLab에 기록되지 않아, 이 옵션이 켜져 있으면 해당 MR의 병합이 영구 차단된다. 대신 "MR 병합 조건: 파이프라인 성공"을 팀 규칙으로 지킨다 — **verify ✅를 확인한 뒤 병합한다.**
 
 ## 8. 관련 문서
 
 - [저장소 폴더 구조](./repository-structure.md)
 - [Git 브랜치 전략](./git-branch-strategy.md)
+- [인프라 개요 (CI/CD·배포·롤백)](../infra/README.md)
 - [Git 커밋 전략](./git-commit-convention.md)
 

@@ -8,8 +8,10 @@
 
 - GitLab 협업 설정은 `.gitlab/` 아래에 둔다.
 - 실행 가능한 애플리케이션은 `apps/` 아래에 둔다.
+- 배포 관련 정의는 `deploy/`, 운영 스크립트는 `scripts/`에 둔다.
 - 팀 규칙과 설계 문서는 `docs/`에 둔다.
 - 각 애플리케이션은 독립적으로 빌드하고 테스트할 수 있어야 한다.
+- CI/CD 파이프라인 정의(Jenkinsfile)는 저장소 루트에 둔다 — 파이프라인 변경도 코드 리뷰를 거친다.
 
 ## 2. 프로젝트 구조
 
@@ -63,14 +65,33 @@ S15P21B201/
 │     ├─ requirements.txt
 │     └─ README.md
 │
+├─ deploy/
+│  ├─ docker-compose.prod.yml     # 운영 서비스 정의 (blue/green 슬롯)
+│  ├─ .env.config.example         # 운영 설정 템플릿 (원본은 Jenkins credential)
+│  ├─ .env.tags.example           # 배포 태그 상태 템플릿 (서버에서 자동 갱신)
+│  ├─ nginx/                      # 호스트 Nginx 라우팅 설정 + blue/green 상태(inc)
+│  └─ jenkins/                    # Jenkins 컨테이너 설치 정의
+│
+├─ scripts/
+│  ├─ deploy.sh                   # blue-green 무중단 배포·롤백 (수동/자동 공용)
+│  ├─ cleanup-images.sh           # 이미지 보존 정책 집행
+│  ├─ ai-review.py                # MR AI 코드리뷰
+│  └─ deploy-summary.py           # 배포 알림용 변경 요약
+│
 ├─ docs/
 │  ├─ conventions/
 │  │  ├─ repository-structure.md
 │  │  ├─ git-branch-strategy.md
 │  │  ├─ git-commit-convention.md
 │  │  └─ gitlab-settings.md
+│  ├─ infra/                      # 인프라 문서 (README.md가 입구)
 │  └─ images/
 │
+├─ Jenkinsfile                    # 배포 파이프라인 (release/*, v* 태그)
+├─ Jenkinsfile.mr                 # MR 검증 + AI 코드리뷰 파이프라인
+├─ Jenkinsfile.rollback           # 수동 롤백 파이프라인
+├─ docker-compose.yml             # 로컬 개발 환경 (up --build --watch)
+├─ .env.example                   # 로컬 개인 환경변수 템플릿
 ├─ .editorconfig
 ├─ .gitattributes
 ├─ .gitignore
@@ -101,9 +122,18 @@ GitLab에서 템플릿을 인식하려면 해당 파일이 기본 브랜치에 �
 
 서비스별 `Dockerfile`, 빌드 파일, 테스트, README는 해당 서비스 폴더에 둔다. 한 서비스의 빌드가 다른 서비스 폴더의 내부 구현에 직접 의존하지 않도록 한다.
 
+### `deploy/` 와 `scripts/`
+
+운영 서버(EC2)에 배치되는 정의와 스크립트의 원본이다. 서버의 사본은 배포 파이프라인이 자동 동기화하므로 **서버에서 직접 수정하지 않는다** — 수정은 항상 repo에서 MR로. 상세는 [docs/infra/README.md](../infra/README.md).
+
+### 루트 파이프라인 파일
+
+`Jenkinsfile`(배포), `Jenkinsfile.mr`(MR 검증), `Jenkinsfile.rollback`(롤백)은 Jenkins가 실행하는 파이프라인 정의다. Jenkins 화면이 아니라 repo에서 관리하므로 파이프라인 변경도 MR 리뷰를 거치고, Jenkins가 초기화되어도 복원된다.
+
 ### `docs/`
 
 - `conventions`: 폴더, 브랜치, 커밋, GitLab 프로젝트 설정 등 팀 규칙
+- `infra`: 인프라 구축·운영 문서 (아키텍처, Docker, 배포, Jenkins, 파이프라인 — [README](../infra/README.md)가 입구)
 - `images`: 문서에서 사용하는 이미지
 
 ## 4. 루트 파일 원칙

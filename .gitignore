@@ -92,3 +92,6 @@ google-services.json
 .nox/
 .hypothesis/
 .history/
+
+# AI 작업 스크래치 (repo 무관)
+Claude outputs/

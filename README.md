@@ -178,8 +178,18 @@ flowchart TB
 
 > 국립국어원(2025). *국립국어원 묵자-점자 병렬 말뭉치 2025* (버전 1.0). 2026-06-30 공개. [국립국어원 모두의 말뭉치](https://kli.korean.go.kr/corpus)
 
+## 로컬 실행
+
+```bash
+docker compose up --build --watch
+```
+
+이 한 줄로 web + backend + ai 전체가 뜨고, 코드를 저장하면 자동 반영된다. 개인 환경변수가 필요하면 `cp .env.example .env` 후 값을 채운다. 상세는 [docs/infra/docker.md](./docs/infra/docker.md).
+
 ## 협업 규칙
 
 - [저장소 폴더 구조](./docs/conventions/repository-structure.md)
 - [Git 브랜치 전략](./docs/conventions/git-branch-strategy.md)
 - [Git 커밋 전략](./docs/conventions/git-commit-convention.md)
+- [GitLab 프로젝트 설정](./docs/conventions/gitlab-settings.md)
+- [인프라 개요 — CI/CD·배포·롤백](./docs/infra/README.md)
