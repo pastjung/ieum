@@ -1,0 +1,17 @@
+# ruff(포맷·린트)와 pyright(타입체크) 설정 — docs/conventions/code-style-ai.md 참조
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# 기본 규칙 + import 정렬(I), 네이밍(N), 버그 유발 패턴(B)
+extend-select = ["I", "N", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI 의존성 주입 관용구는 기본값 함수 호출(B008) 예외로 인정한다
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Header"]
+
+[tool.pyright]
+include = ["app", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"

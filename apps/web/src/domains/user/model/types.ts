@@ -1,16 +1,16 @@
 /** user 도메인 모델 타입 */
-export type UserRole = 'LEARNER' | 'TEACHER' | 'ADMIN';
+export type UserRole = 'LEARNER' | 'TEACHER' | 'ADMIN'
 
 export interface User {
-  userId: number;
-  email: string;
-  name: string;
-  role: UserRole;
+  userId: number
+  email: string
+  name: string
+  role: UserRole
 }
 
 export interface SignupInput {
-  email: string;
-  password: string;
-  name: string;
-  role: UserRole;
+  email: string
+  password: string
+  name: string
+  role: UserRole
 }

@@ -25,13 +25,21 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload
 # ---------- test: MR 검증 파이프라인용 (docker build --target test) ----------
 FROM base AS test
 
+# pyright가 내려받는 node 바이너리 실행에 필요 (slim 이미지에는 libatomic이 없다)
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements-dev.txt .
 RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements-dev.txt
 
 COPY app app
 COPY tests tests
+COPY pyproject.toml .
 
-RUN python -m pytest
+# 린트 → 포맷 검사 → 타입체크 → 테스트 (하나라도 실패하면 빌드 실패 = verify ❌)
+# pyright 캐시 마운트: node를 매 빌드 다시 내려받지 않는다
+RUN --mount=type=cache,target=/root/.cache/pyright-python \
+    ruff check . && ruff format --check . && pyright && python -m pytest
 
 # ---------- runtime: 운영 이미지 (기본 빌드 대상) ----------
 FROM base AS runtime

@@ -1,7 +1,5 @@
 """presentation 계층 DTO (pydantic) — 도메인 모델을 API 스키마로 변환한다."""
 
-from typing import Generic, TypeVar
-
 from pydantic import BaseModel, Field
 
 from app.domain.braille.models import ConversionResult
@@ -38,10 +36,7 @@ class ConvertResponse(BaseModel):
         )
 
 
-T = TypeVar("T")
-
-
-class ApiResponse(BaseModel, Generic[T]):
+class ApiResponse[T](BaseModel):
     """공통 응답 래퍼 (API 명세서 0-3)"""
 
     success: bool = True

@@ -4,8 +4,8 @@ TODO: 국립국어원 말뭉치 기반 변환 모델 + 공식 규칙 엔진으�
 지금은 파이프라인 배선 확인용으로 극히 일부 자모만 매핑한다.
 """
 
-from app.domain.braille.models import BrailleCell, ConversionResult, ConvertedChar
 from app.core.config import get_settings
+from app.domain.braille.models import BrailleCell, ConversionResult, ConvertedChar
 
 # 한국 점자 일부 예시 매핑 (자리표시용 — 실제 규칙 엔진으로 교체 예정)
 _SAMPLE_TABLE: dict[str, tuple[list[int], str]] = {

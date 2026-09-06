@@ -15,7 +15,7 @@ FROM base AS test
 
 COPY src src
 
-RUN --mount=type=cache,target=/root/.gradle ./gradlew test --no-daemon
+RUN --mount=type=cache,target=/root/.gradle ./gradlew spotlessCheck test --no-daemon
 
 # ---------- dev: 로컬 개발용 (루트 docker-compose.yml이 target: dev로 사용) ----------
 # 소스는 compose가 볼륨 마운트한다. build --continuous가 변경을 감지해 재컴파일하고,
