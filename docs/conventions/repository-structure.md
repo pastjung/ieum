@@ -79,8 +79,8 @@ S15P21B201/
 │  └─ deploy-summary.py           # 배포 알림용 변경 요약
 │
 ├─ docs/
-│  ├─ conventions/               # 팀 규칙 (README.md가 입구)
-│  │  ├─ README.md
+│  ├─ conventions/               # 팀 규칙
+│  │  ├─ README.md               # ← 입구: 작업별로 읽을 문서 목차
 │  │  ├─ repository-structure.md
 │  │  ├─ git/                    # 브랜치 전략, 커밋, GitLab 설정
 │  │  ├─ code/                   # 앱별 코드 스타일 + API 규칙
