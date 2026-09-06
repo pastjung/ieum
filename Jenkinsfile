@@ -70,6 +70,10 @@ pipeline {
                         // 알림용 비교 기준: 직전 릴리스 태그 (새 태그가 걸린 HEAD는 제외)
                         env.DEPLOY_BASE = sh(returnStdout: true,
                             script: "git describe --tags --match 'v*' --abbrev=0 HEAD~1 2>/dev/null || true").trim()
+                    } else if (ref.startsWith('release/app-')) {
+                        // 모바일 릴리스 브랜치 — 서버 배포 대상 아님 (app-v* 태그와 동일 취급)
+                        currentBuild.description = "모바일 릴리스 — 서버 배포 없음: ${ref}"
+                        return
                     } else if (ref.startsWith('release/')) {
                         // release/* push: rc 태그 — 마지막 성공 배포 이후 변경된 서비스만
                         env.DEPLOY_TAG = "${ref - 'release/'}-rc.${env.BUILD_NUMBER}-${shortSha}"
