@@ -23,6 +23,7 @@
 
 | 문서 | 다루는 것 |
 | --- | --- |
+| [architecture.md](./architecture.md) | 아키텍처 다이어그램 2장 — 사용자 요청 흐름, CI/CD 전체 흐름 |
 | [docker.md](./docker.md) | 단일 멀티스테이지 Dockerfile 전략, 로컬 개발(compose --watch), 이미지 보존 정책 |
 | [deploy.md](./deploy.md) | EC2 구축, HTTPS(Certbot), 3중 방어, 수동 배포·롤백 절차(비상용), blue-green 원리 |
 | [jenkins.md](./jenkins.md) | Jenkins 설치 구성, docker.sock 보안 원칙, Credentials 계약 표, 백업 |
