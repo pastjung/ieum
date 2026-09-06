@@ -60,17 +60,17 @@ fix/lesson-empty-list
 | `fix/<domain>-<feature>`, `fix/<issue>-<domain>-<feature>` | 개발·릴리스 중 발견한 버그 수정 | 수정 대상 브랜치 | 수정 대상 브랜치 |
 | `hotfix/<domain>-<feature>`, `hotfix/<issue>-<domain>-<feature>` | 운영 장애의 긴급 수정 | `main` | `main`, `dev` |
 | `chore/<domain>-<feature>`, `chore/<issue>-<domain>-<feature>` | 설정, 문서, 저장소 유지보수 | `dev` | `dev` |
-| `release/v<major>.<minor>.<patch>` | 서버 릴리스 안정화 | `dev` | `main`, `dev` |
-| `release/app-v<major>.<minor>.<patch>` | 모바일 릴리스 안정화 | `dev` | `main`, `dev` |
+| `release/<major>.<minor>.<patch>` | 서버 릴리스 안정화 | `dev` | `main`, `dev` |
+| `release/app-<major>.<minor>.<patch>` | 모바일 릴리스 안정화 | `dev` | `main`, `dev` |
 
 버전에는 web과 app을 분리해서 사용한다.
 
 ```text
 # web
-release/v1.2.0
+release/1.2.0
 
 # app
-release/app-v1.0.3
+release/app-1.0.3
 ```
 
 ## 5. 기능 개발 흐름
@@ -125,20 +125,22 @@ dev
 
 ```text
 dev
-  └─ release/v1.2.0
+  └─ release/1.2.0
         ├─ fix/460-user-login-timeout
         ├─ MR → main
         ├─ tag: v1.2.0
         └─ MR → dev
 ```
 
-1. 릴리스 범위가 확정되면 `dev`에서 `release/v1.2.0`을 생성한다.
+> 표기 원칙: **브랜치명에는 v를 붙이지 않고, v는 태그 전용이다** (`release/1.2.0` → 태그 `v1.2.0`). 배포 파이프라인이 릴리스 이미지(v*)와 검증 이미지(rc)를 태그 접두어로 구분하므로, 브랜치명에 v가 들어가면 rc 이미지가 릴리스로 오분류된다.
+
+1. 릴리스 범위가 확정되면 `dev`에서 `release/1.2.0`을 **GitLab 웹 UI로** 생성한다 (보호 브랜치라 CLI push 불가). 생성 즉시 그 시점의 dev가 검증 서버에 자동 배포된다.
 2. 릴리스 브랜치에서는 신규 기능을 추가하지 않는다.
-3. 발견된 문제는 `fix/*` 브랜치에서 수정한 뒤 MR로 반영한다.
+3. 발견된 문제는 `fix/*` 브랜치에서 수정한 뒤 MR로 반영한다 — **병합 즉시 변경 서비스가 자동 재배포된다.**
 4. 검증이 끝나면 `main`에 병합한다.
-5. 병합된 커밋에 `v1.2.0` 태그를 생성한다.
+5. 병합된 커밋에 `v1.2.0` 태그를 웹 UI로 생성한다 — 전체 서비스가 릴리스 확정 배포된다.
 6. 릴리스 수정 사항을 `dev`에도 병합한다.
-7. 릴리스 브랜치를 삭제한다.
+7. 릴리스 브랜치를 웹 UI에서 삭제한다. (자동 배포 상세: [docs/infra/pipeline.md](../infra/pipeline.md) 5절)
 
 ## 7. 모바일 릴리스 흐름
 
@@ -146,7 +148,7 @@ dev
 
 ```text
 dev
-  └─ release/app-v1.0.3
+  └─ release/app-1.0.3
         ├─ MR → main
         ├─ tag: app-v1.0.3
         └─ MR → dev
