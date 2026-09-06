@@ -13,7 +13,8 @@
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # /home/ubuntu/app
-COMPOSE="docker compose -f $APP_DIR/docker-compose.prod.yml --env-file $APP_DIR/.env"
+# 설정(.env.config — Jenkins가 원본, Sync가 배포)과 상태(.env.tags — 이 스크립트가 갱신)를 분리
+COMPOSE="docker compose -f $APP_DIR/docker-compose.prod.yml --env-file $APP_DIR/.env.config --env-file $APP_DIR/.env.tags"
 NGINX_INC_DIR="$APP_DIR/nginx/inc"
 
 SERVICE="${1:?usage: deploy.sh <web|backend|ai> <tag>}"
@@ -41,7 +42,7 @@ TARGET="$SERVICE-$TARGET_COLOR"
 echo "[deploy] $SERVICE: tag=$TAG, 대상 슬롯=$TARGET_COLOR($TARGET_PORT), 현재 활성 포트=${CURRENT_PORT:-없음}"
 
 # 2. .env의 태그 갱신 후 대상 슬롯 기동
-sed -i "s|^$TAG_VAR=.*|$TAG_VAR=$TAG|" "$APP_DIR/.env"
+sed -i "s|^$TAG_VAR=.*|$TAG_VAR=$TAG|" "$APP_DIR/.env.tags"
 $COMPOSE up -d --no-deps "$TARGET"
 
 # 3. 헬스체크 폴링 — 실패 시 새 컨테이너를 내리고 중단 (기존 서비스 무영향)

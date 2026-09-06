@@ -20,6 +20,8 @@ Thumbs.db
 **/.env.*
 !.env.example
 !**/.env.example
+!**/.env.config.example
+!**/.env.tags.example
 
 # Logs and temporary files
 *.log

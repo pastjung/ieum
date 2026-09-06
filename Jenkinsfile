@@ -108,19 +108,24 @@ pipeline {
             }
         }
 
-        // ── 2. 인프라 파일 동기화 — repo가 원본, 서버 사본을 매 배포마다 갱신 ──
-        //    제외: .env(비밀값, 서버가 원본), nginx/inc(활성 슬롯 상태, 서버가 원본),
+        // ── 2. 인프라 파일 동기화 — 원본을 서버 사본에 매 배포마다 반영 ──
+        //    .env.config는 Jenkins Secret file(itda-env-config)이 원본이다.
+        //    제외: .env.tags(활성 태그 상태 — deploy.sh가 갱신, 서버가 원본),
+        //          nginx/inc(활성 슬롯 상태, 서버가 원본),
         //          deploy/jenkins(배포 중 자기 재생성 불가 — 수동 반영)
         stage('Sync') {
             when { expression { env.DEPLOY_SERVICES } }
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'ec2-deploy-key',
                                                    keyFileVariable: 'SSH_KEY',
-                                                   usernameVariable: 'SSH_USER')]) {
+                                                   usernameVariable: 'SSH_USER'),
+                                 file(credentialsId: 'itda-env-config', variable: 'ENV_CONFIG')]) {
                     sh """
                         scp -i "\$SSH_KEY" -o StrictHostKeyChecking=accept-new \\
                             deploy/docker-compose.prod.yml \\
                             "\$SSH_USER"@${DEPLOY_HOST}:/home/ubuntu/app/
+                        scp -i "\$SSH_KEY" "\$ENV_CONFIG" \\
+                            "\$SSH_USER"@${DEPLOY_HOST}:/home/ubuntu/app/.env.config
                         scp -i "\$SSH_KEY" scripts/deploy.sh scripts/cleanup-images.sh \\
                             "\$SSH_USER"@${DEPLOY_HOST}:/home/ubuntu/app/scripts/
                         scp -i "\$SSH_KEY" deploy/nginx/itda.conf deploy/nginx/connection-upgrade.conf \\
@@ -128,6 +133,7 @@ pipeline {
                         ssh -i "\$SSH_KEY" "\$SSH_USER"@${DEPLOY_HOST} '
                             set -e
                             chmod +x /home/ubuntu/app/scripts/*.sh
+                            chmod 600 /home/ubuntu/app/.env.config
                             sudo cp /etc/nginx/sites-available/itda /tmp/itda.rollback
                             sudo cp /tmp/itda.conf /etc/nginx/sites-available/itda
                             sudo cp /tmp/connection-upgrade.conf /etc/nginx/conf.d/connection-upgrade.conf

@@ -131,7 +131,7 @@ release/* push  또는  v* 태그 push (GitLab)
       5. Cleanup : 이미지 보존 정책 집행 (rc/v* 각 최근 3개)
 ```
 
-Sync 스테이지가 있어 **인프라 파일의 서버 반영도 자동이다** — repo에서 `deploy/docker-compose.prod.yml`, `scripts/*.sh`, `deploy/nginx/itda.conf`를 고치면 다음 배포에 실려 서버에 반영된다 (nginx 설정은 `nginx -t` 통과 시에만 reload, 실패 시 이전 설정 복원 후 배포 중단). 동기화하지 **않는** 것: `.env`(비밀값 — 서버가 원본), `nginx/inc/*.inc`(활성 슬롯 상태 — 서버가 원본), `deploy/jenkins/*`(Jenkins가 배포 중 자기 자신을 재생성할 수 없어 수동 반영). 최초 1회 배치(deploy.md 5절)만 수동이고, 이후 변경은 전부 이 스테이지가 처리한다.
+Sync 스테이지가 있어 **인프라 파일의 서버 반영도 자동이다** — repo에서 `deploy/docker-compose.prod.yml`, `scripts/*.sh`, `deploy/nginx/itda.conf`를 고치면 다음 배포에 실려 서버에 반영된다 (nginx 설정은 `nginx -t` 통과 시에만 reload, 실패 시 이전 설정 복원 후 배포 중단). 운영 설정 `.env.config`도 Sync가 배포한다 — 원본은 Jenkins Secret file `itda-env-config`이며, 값 변경은 서버가 아니라 credential 교체 + 재배포로 한다(README 3.5절). 동기화하지 **않는** 것: `.env.tags`(배포 태그 상태 — deploy.sh가 갱신, 서버가 원본), `nginx/inc/*.inc`(활성 슬롯 상태 — 서버가 원본), `deploy/jenkins/*`(Jenkins가 배포 중 자기 자신을 재생성할 수 없어 수동 반영). 최초 1회 배치(deploy.md 5절)만 수동이고, 이후 변경은 전부 이 스테이지가 처리한다.
 
 | 트리거 | 대상 서비스 | 이미지 태그 | 의미 |
 | --- | --- | --- | --- |
@@ -168,7 +168,7 @@ Jenkins 컨테이너 → ssh ubuntu@host.docker.internal → /home/ubuntu/app/sc
 
 - `host.docker.internal`은 Jenkins compose의 `extra_hosts: host-gateway`가 부여한 "자기 호스트" 주소
 - 사람이 수동 배포할 때와 **100% 같은 스크립트, 같은 경로** — 자동/수동 배포가 다르게 동작하는 사고가 구조적으로 불가능
-- 배포 중 배포 금지: `disableConcurrentBuilds`로 동시 실행을 차단 (.env·inc 파일 동시 수정 방지)
+- 배포 중 배포 금지: `disableConcurrentBuilds`로 동시 실행을 차단 (.env.tags·inc 파일 동시 수정 방지)
 
 SSH 키 준비 (1회):
 
@@ -254,7 +254,7 @@ Jenkins가 완전히 초기화됐거나 새로 구축할 때, 이 순서대로 �
 
 ### 7.2 Jenkins Credentials 등록 (Manage Jenkins → Credentials → System → Global)
 
-jenkins.md 6절의 계약 표대로 6개를 등록한다. ID가 Jenkinsfile과의 계약이므로 철자까지 정확해야 한다: `gitlab-repository-read`(Username with password, username `oauth2`), `gitlab-api-token`(GitLab API token), `gitlab-api-token-text`(Secret text, 같은 값), `gms-api-key`(Secret text), `ec2-deploy-key`(SSH Username with private key, username `ubuntu` — 발급 절차는 5.3절), `mattermost-webhook`(Secret text — Mattermost 채널 → Integrations → Incoming Webhooks에서 발급한 URL).
+jenkins.md 6절의 계약 표대로 7개를 등록한다. ID가 Jenkinsfile과의 계약이므로 철자까지 정확해야 한다: `gitlab-repository-read`(Username with password, username `oauth2`), `gitlab-api-token`(GitLab API token), `gitlab-api-token-text`(Secret text, 같은 값), `gms-api-key`(Secret text), `ec2-deploy-key`(SSH Username with private key, username `ubuntu` — 발급 절차는 5.3절), `mattermost-webhook`(Secret text — Mattermost 채널 → Integrations → Incoming Webhooks에서 발급한 URL), `itda-env-config`(**Secret file** — 운영 `.env.config` 파일 자체. deploy/.env.config.example 참고).
 
 ### 7.3 GitLab 연결 (Manage Jenkins → System → GitLab)
 
