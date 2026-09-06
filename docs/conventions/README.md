@@ -16,5 +16,6 @@
 | 비밀값·설정 취급 | [quality/security.md](./quality/security.md) |
 | 코드리뷰 (사람·AI 공용 기준) | [quality/review-checklist.md](./quality/review-checklist.md) |
 | 레포 구조 이해 | [repository-structure.md](./repository-structure.md) |
+| 새 팀원 로컬 세팅 | [onboarding.md](./onboarding.md) |
 
 규칙 운영 원칙: 같은 지적이 두 번 나오면 해당 문서에 규칙으로 추가하고, 문서화 후에도 반복되면 린터·훅·CI 검사로 승격한다.
