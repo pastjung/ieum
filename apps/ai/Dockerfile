@@ -30,8 +30,10 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements-dev.t
 
 COPY app app
 COPY tests tests
+COPY pyproject.toml .
 
-RUN python -m pytest
+# 린트 → 포맷 검사 → 타입체크 → 테스트 (하나라도 실패하면 빌드 실패 = verify ❌)
+RUN ruff check . && ruff format --check . && pyright && python -m pytest
 
 # ---------- runtime: 운영 이미지 (기본 빌드 대상) ----------
 FROM base AS runtime

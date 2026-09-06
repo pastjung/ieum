@@ -47,7 +47,7 @@ pipeline {
                 }
                 stage('web') {
                     when { environment name: 'CH_WEB', value: 'true' }
-                    steps { sh 'docker build apps/web' }                     // tsc 타입체크 포함 풀빌드
+                    steps { sh 'docker build --target test apps/web' }       // 풀빌드(tsc) + eslint
                 }
                 stage('ai') {
                     when { environment name: 'CH_AI', value: 'true' }

@@ -37,9 +37,9 @@ MR 검증은 각 앱 Dockerfile의 `test` 스테이지를 빌드하는 것으로
 
 | 앱 | test 스테이지 내용 | 비고 |
 | --- | --- | --- |
-| backend | `gradlew test` (BuildKit 캐시로 Gradle 캐시 재사용) | |
-| ai | dev 의존성 설치 + `pytest` | |
-| web | 별도 스테이지 없음 — 운영 풀빌드(`docker build`)가 tsc 타입체크를 포함하므로 그 자체가 검증 | 테스트 도입 시 추가 |
+| backend | `gradlew spotlessCheck test` — 포맷 검사(Spotless) + 테스트 | |
+| ai | dev 의존성 설치 + `ruff check` + `ruff format --check` + `pyright` + `pytest` | |
+| web | 풀빌드(tsc 포함) 위에서 `npm run lint`(eslint) 추가 검사 | 테스트 도입 시 추가 |
 
 이 방식을 택한 이유: 테스트 환경 = 빌드 환경이 Dockerfile 하나로 통일되고, Jenkins에 언어 런타임을 설치할 필요가 없으며, DooD(docker.sock) 구조에서 볼륨 마운트 경로가 꼬이는 함정을 피한다. test 스테이지는 운영 이미지 경로에 포함되지 않는다.
 

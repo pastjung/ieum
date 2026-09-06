@@ -18,3 +18,9 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
+
+# ---------- test: MR 검증 파이프라인용 (docker build --target test) ----------
+# build 스테이지(npm ci + tsc + vite build)가 이미 성공한 위에서 린트만 추가로 검사한다
+FROM build AS test
+
+RUN npm run lint
