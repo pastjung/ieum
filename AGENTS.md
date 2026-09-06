@@ -14,14 +14,14 @@ AI 오답 분석 기반 맞춤 복습, Arduino 6점 촉각 출력을 제공한�
 
 ## 문서 라우팅 (해당 작업 전에 그 문서를 읽는다)
 
-- 브랜치 생성·MR: docs/conventions/git-branch-strategy.md
-- 커밋 작성: docs/conventions/git-commit-convention.md
-- GitLab 설정·보호 규칙: docs/conventions/gitlab-settings.md
-- 코드 작성: 작업하는 앱의 docs/conventions/code-style-<앱>.md (backend·ai·web·mobile)
-- API 추가·수정: docs/conventions/api-convention.md
-- 테스트 작성: docs/conventions/testing.md
-- 비밀값·설정을 다룰 때: docs/conventions/security.md
-- 코드리뷰: docs/conventions/review-checklist.md
+- 브랜치 생성·MR: docs/conventions/git/branch-strategy.md
+- 커밋 작성: docs/conventions/git/commit-convention.md
+- GitLab 설정·보호 규칙: docs/conventions/git/gitlab-settings.md
+- 코드 작성: 작업하는 앱의 docs/conventions/code/<앱>.md (backend·ai·web·mobile·api)
+- API 추가·수정: docs/conventions/code/api.md
+- 테스트 작성: docs/conventions/quality/testing.md
+- 비밀값·설정을 다룰 때: docs/conventions/quality/security.md
+- 코드리뷰: docs/conventions/quality/review-checklist.md
 - 인프라·배포·CI/CD: docs/infra/README.md (현관), 파이프라인 상세: docs/infra/pipeline.md
 
 ## 반드시 지킬 것

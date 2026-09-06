@@ -1,4 +1,4 @@
-// docs/conventions/code-style-web.md 참조. 포맷은 prettier, 규칙 충돌은 config-prettier가 해제.
+// docs/conventions/code/web.md 참조. 포맷은 prettier, 규칙 충돌은 config-prettier가 해제.
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'

@@ -1,4 +1,4 @@
-# ruff(포맷·린트)와 pyright(타입체크) 설정 — docs/conventions/code-style-ai.md 참조
+# ruff(포맷·린트)와 pyright(타입체크) 설정 — docs/conventions/code/ai.md 참조
 [tool.ruff]
 target-version = "py312"
 line-length = 100

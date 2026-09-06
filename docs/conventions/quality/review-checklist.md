@@ -15,7 +15,7 @@ MR 리뷰어와 AI 리뷰(ai-review.py, code-reviewer 에이전트)가 공유하
 2. **계층** — Controller/Router에 비즈니스 로직이 없는가? Entity/모델이 API 응답으로 직접 노출되지 않는가?
 3. **버그 가능성** — 경계값(빈 목록, null, 0점·6점 셀), 예외 삼킴, 동시성, N+1.
 4. **보안** — 비밀값 노출, 입력 검증 누락, 에러 응답의 내부 정보 노출 (security.md).
-5. **API 일관성** — URL·필드 케이싱·에러 포맷이 api-convention.md와 일치하는가? backend와 ai가 서로 어긋나지 않는가?
-6. **접근성 (mobile 변경 시 필수)** — accessibilityLabel/Role 누락, 스크린리더 시나리오, TTS·햅틱 유틸 경유 여부 (code-style-mobile.md).
+5. **API 일관성** — URL·필드 케이싱·에러 포맷이 ../code/api.md와 일치하는가? backend와 ai가 서로 어긋나지 않는가?
+6. **접근성 (mobile 변경 시 필수)** — accessibilityLabel/Role 누락, 스크린리더 시나리오, TTS·햅틱 유틸 경유 여부 (../code/mobile.md).
 7. **테스트** — 새 기능의 정상+실패 케이스, 버그 수정의 재발 방지 테스트 (testing.md).
 8. **범위** — 하나의 작업 범위를 벗어난 직교 수정이 섞여 있지 않은가?

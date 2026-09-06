@@ -11,7 +11,7 @@ Spring Boot와 FastAPI가 한 서비스의 API를 나눠 제공하므로, 외부
 ## JSON 필드 — camelCase (팀 확정)
 
 - 모든 요청/응답 JSON 필드는 camelCase: `quizId`, `isCorrect`, `createdAt`
-- backend(Java)는 기본값 그대로, ai(Python)는 Pydantic alias로 경계 변환 (code-style-ai.md 참조).
+- backend(Java)는 기본값 그대로, ai(Python)는 Pydantic alias로 경계 변환 (ai.md 참조).
 
 ## 에러 응답 (공통 포맷)
 
