@@ -18,7 +18,9 @@ class BrailleCell:
 
     def __post_init__(self) -> None:
         if not (MIN_PATTERN <= self.pattern <= MAX_PATTERN):
-            raise ValueError(f"패턴 값이 허용 범위({MIN_PATTERN}~{MAX_PATTERN})를 벗어났습니다: {self.pattern}")
+            raise ValueError(
+                f"패턴 값이 허용 범위({MIN_PATTERN}~{MAX_PATTERN})를 벗어났습니다: {self.pattern}"
+            )
 
     @property
     def dots(self) -> list[int]:

@@ -9,12 +9,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class HealthController {
 
-    @GetMapping("/health")
-    public ApiResponse<Map<String, Object>> health() {
-        return ApiResponse.ok(Map.of(
-                "status", "UP",
-                "service", "itda-backend",
-                "time", OffsetDateTime.now().toString()
-        ));
-    }
+  @GetMapping("/health")
+  public ApiResponse<Map<String, Object>> health() {
+    return ApiResponse.ok(
+        Map.of(
+            "status", "UP",
+            "service", "itda-backend",
+            "time", OffsetDateTime.now().toString()));
+  }
 }
