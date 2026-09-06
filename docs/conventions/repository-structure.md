@@ -79,11 +79,12 @@ S15P21B201/
 │  └─ deploy-summary.py           # 배포 알림용 변경 요약
 │
 ├─ docs/
-│  ├─ conventions/
+│  ├─ conventions/               # 팀 규칙 (README.md가 입구)
+│  │  ├─ README.md
 │  │  ├─ repository-structure.md
-│  │  ├─ git-branch-strategy.md
-│  │  ├─ git-commit-convention.md
-│  │  └─ gitlab-settings.md
+│  │  ├─ git/                    # 브랜치 전략, 커밋, GitLab 설정
+│  │  ├─ code/                   # 앱별 코드 스타일 + API 규칙
+│  │  └─ quality/                # 테스트, 보안, 리뷰 체크리스트
 │  ├─ infra/                      # 인프라 문서 (README.md가 입구)
 │  └─ images/
 │
@@ -132,7 +133,7 @@ GitLab에서 템플릿을 인식하려면 해당 파일이 기본 브랜치에 �
 
 ### `docs/`
 
-- `conventions`: 폴더, 브랜치, 커밋, GitLab 프로젝트 설정 등 팀 규칙
+- `conventions`: 팀 규칙 — git(브랜치·커밋·GitLab 설정), code(코드 스타일·API), quality(테스트·보안·리뷰). [README](./README.md)가 입구
 - `infra`: 인프라 구축·운영 문서 (아키텍처, Docker, 배포, Jenkins, 파이프라인 — [README](../infra/README.md)가 입구)
 - `images`: 문서에서 사용하는 이미지
 

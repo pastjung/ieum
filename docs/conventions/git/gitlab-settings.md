@@ -89,7 +89,7 @@ MR 검증 파이프라인이 운영 중이다: MR 생성과 새 커밋 push가 J
 ## 8. 관련 문서
 
 - [저장소 폴더 구조](./repository-structure.md)
-- [Git 브랜치 전략](./git-branch-strategy.md)
+- [Git 브랜치 전략](./branch-strategy.md)
 - [인프라 개요 (CI/CD·배포·롤백)](../infra/README.md)
-- [Git 커밋 전략](./git-commit-convention.md)
+- [Git 커밋 전략](./commit-convention.md)
 

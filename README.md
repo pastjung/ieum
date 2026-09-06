@@ -189,7 +189,7 @@ docker compose up --build --watch
 ## 협업 규칙
 
 - [저장소 폴더 구조](./docs/conventions/repository-structure.md)
-- [Git 브랜치 전략](./docs/conventions/git-branch-strategy.md)
-- [Git 커밋 전략](./docs/conventions/git-commit-convention.md)
-- [GitLab 프로젝트 설정](./docs/conventions/gitlab-settings.md)
+- [Git 브랜치 전략](./docs/conventions/git/branch-strategy.md)
+- [Git 커밋 전략](./docs/conventions/git/commit-convention.md)
+- [GitLab 프로젝트 설정](./docs/conventions/git/gitlab-settings.md)
 - [인프라 개요 — CI/CD·배포·롤백](./docs/infra/README.md)

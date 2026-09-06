@@ -48,5 +48,5 @@ public class Lesson {
 - 패키지는 도메인 중심: `lesson/`, `quiz/`, `review/`, `member/` + 공통은 `global/`(config, error, security).
 - Controller에는 요청/응답 변환만, 비즈니스 로직은 Service에, 도메인 규칙은 Entity에 둘 수 있다.
 - 예외는 `@RestControllerAdvice`에서 공통 처리. 비즈니스 예외는 커스텀 예외 + 에러 코드.
-- 응답에 스택 트레이스를 노출하지 않는다. 에러 응답 포맷은 api-convention.md를 따른다.
-- URL 설계는 api-convention.md, 테스트는 testing.md를 따른다.
+- 응답에 스택 트레이스를 노출하지 않는다. 에러 응답 포맷은 api.md를 따른다.
+- URL 설계는 api.md, 테스트는 ../quality/testing.md를 따른다.

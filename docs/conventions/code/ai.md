@@ -39,4 +39,4 @@ class QuizResultResponse(ApiModel):
 - 폴더는 도메인 중심: `app/lessons/`, `app/reviews/`(router.py, service.py, models.py, schemas.py) + 공통 `app/core/`, `app/common/`.
 - SQLAlchemy 모델은 PascalCase, 필드·테이블·컬럼은 snake_case.
 - 라우터에서 예외 응답을 반복하지 않고 공통 exception handler를 등록한다.
-- 에러 응답 포맷은 backend와 동일하게 api-convention.md를 따른다.
+- 에러 응답 포맷은 backend와 동일하게 api.md를 따른다.
