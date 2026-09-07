@@ -33,7 +33,8 @@
 
 ## 4. AI 도구
 
-- [ ] Claude Code 설치·로그인 — 레포 루트의 Git Bash에서 실행하면 CLAUDE.md 규약이 자동 적용된다
+- [ ] Claude Code CLI 설치(PowerShell: `irm https://claude.ai/install.ps1 | iex`)·로그인 — 레포 루트의 Git Bash에서 `claude` 실행
+- [ ] **프로젝트 코드 작업은 Claude Code CLI에서 하는 것이 표준** — 팀 하네스(규약·권한·훅·스킬)는 CLI에서만 적용된다. Claude 데스크톱 앱(Cowork)에는 .claude/ 설정이 적용되지 않는다
 - [ ] (선택) Codex 설치 — AGENTS.md를 자동으로 읽는다
 - [ ] AGENTS.md와 docs/conventions/README.md 통독 (30분이면 충분)
 
