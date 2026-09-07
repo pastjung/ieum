@@ -1,0 +1,46 @@
+# 커밋 계층 방어선 — 빠르고 의존성 없는 검사만 둔다 (무거운 린트·테스트는 CI가 담당)
+# 활성화(팀원 전원 1회): python -m pre_commit install --hook-type pre-commit --hook-type commit-msg
+# 상세: docs/conventions/onboarding.md
+default_stages: [pre-commit]   # stage 미지정 훅은 커밋 단계에서 1회만 실행
+repos:
+  # 비밀값 스캔 — 코드·설정에 하드코딩된 키, 토큰, 고엔트로피 문자열 차단
+  # 공식 바이너리를 자동 다운로드해 실행한다 (scripts/run-gitleaks.sh)
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks 비밀값 스캔
+        entry: bash scripts/run-gitleaks.sh
+        language: system
+        pass_filenames: false
+
+  # 기본 위생 검사
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict      # 충돌 마커(<<<<<<<) 잔재 차단
+      - id: check-added-large-files   # 5MB 초과 파일 차단
+        args: ["--maxkb=5120"]
+      - id: detect-private-key        # 개인키(PEM 등) 내용 차단
+
+  # 팀 규칙 검사 (레포 스크립트)
+  - repo: local
+    hooks:
+      - id: forbid-env-files
+        name: .env 계열 파일 커밋 차단
+        entry: bash scripts/check-no-env-files.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+
+      - id: branch-name
+        name: 브랜치 이름 규칙 검사
+        entry: bash scripts/check-branch-name.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+
+      - id: commit-msg
+        name: 커밋 메시지 규칙 검사
+        entry: bash scripts/check-commit-msg.sh
+        language: system
+        stages: [commit-msg]
