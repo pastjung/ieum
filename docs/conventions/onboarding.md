@@ -35,10 +35,10 @@
 
 - [ ] Claude Code CLI 설치(PowerShell: `irm https://claude.ai/install.ps1 | iex`)·로그인 — 레포 루트의 Git Bash에서 `claude` 실행
 - [ ] **프로젝트 코드 작업은 Claude Code CLI에서 하는 것이 표준** — 팀 하네스(규약·권한·훅·스킬)는 CLI에서만 적용된다. Claude 데스크톱 앱(Cowork)에는 .claude/ 설정이 적용되지 않는다
-- [ ] context7 MCP 승인 — 레포의 .mcp.json에 등록되어 있어 Claude Code 첫 실행 시 승인만 하면 된다 (라이브러리 최신 문서 조회)
+- [ ] MCP 승인 — 레포의 .mcp.json에 context7(라이브러리 최신 문서)과 chrome-devtools(웹 디버깅)가 등록되어 있어 Claude Code 첫 실행 시 승인만 하면 된다
 - [ ] codex-plugin-cc 설치 — Claude Code에서 순서대로: `/plugin marketplace add openai/codex-plugin-cc` → `/plugin install codex@openai-codex` → `/codex:setup` (Codex 교차 리뷰용, ChatGPT 로그인 필요)
 - [ ] (선택) Codex CLI 설치 — AGENTS.md를 자동으로 읽는다
-- [ ] (선택·개인 체험) superpowers 플러그인, chrome devtools MCP(web 담당) — 회고에서 팀 도입 여부 결정
+- [ ] superpowers 플러그인 설치 — Claude Code에서 `/plugin install superpowers@claude-plugins-official` (브레인스토밍·TDD·디버깅 방법론 스킬 묶음)
 - [ ] AGENTS.md와 docs/conventions/README.md 통독 (30분이면 충분)
 
 ## 5. 동작 확인
