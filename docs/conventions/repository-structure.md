@@ -12,11 +12,19 @@
 - 팀 규칙과 설계 문서는 `docs/`에 둔다.
 - 각 애플리케이션은 독립적으로 빌드하고 테스트할 수 있어야 한다.
 - CI/CD 파이프라인 정의(Jenkinsfile)는 저장소 루트에 둔다 — 파이프라인 변경도 코드 리뷰를 거친다.
+- AI 에이전트 설정(규약, 권한, 훅, 스킬)은 `.claude/`와 루트 규약 파일에 둔다 — 팀이 공유하고 리뷰하는 코드로 관리한다.
 
 ## 2. 프로젝트 구조
 
 ```text
 S15P21B201/
+├─ .claude/                       # AI 에이전트 하네스 (Claude Code CLI가 읽는다)
+│  ├─ settings.json               # 권한(permissions) + 훅 등록 — 팀 공유
+│  ├─ agents/                     # 서브에이전트 (explorer·test-runner·code-reviewer)
+│  ├─ commands/                   # 슬래시 커맨드 (/verify, /fix-issue, /review)
+│  ├─ hooks/                      # 안전·검증 훅 스크립트 4종
+│  └─ skills/                     # 작업 절차서 (git·MR·리뷰·린트·API 등)
+│
 ├─ .gitlab/
 │  ├─ issue_templates/
 │  │  ├─ Feature.md
@@ -82,10 +90,12 @@ S15P21B201/
 │  ├─ conventions/               # 팀 규칙
 │  │  ├─ README.md               # ← 입구: 작업별로 읽을 문서 목차
 │  │  ├─ repository-structure.md
+│  │  ├─ onboarding.md           # 새 팀원 로컬 세팅 체크리스트
 │  │  ├─ git/                    # 브랜치 전략, 커밋, GitLab 설정
 │  │  ├─ code/                   # 앱별 코드 스타일 + API 규칙
 │  │  └─ quality/                # 테스트, 보안, 리뷰 체크리스트
 │  ├─ infra/                      # 인프라 문서 (README.md가 입구)
+│  ├─ solutions/                  # 해결한 문제의 축적 (README.md가 기록 규칙)
 │  └─ images/
 │
 ├─ Jenkinsfile                    # 배포 파이프라인 (release/*, v* 태그)
@@ -93,6 +103,10 @@ S15P21B201/
 ├─ Jenkinsfile.rollback           # 수동 롤백 파이프라인
 ├─ docker-compose.yml             # 로컬 개발 환경 (up --build --watch)
 ├─ .env.example                   # 로컬 개인 환경변수 템플릿
+├─ AGENTS.md                      # AI 에이전트 공통 규약 (원본)
+├─ CLAUDE.md                      # Claude Code 진입점 (@AGENTS.md import)
+├─ .mcp.json                      # 프로젝트 공유 MCP (context7, chrome-devtools)
+├─ .pre-commit-config.yaml        # 커밋 시점 검사 (비밀값·컨벤션·브랜치명)
 ├─ .editorconfig
 ├─ .gitattributes
 ├─ .gitignore
@@ -102,6 +116,18 @@ S15P21B201/
 프로젝트는 실제로 사용하는 디렉터리만 생성한다. Git은 빈 디렉터리를 추적하지 않으므로 단순히 구조를 보이기 위한 `.gitkeep`은 사용하지 않는다.
 
 ## 3. 디렉터리별 책임
+
+### `.claude/`
+
+AI 에이전트가 이 저장소에서 일하는 방식을 정의한다. Claude Code CLI가 세션 시작 시 읽으므로, 이 폴더의 변경은 팀 전원의 AI 작업 환경에 즉시 영향을 준다.
+
+- `settings.json`: 위험 동작 차단·안전 명령 허용(permissions)과 훅 등록
+- `hooks/`: 결정론적으로 실행되는 검사 — 비밀 파일 접근 차단, 수정 직후 자동 포맷·린트, 턴 종료 시 검증 게이트
+- `skills/`: "이 작업은 이 순서로" 절차서. 에이전트가 상황에 맞게 선택한다
+- `commands/`: 사람이 `/이름`으로 호출하는 단축 명령
+- `agents/`: 역할별 서브에이전트 (모델 라우팅 + 컨텍스트 격리)
+
+개인 설정은 `settings.local.json`(git 제외)에 둔다. 이 설정은 CLI에만 적용되며, 데스크톱 앱에는 적용되지 않는다 — 코드 작업은 CLI를 표준으로 한다([onboarding.md](./onboarding.md)).
 
 ### `.gitlab/`
 
@@ -135,6 +161,7 @@ GitLab에서 템플릿을 인식하려면 해당 파일이 기본 브랜치에 �
 
 - `conventions`: 팀 규칙 — git(브랜치·커밋·GitLab 설정), code(코드 스타일·API), quality(테스트·보안·리뷰). [README](./README.md)가 입구
 - `infra`: 인프라 구축·운영 문서 (아키텍처, Docker, 배포, Jenkins, 파이프라인 — [README](../infra/README.md)가 입구)
+- `solutions`: 해결한 비자명한 문제의 기록 — 막혔을 때 먼저 검색하는 곳 ([기록 규칙](../solutions/README.md))
 - `images`: 문서에서 사용하는 이미지
 
 ## 4. 루트 파일 원칙
@@ -142,6 +169,10 @@ GitLab에서 템플릿을 인식하려면 해당 파일이 기본 브랜치에 �
 - `.editorconfig`: 에디터와 언어별 기본 들여쓰기, 문자셋, 줄바꿈을 통일한다.
 - `.gitattributes`: 텍스트 줄바꿈과 바이너리 파일 처리 방식을 통일한다.
 - `.gitignore`: 로컬 환경, 빌드 결과, 비밀값을 저장소에서 제외한다.
+- `AGENTS.md`: AI 에이전트 공통 규약의 **원본**. Codex가 자동으로 읽는다.
+- `CLAUDE.md`: Claude Code 진입점. `@AGENTS.md` 한 줄만 두어 규약이 두 곳으로 갈라지는 것을 막는다.
+- `.mcp.json`: 프로젝트가 공유하는 MCP 서버 목록. 팀원은 첫 실행 시 승인만 하면 된다.
+- `.pre-commit-config.yaml`: 커밋 시점 검사 정의. 활성화는 각자 1회 필요하다([onboarding.md](./onboarding.md)).
 - `README.md`: 프로젝트 소개와 가장 기본적인 실행 방법만 제공하고, 세부 규칙은 `docs/`로 연결한다.
 
 프로젝트는 Java, TypeScript, Python 애플리케이션의 빌드 설정을 각 애플리케이션 폴더에서 독립적으로 관리한다. 루트 통합 빌드 도구를 사용하지 않으므로 루트 `build.gradle`, `settings.gradle`, `package.json`을 두지 않는다.
