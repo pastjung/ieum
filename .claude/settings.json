@@ -55,6 +55,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/verify-gate.sh"
+          }
+        ]
+      }
     ]
   }
 }
