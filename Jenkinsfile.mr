@@ -34,7 +34,8 @@ pipeline {
                     env.CH_BACKEND = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/backend/'") == 0 ? 'true' : 'false'
                     env.CH_WEB     = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/web/'")     == 0 ? 'true' : 'false'
                     env.CH_AI      = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/ai/'")      == 0 ? 'true' : 'false'
-                    echo "변경 감지 → backend=${env.CH_BACKEND}, web=${env.CH_WEB}, ai=${env.CH_AI}"
+                    env.CH_MOBILE  = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/mobile/'")  == 0 ? 'true' : 'false'
+                    echo "변경 감지 → backend=${env.CH_BACKEND}, web=${env.CH_WEB}, ai=${env.CH_AI}, mobile=${env.CH_MOBILE}"
                 }
             }
         }
@@ -52,6 +53,10 @@ pipeline {
                 stage('ai') {
                     when { environment name: 'CH_AI', value: 'true' }
                     steps { sh 'docker build --target test apps/ai' }        // pytest 실행
+                }
+                stage('mobile') {
+                    when { environment name: 'CH_MOBILE', value: 'true' }
+                    steps { sh 'docker build --target test apps/mobile' }    // eslint + tsc + jest
                 }
             }
         }
