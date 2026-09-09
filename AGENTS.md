@@ -14,6 +14,7 @@ AI 오답 분석 기반 맞춤 복습, Arduino 6점 촉각 출력을 제공한�
 
 ## 문서 라우팅 (해당 작업 전에 그 문서를 읽는다)
 
+- 기능 범위·API 계약·데이터 구조 확인: docs/product/README.md (기능명세·API명세·ERD·사용자Flow·커리큘럼의 원본)
 - 브랜치 생성·MR: docs/conventions/git/branch-strategy.md
 - 커밋 작성: docs/conventions/git/commit-convention.md
 - GitLab 설정·보호 규칙: docs/conventions/git/gitlab-settings.md
