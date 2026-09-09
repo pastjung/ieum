@@ -33,8 +33,8 @@ dependencies {
 
     // persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    runtimeOnly 'com.h2database:h2'                      // local profile
-    runtimeOnly 'com.mysql:mysql-connector-j'            // prod profile
+    runtimeOnly 'com.h2database:h2'                      // test profile (오프라인 CI)
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'   // local·prod profile
 
     // lombok
     compileOnly 'org.projectlombok:lombok'

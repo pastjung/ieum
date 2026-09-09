@@ -2,10 +2,9 @@ package com.itda;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
+// 프로필은 src/test/resources/application.properties가 test로 고정한다.
 @SpringBootTest
-@ActiveProfiles("local")
 class ItdaApplicationTests {
 
   @Test
