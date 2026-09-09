@@ -94,6 +94,13 @@ S15P21B201/
 │  │  ├─ git/                    # 브랜치 전략, 커밋, GitLab 설정
 │  │  ├─ code/                   # 앱별 코드 스타일 + API 규칙
 │  │  └─ quality/                # 테스트, 보안, 리뷰 체크리스트
+│  ├─ product/                   # 제품 설계 문서 (README.md가 입구)
+│  │  ├─ feature-spec.md         # 기능 명세 — 수용 기준·비기능 요구사항
+│  │  ├─ api-spec.md             # API 명세 — 요청·응답·권한·오류 계약의 원본
+│  │  ├─ erd.md                  # 테이블·컬럼·관계
+│  │  ├─ user-flow.md            # 사용자 여정·화면 상태
+│  │  ├─ curriculum.md           # 학습 단계·진단·추천 규칙
+│  │  └─ images/                 # ERD 도식 (PNG 삽입용 + SVG 확대용)
 │  ├─ infra/                      # 인프라 문서 (README.md가 입구)
 │  ├─ solutions/                  # 해결한 문제의 축적 (README.md가 기록 규칙)
 │  └─ images/
@@ -160,6 +167,7 @@ GitLab에서 템플릿을 인식하려면 해당 파일이 기본 브랜치에 �
 ### `docs/`
 
 - `conventions`: 팀 규칙 — git(브랜치·커밋·GitLab 설정), code(코드 스타일·API), quality(테스트·보안·리뷰). [README](./README.md)가 입구
+- `product`: 제품 설계 문서 — 기능 명세, API 명세, ERD, 사용자 Flow, 커리큘럼. **기능·계약·데이터 구조의 원본**이며 구현이 명세와 달라지면 문서를 먼저 고친다 ([README](../product/README.md)가 입구)
 - `infra`: 인프라 구축·운영 문서 (아키텍처, Docker, 배포, Jenkins, 파이프라인 — [README](../infra/README.md)가 입구)
 - `solutions`: 해결한 비자명한 문제의 기록 — 막혔을 때 먼저 검색하는 곳 ([기록 규칙](../solutions/README.md))
 - `images`: 문서에서 사용하는 이미지

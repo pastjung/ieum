@@ -188,6 +188,7 @@ docker compose up --build --watch
 
 ## 협업 규칙
 
+- [제품 설계 문서 — 기능·API·ERD·사용자 Flow·커리큘럼](./docs/product/README.md)
 - [저장소 폴더 구조](./docs/conventions/repository-structure.md)
 - [Git 브랜치 전략](./docs/conventions/git/branch-strategy.md)
 - [Git 커밋 전략](./docs/conventions/git/commit-convention.md)
