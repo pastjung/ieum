@@ -25,11 +25,21 @@ spring:
   config:
     activate:
       on-profile: local
+    # 호스트에서 ./gradlew bootRun으로 띄울 때 저장소 루트의 .env를 읽는다.
+    # compose는 env_file로 주입하지만 Gradle 실행에는 그 경로가 없다. 없으면 비밀번호
+    # 자리에 미해결 플레이스홀더가 그대로 전송돼 Access denied로 끝난다(Spring은 미해결
+    # 플레이스홀더에 예외를 던지지 않는다). ai 앱이 pydantic env_file로 하는 것과 같은 규약.
+    # optional이라 파일이 없거나 컨테이너 안이면 무시되고, OS 환경변수가 이 파일보다 우선한다.
+    import:
+      - optional:file:../../.env[.properties]
+      - optional:file:./.env[.properties]
   datasource:
     url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:itda}?connectionTimeZone=UTC
     driver-class-name: org.mariadb.jdbc.Driver
     username: ${DB_USERNAME:itda}
-    # 기본값을 두지 않는다 — 미설정 시 기동 시점에 바로 드러나야 한다
+    # 기본값을 두지 않는다 — 저장소에 자격증명을 남기지 않기 위해서다.
+    # 주의: Spring은 미해결 플레이스홀더에 예외를 던지지 않고 리터럴을 그대로 넘긴다.
+    # 값이 없으면 기동 실패 메시지가 Access denied로 나온다 (설정 누락이라고 알려 주지 않는다).
     password: ${DB_PASSWORD}
   jpa:
     hibernate:
