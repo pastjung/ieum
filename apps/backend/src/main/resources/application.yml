@@ -3,6 +3,15 @@ spring:
     name: itda-backend
   profiles:
     default: local
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        # ERD 7절: 서버 영속 시각은 전부 UTC DATETIME(6)이다.
+        jdbc.time_zone: UTC
+        format_sql: true
+        # Boot 4의 Jackson 3을 Hibernate JSON 매핑에 연결한다 (Jackson3JsonFormatMapper 주석 참고).
+        type.json_format_mapper: com.itda.global.config.Jackson3JsonFormatMapper
 
 server:
   port: 8080
@@ -10,40 +19,64 @@ server:
     context-path: /api/v1
 
 ---
-# ---------- local: H2 in-memory ----------
+# ---------- local: MariaDB (docker-compose의 db 서비스) ----------
+# 컨테이너에서 실행하면 DB_HOST=db, 호스트에서 bootRun하면 기본값 localhost:3306을 쓴다.
 spring:
   config:
     activate:
       on-profile: local
+    # 호스트에서 ./gradlew bootRun으로 띄울 때 저장소 루트의 .env를 읽는다.
+    # compose는 env_file로 주입하지만 Gradle 실행에는 그 경로가 없다. 없으면 비밀번호
+    # 자리에 미해결 플레이스홀더가 그대로 전송돼 Access denied로 끝난다(Spring은 미해결
+    # 플레이스홀더에 예외를 던지지 않는다). ai 앱이 pydantic env_file로 하는 것과 같은 규약.
+    # optional이라 파일이 없거나 컨테이너 안이면 무시되고, OS 환경변수가 이 파일보다 우선한다.
+    import:
+      - optional:file:../../.env[.properties]
+      - optional:file:./.env[.properties]
   datasource:
-    url: jdbc:h2:mem:itda;MODE=MySQL
+    url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:itda}?connectionTimeZone=UTC
+    driver-class-name: org.mariadb.jdbc.Driver
+    username: ${DB_USERNAME:itda}
+    # 기본값을 두지 않는다 — 저장소에 자격증명을 남기지 않기 위해서다.
+    # 주의: Spring은 미해결 플레이스홀더에 예외를 던지지 않고 리터럴을 그대로 넘긴다.
+    # 값이 없으면 기동 실패 메시지가 Access denied로 나온다 (설정 누락이라고 알려 주지 않는다).
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      # 스키마 원본은 엔티티다 (docs/superpowers/specs/2026-09-09-backend-ddd-entities-design.md 3.2절).
+      ddl-auto: update
+    properties:
+      hibernate:
+        show_sql: true
+
+---
+# ---------- test: H2 (MySQL 모드) ----------
+# Dockerfile의 test 스테이지는 DB 컨테이너·네트워크 없이 실행되므로 인메모리여야 한다.
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: jdbc:h2:mem:itda;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
     username: sa
     password:
   jpa:
     hibernate:
       ddl-auto: create-drop
-    properties:
-      hibernate:
-        format_sql: true
-    open-in-view: false
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
 
 ---
-# ---------- prod: MySQL ----------
+# ---------- prod: MariaDB (RDS) ----------
 spring:
   config:
     activate:
       on-profile: prod
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/itda?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    username: ${DB_USERNAME:itda}
-    password: ${DB_PASSWORD:}
+    url: ${DB_URL}
+    driver-class-name: org.mariadb.jdbc.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
+      # 운영에서는 스키마를 자동 변경하지 않고 엔티티와 일치하는지만 검증한다.
       ddl-auto: validate
-    open-in-view: false

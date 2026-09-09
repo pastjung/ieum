@@ -46,7 +46,8 @@ services:
       - path: .env            # 개인 변수 자동 주입 (없어도 기동 — .env.example 참고)
         required: false
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}   # 기본 local(H2). RDS 사용 시 .env에서 변경 (.env.example)
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}   # 기본 local(MariaDB db 서비스). RDS 사용 시 .env에서 변경 (.env.example)
+      DB_HOST: db                              # 같은 네트워크의 MariaDB 컨테이너
       AI_BASE_URL: http://ai:8000/api/v1       # AI는 내부 네트워크로 직접 호출
     ports:
       - "127.0.0.1:8080:8080"
@@ -63,7 +64,11 @@ services:
         - action: rebuild
           path: ./apps/backend/settings.gradle
     depends_on:
-      - ai
+      ai:
+        condition: service_started
+      db:
+        # 스키마 자동 반영(ddl-auto)이 기동 시 DB에 붙으므로 준비 완료를 기다린다
+        condition: service_healthy
 
   ai:
     build:
@@ -87,5 +92,38 @@ services:
         - action: rebuild
           path: ./apps/ai/requirements-dev.txt
 
+  # 관계형 저장소 — 문서 기준 버전은 MariaDB 11.8 LTS (docs/product/erd.md 7절)
+  db:
+    image: mariadb:11.8
+    env_file:
+      # DB_PASSWORD는 기본값을 두지 않으므로 이 파일이 필요하다 (.env.example을 복사해 채운다).
+      # 없으면 여기서 즉시 실패하게 해 backend가 placeholder 오류로 죽는 혼란을 막는다.
+      - path: .env
+        required: true
+    environment:
+      # 루트 비밀번호는 컨테이너가 매번 무작위로 만든다 — 저장소에 비밀값을 두지 않는다
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+      MARIADB_DATABASE: ${DB_NAME:-itda}
+      MARIADB_USER: ${DB_USERNAME:-itda}
+      # 비밀번호에는 인라인 기본값을 두지 않는다 — 저장소에 자격증명을 남기지 않기 위해서다
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      TZ: UTC                                  # ERD 7절: 서버 영속 시각은 전부 UTC
+    command:
+      - --character-set-server=utf8mb4
+      # 대소문자 무시 collation — users.username/email의 대소문자 비구분 중복 검사 근거 (ERD 3.1절)
+      - --collation-server=utf8mb4_uca1400_ai_ci
+    ports:
+      - "127.0.0.1:3306:3306"                  # 로컬 DB 클라이언트 접속용
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      # MariaDB 공식 이미지가 제공하는 스크립트
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
 volumes:
   gradle-cache:
+  mariadb-data:
