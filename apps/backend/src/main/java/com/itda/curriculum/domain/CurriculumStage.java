@@ -32,7 +32,11 @@ public class CurriculumStage {
   @Column(nullable = false, unique = true, length = 30)
   private String level;
 
-  /** 단계 학습 순서. 단계 사이에서 고유하며 강사의 사전 문제 순서와 무관하다. */
+  /**
+   * 단계 학습 순서. 단계 사이에서 고유하며 강사의 사전 문제 순서와 무관하다.
+   *
+   * <p>L0도 curriculum_stages의 한 행이므로(ERD 4.1절) 순번은 0부터 시작한다. 1 이상으로 조이면 L0 행만 단계 코드와 순번이 어긋난다.
+   */
   @Column(name = "order_no", nullable = false, unique = true)
   private int orderNo;
 
@@ -42,6 +46,7 @@ public class CurriculumStage {
   private CurriculumStage(String name, String level, int orderNo, String description) {
     this.name = requireText(name, "단계 이름");
     this.level = requireText(level, "단계 코드");
+    // L0가 0번이므로 하한은 1이 아니라 0이다 (ERD 4.1절).
     if (orderNo < 0) {
       throw new IllegalArgumentException("단계 순서는 0 이상이어야 합니다: " + orderNo);
     }
