@@ -45,6 +45,8 @@ dependencies {
 
     // test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Boot 4부터 @DataJpaTest·TestEntityManager는 starter-test가 아니라 모듈별 test 아티팩트에 있다
+    testImplementation 'org.springframework.boot:spring-boot-data-jpa-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
