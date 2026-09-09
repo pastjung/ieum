@@ -48,6 +48,12 @@ spring:
     properties:
       hibernate:
         show_sql: true
+  data:
+    # 컨테이너에서 실행하면 REDIS_HOST=redis, 호스트에서 bootRun하면 기본값 localhost:6379를 쓴다.
+    # 운영 Redis 연결은 배포 작업에서 prod 프로필에 별도로 추가한다.
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
 ---
 # ---------- test: H2 (MySQL 모드) ----------
