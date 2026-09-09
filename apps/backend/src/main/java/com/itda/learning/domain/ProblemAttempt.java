@@ -162,7 +162,11 @@ public class ProblemAttempt {
     this.attemptedAt = now;
 
     for (int index = 0; index < submissions.size(); index++) {
-      this.cells.add(new AttemptCell(this, index + 1, submissions.get(index), now));
+      CellSubmission submission = submissions.get(index);
+      if (submission == null) {
+        throw new IllegalArgumentException("Cell 제출은 비어 있을 수 없습니다: " + (index + 1) + "번째");
+      }
+      this.cells.add(new AttemptCell(this, index + 1, submission, now));
     }
     int errorDots = this.cells.stream().mapToInt(AttemptCell::errorDotCount).sum();
     int totalDots = this.cells.size() * BraillePattern.DOTS_PER_CELL;

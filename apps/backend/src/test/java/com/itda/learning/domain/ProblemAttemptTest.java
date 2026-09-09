@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -193,6 +194,15 @@ class ProblemAttemptTest {
   @Test
   void Cell_제출이_없으면_거부한다() {
     assertThatThrownBy(() -> freeAttempt(List.of())).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void Cell_제출_목록에_빈_항목이_있으면_몇_번째인지_알리며_거부한다() {
+    List<CellSubmission> withNull = Arrays.asList(CellSubmission.of(1, 1), null);
+
+    assertThatThrownBy(() -> freeAttempt(withNull))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("2번째");
   }
 
   @Test
