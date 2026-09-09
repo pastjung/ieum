@@ -10,6 +10,8 @@ spring:
         # ERD 7절: 서버 영속 시각은 전부 UTC DATETIME(6)이다.
         jdbc.time_zone: UTC
         format_sql: true
+        # Boot 4의 Jackson 3을 Hibernate JSON 매핑에 연결한다 (Jackson3JsonFormatMapper 주석 참고).
+        type.json_format_mapper: com.itda.global.config.Jackson3JsonFormatMapper
 
 server:
   port: 8080
