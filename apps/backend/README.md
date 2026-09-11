@@ -65,16 +65,20 @@ Lettuce는 지연 연결이라 host·port가 틀려도 애플리케이션이 오
 
 ## DDD 패키지 구조
 
-ERD 15개 테이블을 5개 바운디드 컨텍스트로 나눴다 ([docs/product/erd.md](../../docs/product/erd.md)).
+현재 backend에는 15개 엔티티 테이블이 구현되어 있고 5개 바운디드 컨텍스트로 나눴다 ([docs/product/erd.md](../../docs/product/erd.md)). 제품 ERD에는 후속 구현 대상인 `mail_outbox`가 더해져 총 16개이며, 구현 클래스명과 패키지는 이 문서에서 확정하지 않는다.
 
 ```
 com.itda
 ├── global/                  # 공통
 │   ├── config/, error/, response/
+│   ├── security/            # [예정] Access Token 공통 인증·역할 인가
 │   └── braille/             # BraillePattern — 6비트 셀 shared kernel
-├── user/                    # users
-│   ├── domain/              # User(애그리거트), Email(VO), UserRole, UserStatus, UserRepository(인터페이스)
-│   └── infrastructure/      # UserRepositoryImpl(JPA 어댑터), UserJpaRepository
+├── user/                    # users — 계정·인증. 아래 "계정·인증 목표 구조" 참고
+│   ├── domain/              # [현재] User(애그리거트), Email(VO), UserRole, UserStatus, UserRepository(인터페이스)
+│   ├── application/         # [예정] 유스케이스 + port/out (JWT·Redis·메일·비밀번호 해시 outbound port)
+│   ├── presentation/        # [예정] HTTP DTO·상태 코드·쿠키/body 변환
+│   └── infrastructure/      # [현재] UserRepositoryImpl(JPA 어댑터), UserJpaRepository
+│                            # [예정] Argon2id·JWT·Redis·메일 adapter
 ├── lecture/domain/          # Lecture(애그리거트), LectureProblem, Participant, ParticipantId, LectureStatus
 ├── curriculum/domain/       # CurriculumStage, CurriculumProblem, CurriculumProblemId
 ├── problem/domain/          # Problem(애그리거트 + ProblemCell), LearningSkill, ProblemSkill, enum 3개
@@ -82,8 +86,9 @@ com.itda
                              # UserSkillMemory, AssignedProblem, CellSubmission, enum 4개
 ```
 
-`application/`·`presentation/` 계층은 아직 없다. 유스케이스가 생기는 기능 이슈에서 해당 컨텍스트에 추가한다.
-`user/`가 4계층 중 `domain`↔`infrastructure` 참조 패턴의 예시다.
+현재 `dev`에는 `domain`과 `infrastructure` 일부만 있다. `application/`·`presentation/`과 `global/security/`는
+아직 존재하지 않으며, 후속 계정 API 구현 이슈에서 순차적으로 추가할 목표 구조다.
+지금은 `user/`가 `domain`↔`infrastructure` 참조 패턴의 예시다.
 
 ### 규칙
 
@@ -93,6 +98,35 @@ com.itda
 4. presentation의 Request/Response DTO와 application의 Command/Info를 분리한다.
 5. 시각은 엔티티가 스스로 읽지 않고 인자로 받는다. ERD가 서버 영속 시각을 UTC DB 시각으로 못박고 자동 `ON UPDATE`를 금지하므로,
    한 트랜잭션의 여러 시각이 어긋나면 안 되고 테스트도 결정적이어야 한다.
+
+### 계정·인증 목표 구조
+
+새 최상위 `auth` 패키지를 만들지 않고 기존 `com.itda.user` 안에서 4계층으로 구현한다.
+`[예정]` 계층은 후속 계정 API 구현 이슈에서 추가하며, 유스케이스·DTO·port·adapter의 클래스명은 아직 계약이 아니다.
+
+| 계층 | 담당 | 담당하지 않음 |
+| --- | --- | --- |
+| `user/domain` [현재] | 계정 상태와 핵심 불변식(상태 전이·정규화), `UserRepository` 포트 | 트랜잭션 경계, 토큰 발급, HTTP, 외부 port 직접 호출 |
+| `user/application` [예정] | 유스케이스, 트랜잭션 경계, outbound port 호출 조정 | HTTP 상태 코드, 쿠키, 플랫폼 분기 |
+| `user/presentation` [예정] | HTTP DTO, 상태 코드, 쿠키↔body 변환 | 비즈니스 규칙, 트랜잭션 |
+| `user/infrastructure` [일부 현재] | JPA, Argon2id, JWT, Redis, 메일 adapter | 유스케이스 순서, 정책 판단 |
+| `global/security` [예정] | Access Token 공통 인증, 역할 기반 인가 | 로그인·회원가입·Refresh 검증 |
+
+**Port 배치.** `UserRepository`는 위 규칙 2번대로 `user/domain`에 둔다 — 도메인 애그리거트를 되살리는 수단이라
+도메인 언어의 일부다. JWT·Redis·메일·비밀번호 해시처럼 바깥에 요청하는 기능의 outbound port는
+`user/application/port/out`에 두고 기술 구현은 `user/infrastructure`에 둔다.
+**`domain`은 이 port들을 직접 호출하지 않는다** — 호출 순서와 트랜잭션 경계를 정하는 것은 `application`이다.
+
+**인증 경계.** `global/security`는 Access Token 기반 보호 API의 공통 인증과 역할 인가를 담당한다.
+로그인·토큰 갱신·이메일 인증·비밀번호 복구의 자격 증명 검증은 각 `application` 유스케이스가 담당한다.
+
+**플랫폼 경계.** `application`은 플랫폼 중립적인 인증 결과를 반환하고, `presentation`이 WEB은 HttpOnly 쿠키로
+MOBILE은 응답 body로 변환한다. WEB/MOBILE별 Controller를 복제하지 않는다.
+JWT 발급과 Redis 저장 infrastructure는 WEB/MOBILE 공통이다.
+
+**클라이언트 책임.** 웹 쿠키 저장소와 모바일 OS 보안 저장소(Android Keystore·iOS Keychain)는
+서버 infrastructure가 아니라 클라이언트 영역이다. 서버 `presentation`은 전달 방식만 결정하며
+모바일 Keychain·Keystore에 직접 저장하지 않는다.
 
 ### 연관관계 매핑 기준
 

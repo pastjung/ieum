@@ -39,7 +39,7 @@
 
 Backend는 외부 HTTP 요청 또는 백그라운드 작업 시작마다 UUID v4 `X-Request-Id`를 생성한다. HTTP 응답 헤더에 같은 값을 반환하고 AI 호출 헤더에도 전달해 Backend·AI 구조화 로그에서 같은 처리 흐름을 찾을 수 있게 한다. 클라이언트가 이 값을 필수로 만들거나 업무 body에 넣지 않으며, 도메인 DB와 응답 body에는 저장·포함하지 않는다. AI는 받은 값을 로그에 기록하고 응답 헤더에 돌려준다.
 
-`X-Request-Id`는 관측용이며 재전송 중복을 막지 않는다. 답안·문제 등록의 `Idempotency-Key`, 수업 WebSocket 알림의 `eventId`, DB 기본 키와 서로 대체할 수 없다. 기본 요청 로그와 health check는 MVP 필수다. 로그 보존 기간·수집 시스템·샘플링·알림 임계값과 W3C `traceparent`·OpenTelemetry는 후속 운영 범위다.
+`X-Request-Id`는 관측용이며 재전송 중복을 막지 않는다. 답안·문제 등록의 `Idempotency-Key`, 수업 WebSocket 알림의 `eventId`, DB 기본 키와 서로 대체할 수 없다. 기본 요청 로그와 health check는 MVP 필수다. 메일 outbox의 최초 사건·정체 경고 조건은 3.8절에서 확정하며, 정체 경고는 새 수치 상수를 만들지 않고 ERD 3.5의 가시성 만료 기본값을 재사용한다. 그 밖의 비율·percentile·트래픽 기반 임계값과 로그 보존 기간·수집 시스템·샘플링·관측 제품·알림 채널, W3C `traceparent`·OpenTelemetry는 후속 운영 범위다.
 
 역할은 LEARNER / INSTRUCTOR / ADMIN 중 하나다. roles 배열·역할 전환을 제공하지 않는다. 사용자 식별·권한을 요청 body의 주장만으로 신뢰하지 않으며, 타인의 학습 결과를 노출하지 않는다. ADMIN·INSTRUCTOR는 통제된 Seed/운영 절차로만 발급하고 MVP 관리자 공개 API·화면과 ADMIN의 강사/문제 자동 권한은 두지 않는다.
 
@@ -49,9 +49,9 @@ Backend는 외부 HTTP 요청 또는 백그라운드 작업 시작마다 UUID v4
 | --- | --- | --- | --- |
 | A-01 / F-01 가입·로그인·내 정보 | username·비밀번호와 가입 email | 공개 가입은 LEARNER만 생성. username 로그인 후 인증된 단일 역할로 접근하며 미인증·탈퇴·제한 계정은 거부 | users. username/email 정규화·UNIQUE, Argon2id, 실패 5회·10분 제한. 실제 HTTP·DTO·오류는 |
 | A-02 / F-02 이메일 인증·재발송 | 계정 또는 이메일과 일회성 인증 토큰 | 유효한 토큰이면 email_verified_at 기록. 재발송은 기존 활성 인증 토큰을 무효화하고 새 토큰 발급 | Redis 계정 작업 토큰 상태, 인증 TTL 24시간·단일 사용·원문 미저장. 실제 HTTP·DTO·오류는 |
-| A-03 / F-02 비밀번호 복구 | 이메일 기반 복구 요청·일회성 토큰·새 비밀번호 | 유효한 토큰으로 비밀번호를 변경하고 해당 사용자의 모든 Refresh Token 폐기 | Redis 계정 작업 토큰 상태, 복구 TTL 30분·단일 사용·계정 존재 비노출. 실제 HTTP·DTO·오류는 |
-| A-04 / F-01 인증 상태 갱신·폐기 | Access/Refresh Token과 현재 인증 상태 | Access 15분, Refresh 14일. 갱신마다 회전하고 이전 토큰 재사용 시 같은 계열 폐기. 로그아웃은 현재 기기 계열 폐기 | Redis에 JWT 해시·jti·계열·회전·폐기 상태 저장. 보호 API에서 ACTIVE·이메일 인증 상태 재검증. 실제 HTTP·DTO·오류는 |
-| A-05 / F-03 탈퇴 | 인증된 본인의 현재 비밀번호 확인 | MariaDB 트랜잭션으로 WITHDRAWN·탈퇴 시각·식별정보 가명화, Redis에서 전체 Refresh 폐기. 로그인·신규 학습 차단 | 사용자 행·가명 처리된 과거 이력 보존, identifier 즉시 재사용, 재가입은 새 ID. 실제 HTTP·DTO·오류는 |
+| A-03 / F-02 비밀번호 복구 | 이메일 기반 복구 요청·일회성 토큰·새 비밀번호 | 유효한 토큰으로 비밀번호를 변경하고 같은 트랜잭션의 auth_version +1로 기존 Access·Refresh 인증 세션 무효화 | Redis 계정 작업 토큰 상태, 복구 TTL 30분·단일 사용·계정 존재 비노출. 실제 HTTP·DTO·오류는 |
+| A-04 / F-01 인증 상태 갱신·폐기 | Access/Refresh Token과 현재 인증 상태 | Access 15분, Refresh 14일. 갱신마다 회전하고 이전 토큰 재사용 시 같은 계열 폐기. 로그아웃은 현재 기기 계열 폐기 | Redis에 JWT 해시·jti·계열·회전·폐기 상태 저장. 보호 API에서 status·이메일 인증 상태·authVersion 재검증. 실제 HTTP·DTO·오류는 |
+| A-05 / F-03 탈퇴 | 인증된 본인의 현재 비밀번호 확인 | MariaDB 트랜잭션에서 WITHDRAWN·탈퇴 시각·식별정보 가명화와 auth_version +1을 함께 커밋해 기존 Access·Refresh 인증 세션 무효화. Redis family 폐기는 사후 정리. 로그인·신규 학습 차단 | 사용자 행·가명 처리된 과거 이력 보존, identifier 즉시 재사용, 재가입은 새 ID. 실제 HTTP·DTO·오류는 |
 
 접근성 설정(F-04)은 프론트엔드 로컬에서 계정별로 유지하므로 TTS·햅틱·고대비·글자 크기를 저장하는 백엔드 API는 두지 않는다. 내 정보 수정에 이러한 필드를 섞지 않는다. 일반 프로필 수정 API는 현행 계약에 포함하지 않는다.
 
@@ -61,13 +61,13 @@ Backend는 외부 HTTP 요청 또는 백그라운드 작업 시작마다 UUID v4
 
 비밀번호는 15~64자, 유니코드·공백 허용, NFC 정규화와 흔하거나 유출된 값 차단을 적용한다. 대·소문자·숫자·특수문자 조합을 강제하거나 주기적 변경을 요구하지 않는다. Argon2id 최소 설정은 메모리 19MiB·반복 2·병렬도 1이며 원문·복구 토큰·Refresh Token을 로그에 남기지 않는다. 로그인 실패는 계정 없음·비밀번호 오류·잠금·탈퇴 여부를 외부 응답과 처리 시간으로 구분하지 않는다. 계정별 연속 실패 5회 시 10분 제한하고 정상 로그인 시 `failed_login_count`와 `locked_until`을 초기화한다. 프론트 검증은 안내용이며 동일 규칙을 백엔드가 다시 적용한다.
 
-Access Token은 15분 유효 JWT이며 MariaDB·Redis에 원문을 저장하지 않는다. claim에는 sub·role·iat·exp·jti·iss·aud를 두고 username·email을 넣지 않는다. Refresh Token도 서명된 JWT로 발급하며 원문 대신 SHA-256 해시·jti·userId·familyId·만료·회전·폐기 상태를 Redis에 저장한다. 유효기간은 발급별 14일이다. 갱신 때 기존 토큰을 무효화하고 같은 familyId의 새 JWT를 발급한다. 폐기된 토큰 재사용은 해당 계열 전체를 폐기한다. 로그아웃은 현재 계열, 비밀번호 재설정과 탈퇴는 사용자 전체 계열을 폐기한다. 웹 Refresh Token은 Secure·HttpOnly 쿠키, 모바일은 운영체제 보안 저장소를 사용하고 일반 localStorage·AsyncStorage에는 저장하지 않는다.
+Access Token은 15분 유효 JWT이며 MariaDB·Redis에 원문을 저장하지 않는다. claim에는 sub·role·authVersion·iat·exp·jti·iss·aud를 두고 username·email을 넣지 않는다. Refresh Token도 서명된 JWT로 발급하며 원문 대신 SHA-256 해시·jti·userId·familyId·만료·회전·폐기 상태를 Redis에 저장한다. 유효기간은 발급별 14일이다. 갱신 때 기존 토큰을 무효화하고 같은 familyId의 새 JWT를 발급한다. 폐기된 토큰 재사용은 해당 계열 전체를 폐기한다. Refresh도 authVersion을 필수 claim으로 싣는다. 로그아웃은 Redis에서 현재 계열을 폐기하고, 비밀번호 재설정과 탈퇴는 users.auth_version을 같은 MariaDB 트랜잭션에서 증가시켜 기존 Access·Refresh 인증 세션을 무효화하며 Redis 계열 정리는 사후 정리다. action token은 이 무효화의 대상이 아니다. 웹 Refresh Token은 Secure·HttpOnly 쿠키, 모바일은 운영체제 보안 저장소를 사용하고 일반 localStorage·AsyncStorage에는 저장하지 않는다.
 
 이메일 인증·복구 토큰도 용도를 구분한 서명 JWT로 발급하고 Redis에는 SHA-256 해시·jti·userId·purpose·만료·사용 상태를 저장한다. EMAIL_VERIFICATION은 24시간, PASSWORD_RESET은 30분이다. 새 토큰 발급 시 같은 사용자·용도의 이전 활성 토큰을 무효화하고 완료 시 원자적으로 소비하여 단일 사용을 보장한다. 인증 재발송·비밀번호 복구 요청은 계정 존재 여부와 관계없이 같은 HTTP 상태와 일반 메시지를 사용한다. 미인증 계정은 MVP에서 자동 삭제하지 않고 재발송을 허용한다.
 
-모든 JWT는 서버에서 허용한 서명 알고리즘·키·iss·aud·exp를 검증한다. Refresh에는 계열 식별, action에는 EMAIL_VERIFICATION/PASSWORD_RESET 용도 식별을 포함하고 jti는 안전한 난수로 생성한다. Access·Refresh·이메일 인증·비밀번호 복구 JWT의 audience/용도와 검증 경로를 분리하여 서로 대체 사용할 수 없게 한다. 정확한 issuer·audience 문자열·키 회전 설정은 구현 계획에서 확인받는다. Refresh/action은 Redis 활성 상태도 일치해야 하며 서명만으로 허용하지 않는다.
+모든 JWT는 서버에서 허용한 서명 알고리즘·키·iss·aud·exp를 검증한다. Refresh에는 계열 식별, action에는 EMAIL_VERIFICATION/PASSWORD_RESET 용도 식별을 포함하고 jti는 안전한 난수로 생성한다. Access·Refresh·이메일 인증·비밀번호 복구 JWT의 audience/용도와 검증 경로를 분리하여 서로 대체 사용할 수 없게 한다. 서명 알고리즘·key 구성·key 회전·검증 순서와 정확한 issuer·audience 문자열, Redis 키·상태·원자 연산은 3.6.1절을 따른다. Refresh/action은 Redis 활성 상태도 일치해야 하며 서명만으로 허용하지 않는다.
 
-탈퇴는 물리 삭제가 아니다. 현재 비밀번호를 다시 확인한 뒤 status·`withdrawn_at`·`email_verified_at`, username·email, `password_hash`를 MariaDB 트랜잭션에서 변경하고 모든 Refresh Token은 Redis에서 폐기한다. API에는 가명 값을 노출하지 않고 ‘탈퇴 사용자’로 처리한다. 과거 학습·수업 기록은 사용자 내부 ID 관계를 유지하지만 신규 로그인·학습에는 사용할 수 없다. 운영 배포의 법적 보존 기간과 백업 제거 시점은 별도 정책이며 현재 API가 30일 물리 삭제를 보장한다고 명세하지 않는다.
+탈퇴는 물리 삭제가 아니다. 현재 비밀번호를 다시 확인한 뒤 status·`withdrawn_at`·`email_verified_at`, username·email, `password_hash`를 MariaDB 트랜잭션에서 변경하고 같은 트랜잭션에서 `auth_version`을 +1 해 기존 Access·Refresh 인증 세션을 무효화한다. Redis family 폐기는 커밋 뒤의 사후 정리다. API에는 가명 값을 노출하지 않고 ‘탈퇴 사용자’로 처리한다. 과거 학습·수업 기록은 사용자 내부 ID 관계를 유지하지만 신규 로그인·학습에는 사용할 수 없다. 운영 배포의 법적 보존 기간과 백업 제거 시점은 별도 정책이며 현재 API가 30일 물리 삭제를 보장한다고 명세하지 않는다.
 
 ### 3.2 계정·인증 공개 HTTP API
 
@@ -79,30 +79,222 @@ Access Token은 15분 유효 JWT이며 MariaDB·Redis에 원문을 저장하지 
 | 로그인 | `POST /api/v1/auth-sessions` | `X-Client-Platform`, `{ username, password }` | `201`, 인증 응답 |
 | Access Token 갱신·Refresh 회전 | `POST /api/v1/access-tokens` | `X-Client-Platform`, 플랫폼별 Refresh 전달 | `201`, 인증 응답과 새 Refresh |
 | 로그아웃·현재 Refresh 계열 폐기 | `POST /api/v1/auth-session-revocations` | `X-Client-Platform`, 플랫폼별 Refresh 전달 | `204` |
-| 이메일 인증 요청·재발송 | `POST /api/v1/email-verification-requests` | `{ email }` | 항상 `202` |
+| 이메일 인증 요청·재발송 | `POST /api/v1/email-verification-requests` | `{ email }` | `202`, 빈 body |
 | 이메일 인증 완료 | `POST /api/v1/email-verifications` | `{ token }` | `204` |
-| 비밀번호 재설정 요청 | `POST /api/v1/password-reset-requests` | `{ email }` | 항상 `202` |
+| 비밀번호 재설정 요청 | `POST /api/v1/password-reset-requests` | `{ email }` | `202`, 빈 body |
 | 비밀번호 재설정 완료 | `POST /api/v1/password-resets` | `{ token, newPassword }` | `204` |
 
 가입 요청은 `role`, `emailVerified`, `status`, `level`을 받지 않고 서버가 항상 `LEARNER`를 부여한다. 가입 트랜잭션 뒤 최초 이메일 인증 토큰을 발급·발송하며 인증 완료 전에는 Access·Refresh Token을 발급하지 않는다. 가입·비밀번호 변경 시 정규화·비밀번호·Argon2id 규칙을 백엔드에서 적용한다.
 
 사용자 요약은 `{ userId, username, email, role, emailVerified, level, createdAt }`이며 `userId`는 BIGINT의 10진수 문자열, `createdAt`은 ISO 8601 UTC다. 가입·내 정보 조회·인증 응답의 user는 같은 형태를 사용한다. level은 users.level에서 조회한 열린 최고 단계 코드다. LEARNER의 자가 진단 전과 INSTRUCTOR·ADMIN은 null, 진단 후에는 L1~L6이며 BKT 확률과 다르다. 재로그인 후 프론트는 이 값으로 자가 진단 필요 여부와 열린 단계 범위를 판단한다. 접근성 설정, 일반 프로필 변경, 역할 변경은 이 계약에 포함하지 않는다.
 
+### 3.2.1 계정 리소스 API 계약 (가입·내 정보·탈퇴)
+
+username은 trim·NFC 정규화 후 3~30자이며 ASCII 영문 대소문자(`A-Z`, `a-z`)·숫자·`.`·`_`·`-`만 허용하고 처음과 끝은 ASCII 영문 또는 숫자다. 대소문자 비구분 UNIQUE이며 위반은 `422 INVALID_ACCOUNT_INPUT`이다.
+
+email은 trim 후 소문자로 정규화하며 유효한 이메일 형식이어야 하고 정규화 후 254자를 넘지 않는다. 위반은 `422 INVALID_ACCOUNT_INPUT`이다.
+
+사용자 요약은 가입·내 정보 조회·인증 응답이 같은 형태를 쓴다. 필드 의미는 3.2절을 따른다.
+
+| 필드 | 타입 | required | nullable |
+| --- | --- | :---: | :---: |
+| `userId` | string | O | X |
+| `username` | string | O | X |
+| `email` | string | O | X |
+| `role` | string | O | X |
+| `emailVerified` | boolean | O | X |
+| `level` | string | O | **O** |
+| `createdAt` | string | O | X |
+
+`userId`는 BIGINT의 10진수 문자열, `createdAt`은 ISO 8601 UTC다. `level`만 조건부 nullable이며 필드를 생략하지 않고 값으로 `null`을 보낸다.
+
+`POST /api/v1/users` 요청 body는 `username`·`email`·`password` 세 개이며 모두 required·non-null 문자열이다. `role`·`status`·`emailVerified`·`level`은 받지 않는다. 성공은 `201`과 사용자 요약이며, 생성 리소스 전용 조회 URI가 없으므로 `Location` 헤더를 두지 않는다.
+
+가입은 `users` INSERT와 이메일 인증 메일 작업의 `mail_outbox` INSERT를 하나의 MariaDB 트랜잭션으로 커밋한다. 메일 작업의 purpose는 `EMAIL_VERIFICATION`이다. `201`의 저장소 성공 조건은 두 INSERT를 포함한 트랜잭션 commit 성공이 확정되는 것이며, `201`은 사용자 생성과 메일 작업의 내구적 접수만 뜻하고 action token 발급, 제공자 접수, 사용자 편지함 도달은 뜻하지 않는다.
+
+실패 판정은 결정적 결과를 장애보다 우선한다. 입력 형식의 결정적 위반은 기존 `422 INVALID_ACCOUNT_INPUT`, 비밀번호가 정책을 결정적으로 위반하면 기존 `422 INVALID_PASSWORD`를 유지한다. 유출 비밀번호 조회 자체가 실패하면 기존 `503 PASSWORD_POLICY_UNAVAILABLE`이며 이를 `AUTH_STATE_UNAVAILABLE`로 바꾸지 않는다. MariaDB가 username 또는 email의 UNIQUE 위반을 결정적으로 확인하면 동시 가입 경쟁 때문에 commit 단계에서 드러난 경우를 포함해 기존 `409 ACCOUNT_IDENTIFIER_UNAVAILABLE`을 유지한다. `503 AUTH_STATE_UNAVAILABLE`은 그 밖의 MariaDB 명령 실패, 저장소 장애, commit 실패, commit 결과 불확실에만 쓴다. 저장소 오류를 UNIQUE 충돌로 추측하지 않고 UNIQUE 충돌을 `503`으로 바꾸지도 않는다.
+
+`GET /api/v1/users/me`는 요청 body가 없고 성공은 `200`과 사용자 요약이다.
+
+`POST /api/v1/users/me/withdrawals` 요청 body는 required·non-null 문자열 `currentPassword` 하나이며 성공은 `204`와 빈 body다. `currentPassword`가 누락·null·빈 문자열이면 `422 INVALID_ACCOUNT_INPUT`이고, non-empty지만 실제 비밀번호와 다르면 `403 CURRENT_PASSWORD_MISMATCH`다.
+
+다음은 이 절에서 확정하는 계정 업무 오류다. 공통 HTTP 파싱·전송 오류는 제외하고, 저장소 장애 code의 상세 판정 절차는 3.6.2절을 따르며 code 정의는 3.5절을 따른다.
+
+| API | 오류 |
+| --- | --- |
+| `POST /api/v1/users` | `409 ACCOUNT_IDENTIFIER_UNAVAILABLE`, `422 INVALID_ACCOUNT_INPUT`, `422 INVALID_PASSWORD`, `503 PASSWORD_POLICY_UNAVAILABLE`, `503 AUTH_STATE_UNAVAILABLE` |
+| `GET /api/v1/users/me` | `401 UNAUTHORIZED` |
+| `POST /api/v1/users/me/withdrawals` | `401 UNAUTHORIZED`, `403 CURRENT_PASSWORD_MISMATCH`, `422 INVALID_ACCOUNT_INPUT` |
+
+`409`는 username과 email 중 어느 값이 중복됐는지 구분하지 않는다. 이로 인한 계정 열거 가능성은 MVP에서 의도적으로 수용한다. 가입 API는 계정 열거 완화를 위한 요청 제한 대상이며 구체 제한 수치는 후속 보안 계약에서 정한다.
+
 ### 3.3 플랫폼별 Refresh Token 전달
 
-로그인·갱신·로그아웃은 `X-Client-Platform: WEB` 또는 `X-Client-Platform: MOBILE`을 필수로 받는다. 이 헤더는 Refresh Token 전달 방식을 고르는 값일 뿐 역할·권한의 근거가 아니다. 허용 브라우저 Origin에서 `MOBILE`을 주장하는 요청은 거부하고 신뢰할 Origin·CORS 정책을 함께 검사한다.
+로그인·갱신·로그아웃은 `X-Client-Platform: WEB` 또는 `X-Client-Platform: MOBILE`을 필수로 받는다. 이 헤더는 Refresh Token 전달 방식을 고르는 값일 뿐 역할·권한의 근거가 아니다. 요청에 `Origin` 헤더가 있으면 값이 허용 목록에 있는지와 무관하게 `MOBILE` 주장을 `400 INVALID_CLIENT_PLATFORM`으로 거부하며 `Origin: null`도 존재로 취급한다. 허용 Origin 검사는 CORS에서 별도로 수행한다. `Origin`과 `X-Client-Platform`은 인증·신원·권한의 근거가 아니다.
 
 공통 인증 응답은 `{ accessToken, tokenType: "Bearer", accessTokenExpiresAt, user }`다. WEB은 Refresh Token을 JSON에 포함하지 않고 `__Host-refreshToken` 이름의 `Secure; HttpOnly; SameSite=Strict; Path=/` 쿠키로 전달한다. MOBILE은 응답에 `refreshToken`, `refreshTokenExpiresAt`을 추가하며 Android Keystore·iOS Keychain과 동등한 운영체제 보안 저장소에만 보관한다. 웹 Access Token은 가능한 한 메모리에 유지하고 `localStorage`, 모바일의 `AsyncStorage` 등 일반 저장소에는 Refresh Token을 저장하지 않는다.
 
-갱신·로그아웃 때 WEB은 쿠키, MOBILE은 `{ refreshToken }` body를 사용한다. 갱신은 엄격한 회전을 수행하고 기존 토큰을 폐기한 뒤 같은 `family_id`의 새 토큰을 발급한다. 폐기·만료·잘못된 Refresh Token은 모두 `INVALID_REFRESH_TOKEN`으로 응답하며 폐기 토큰 재사용이 감지되면 같은 계열 전체를 폐기한다. 프론트엔드는 동시 갱신을 single-flight로 합쳐야 한다. 회전 응답 유실 뒤 이미 폐기된 토큰을 다시 보내면 엄격한 재사용 정책상 재로그인이 필요하다. 로그아웃은 이미 폐기되었어도 `204`로 멱등 처리하고 WEB 쿠키와 MOBILE 로컬 토큰을 제거한다.
+갱신·로그아웃 때 WEB은 쿠키, MOBILE은 `{ refreshToken }` body를 사용한다. 갱신은 엄격한 회전을 수행하고 기존 토큰을 폐기한 뒤 같은 `family_id`의 새 토큰을 발급한다. 폐기·만료·잘못된 Refresh Token은 모두 `INVALID_REFRESH_TOKEN`으로 응답하며 폐기 토큰 재사용이 감지되면 같은 계열 전체를 폐기한다. 프론트엔드는 동시 갱신을 single-flight로 합쳐야 한다. 회전 응답 유실 뒤 이미 폐기된 토큰을 다시 보내면 엄격한 재사용 정책상 재로그인이 필요하다. 위 `INVALID_REFRESH_TOKEN` 규칙은 갱신 기준이다. 로그아웃은 서명·용도·만료 검증을 통과하고 Redis 정상 조회로 토큰과 family 상태가 식별되면 family가 폐기된 상태가 되도록 보장하고 `204`를 반환한다. 활성 토큰이면 family를 폐기하고, 회전된 이전 토큰이면 이미 폐기된 것으로 무시하지 않고 재사용으로 판정해 family 전체를 폐기하며, 이미 폐기된 family면 멱등하게 `204`다. 토큰 누락·위조·용도 불일치·만료와 Redis가 정상 응답했지만 토큰 상태가 조회되지 않는 경우는 `401 INVALID_REFRESH_TOKEN`이다. Redis 조회나 폐기 명령 자체가 실패했거나 결과를 알 수 없는 장애는 이 규칙과 구분하며 `503 AUTH_STATE_UNAVAILABLE`이다. 멱등 `204`는 Redis가 정상 응답해 상태를 확인한 경우에만 성립하며 상세는 3.6.2절을 따른다. `X-Client-Platform: WEB`이고 전달 경로 충돌이 없는 로그아웃 요청에는 서버 판정이 `204`·`401`·`503` 중 무엇이든 발급 때와 같은 속성으로 refresh 쿠키 삭제 응답을 보내고, MOBILE 로컬 보안 저장소 삭제는 클라이언트 책임이다. `400 INVALID_CLIENT_PLATFORM`처럼 WEB 여부와 전달 경로가 확정되지 않은 요청에는 적용하지 않는다.
+
+### 3.3.1 인증 세션 API 계약 (로그인·갱신·로그아웃)
+
+Origin에 따른 MOBILE 주장 거부와 로그아웃 토큰 상태 판정은 3.3절을 따른다. 이 절은 요청·응답 스키마와 쿠키 속성을 정의한다.
+
+`POST /api/v1/auth-sessions` 요청 body는 `username`·`password`이며 둘 다 required·non-null 문자열이다. username은 trim·NFC 정규화와 3.2.1절의 길이·허용 문자 검증을 적용한 뒤 대소문자 비구분으로 조회한다. `username` 또는 `password`가 누락·null·빈 문자열이거나 정규화한 username이 3.2.1절 형식에 맞지 않으면 `422 INVALID_ACCOUNT_INPUT`이다. 형식은 유효하지만 계정·비밀번호·잠금·탈퇴 조건으로 실패하면 원인을 구분하지 않고 `401 INVALID_CREDENTIALS`이며, 자격 증명이 올바르지만 이메일 미인증이면 `403 EMAIL_VERIFICATION_REQUIRED`다. 성공은 `201`과 아래 인증 응답이다.
+
+`POST /api/v1/access-tokens`(성공 `201`과 인증 응답)와 `POST /api/v1/auth-session-revocations`(성공 `204`와 빈 body)는 Refresh Token을 플랫폼별 위치에서만 받는다.
+
+| `X-Client-Platform` | 허용 위치 | 금지 위치 |
+| --- | --- | --- |
+| `WEB` | `__Host-refreshToken` 쿠키 | body `refreshToken` |
+| `MOBILE` | body `refreshToken` (required·non-null) | `__Host-refreshToken` 쿠키 |
+
+금지 위치에 토큰이 하나라도 있으면 `400 INVALID_CLIENT_PLATFORM`, 허용 위치에 없으면 `401 INVALID_REFRESH_TOKEN`, 양쪽에 모두 있으면 우선순위 없이 `400 INVALID_CLIENT_PLATFORM`이다.
+
+갱신은 플랫폼과 전달 위치 → Refresh Token의 서명·용도·만료와 Redis 활성 상태 → 연결 사용자 조회 순으로 검사한다. 사용자 검사에서는 `status != ACTIVE`를 먼저 판정해 `401 INVALID_REFRESH_TOKEN`으로 응답하고, 이어서 Refresh claim의 `authVersion`이 `users.auth_version`과 다르면 `401 INVALID_REFRESH_TOKEN`으로 응답한다. 두 조건을 통과한 ACTIVE 계정에 한해 `emailVerified`를 검사해 미인증이면 `403 EMAIL_VERIFICATION_REQUIRED`로 응답한다.
+
+Redis 회전에 성공한 뒤 응답 전에 `users.auth_version`과 `status`를 다시 확인한다. 이 재확인은 선택이 아니라 필수다. `auth_version`이 Snapshot과 달라졌거나 `status`가 ACTIVE가 아니면 해당 family를 폐기하고 신규 Access·Refresh를 반환하지 않으며 `401 INVALID_REFRESH_TOKEN`으로 응답한다. DB 재확인 자체가 실패하면 family 폐기를 가능한 범위에서 시도하되 신규 토큰을 반환하지 않으며, 그때는 `503 AUTH_STATE_UNAVAILABLE`이다. 회전 전 사용자 조회가 실패한 경우를 포함한 저장소 장애 처리는 3.6.2절을 따른다. 어떤 경우에도 기존 Snapshot의 `authVersion`을 최신 값으로 바꿔 발급하지 않는다. 재확인 이후에 발생하는 경쟁의 최종 차단은 보호 API의 DB `authVersion` 비교가 담당한다.
+
+인증 응답의 공통 필드는 `accessToken`·`tokenType`·`accessTokenExpiresAt`·`user`이며 모두 required·non-null이다. `tokenType`은 고정 문자열 `Bearer`, `accessTokenExpiresAt`은 ISO 8601 UTC, `user`는 3.2.1절의 사용자 요약이다. MOBILE 응답은 `refreshToken`과 `refreshTokenExpiresAt`을 추가하며, 두 필드 모두 required·non-null이다. `refreshTokenExpiresAt`은 ISO 8601 UTC다. **WEB body에는 이 두 필드를 어떤 경우에도 포함하지 않는다.** 구현은 WEB과 MOBILE의 응답 타입을 분리하고, application은 플랫폼 중립 결과를 반환하며 presentation이 플랫폼별 HTTP 응답으로 변환한다.
+
+WEB 쿠키는 로그인과 정상 갱신에서 같은 규칙으로 발급한다.
+
+| 속성 | 발급 | 삭제 |
+| --- | --- | --- |
+| 이름 | `__Host-refreshToken` | 발급과 동일 |
+| `Secure`·`HttpOnly`·`SameSite=Strict`·`Path=/` | 적용 | 발급과 동일 |
+| `Domain` | 생략 | 생략 |
+| `Max-Age` | `1209600` | `0` |
+| `Expires` | `refreshTokenExpiresAt`과 같은 시각 | 과거 시각 |
+
+WEB으로 판정되고 전달 경로 충돌이 없는 로그아웃 요청에는 서버 처리 결과가 `204`·`401`·`503` 중 무엇이든 삭제 `Set-Cookie`를 반환한다. MOBILE 로컬 보안 저장소 삭제는 클라이언트 책임이다.
+
+`SameSite=Strict`를 쓰려면 WEB 프론트와 API를 HTTPS same-site로 배포해야 한다. cross-site 배포가 필요하면 `SameSite`를 임의로 `None`으로 바꾸지 않고 CORS·CSRF·쿠키 정책을 재검토해 승인받는다.
+
+세 API의 계정 업무 오류는 다음과 같다. 공통 HTTP 파싱·전송 오류는 제외하고, 저장소 장애 code의 상세 판정 절차는 3.6.2절을 따르며 code 정의는 3.5절을 따른다.
+
+| API | 오류 |
+| --- | --- |
+| `POST /api/v1/auth-sessions` | `400 INVALID_CLIENT_PLATFORM`, `401 INVALID_CREDENTIALS`, `403 EMAIL_VERIFICATION_REQUIRED`, `422 INVALID_ACCOUNT_INPUT`, `503 AUTH_STATE_UNAVAILABLE` |
+| `POST /api/v1/access-tokens` | `400 INVALID_CLIENT_PLATFORM`, `401 INVALID_REFRESH_TOKEN`, `403 EMAIL_VERIFICATION_REQUIRED`, `503 AUTH_STATE_UNAVAILABLE` |
+| `POST /api/v1/auth-session-revocations` | `400 INVALID_CLIENT_PLATFORM`, `401 INVALID_REFRESH_TOKEN`, `503 AUTH_STATE_UNAVAILABLE` |
 
 ### 3.4 인증·복구·탈퇴 처리
 
-이메일 인증 요청·재발송과 비밀번호 재설정 요청은 계정 존재 여부와 발송 여부에 상관없이 항상 `202`를 반환한다. 실제 이메일 인증 메일은 ACTIVE이면서 미인증인 계정에만 발송한다. 같은 사용자·용도의 새 인증 토큰을 만들 때 기존 활성 토큰을 무효화한다. 인증 토큰은 24시간, 비밀번호 재설정 토큰은 30분이며 단일 사용이다. 발송을 억제한 경우에도 외부 응답은 같고 실제 IP·계정별 제한 수치는 운영 부하·남용 데이터를 바탕으로 별도 승인한다.
+이메일 인증 요청·재발송과 비밀번호 재설정 요청은 요청 형식이 유효하고 메일 작업의 `mail_outbox` INSERT commit 성공이 확정되면 계정 존재 여부와 발송 여부에 관계없이 `202`와 빈 body를 반환한다. INSERT 또는 commit이 실패하거나 commit 결과가 불확실하면 `503 AUTH_STATE_UNAVAILABLE`이다. 입력 형식 오류는 `422 INVALID_ACCOUNT_INPUT`이며 `202`로 감추지 않는다. 이 규칙은 두 요청 API에 공통 적용된다. 실제 이메일 인증 메일은 ACTIVE이면서 미인증인 계정에만 발송하며 이 판정은 동기 요청 경로가 아니라 비동기 worker가 수행한다. 같은 사용자·용도의 새 인증 토큰을 만들 때 기존 활성 토큰을 무효화한다. 인증 토큰은 24시간, 비밀번호 재설정 토큰은 30분이며 단일 사용이다. 발송을 억제한 경우에도 외부 응답은 같고 실제 IP·계정별 제한 수치는 운영 부하·남용 데이터를 바탕으로 별도 승인한다.
 
-원문 action token은 백엔드의 GET·query parameter로 받지 않고 POST body로만 전달한다. 이메일 링크는 프론트 화면 또는 앱 deep link·fragment를 열고, 프론트가 토큰을 POST body에 실어 완료 API를 호출한다. 비밀번호 재설정 성공 시 사용자의 모든 Refresh Token을 폐기하고 자동 로그인하지 않는다.
+원문 action token은 백엔드의 GET·query parameter로 받지 않고 POST body로만 전달한다. 이메일 링크는 프론트 화면 또는 앱 deep link·fragment를 열고, 프론트가 토큰을 POST body에 실어 완료 API를 호출한다. 비밀번호 재설정 성공 시 `password_hash` 변경과 같은 트랜잭션에서 `users.auth_version`을 +1 해 기존 Access와 Refresh를 모두 무효화하고 자동 로그인하지 않는다. Redis family 폐기는 사후 정리다.
 
-탈퇴 API는 현재 비밀번호를 다시 확인한다. 성공 시 가명화, `WITHDRAWN`·`withdrawn_at`·`email_verified_at=NULL`, 임의 Argon2id 비밀번호 해시 변경을 MariaDB 트랜잭션으로 수행하고 모든 Refresh Token은 Redis에서 폐기한다. 두 저장소의 일부 성공·실패 복구는 3.6절의 추가 승인 대상이다. Access Token 자체는 무상태지만 모든 보호 API가 `users.status=ACTIVE`를 재확인하므로 즉시 접근을 막는다. 물리 삭제, 30일 복구, 탈퇴 취소는 제공하지 않는다.
+탈퇴 API는 현재 비밀번호를 다시 확인한다. 성공 시 가명화, `WITHDRAWN`·`withdrawn_at`·`email_verified_at=NULL`, 임의 Argon2id 비밀번호 해시 변경과 `auth_version` +1을 하나의 MariaDB 트랜잭션으로 커밋해 기존 Access·Refresh 인증 세션을 무효화한다. Redis family 폐기는 커밋 뒤의 사후 정리다. Access Token 자체는 무상태지만 모든 보호 API가 `users.status`와 `auth_version`을 재확인하므로 즉시 접근을 막는다. 물리 삭제, 30일 복구, 탈퇴 취소는 제공하지 않는다.
+
+### 3.4.1 이메일 인증 API 계약 (요청·완료)
+
+두 API는 `X-Client-Platform`을 읽지 않는다. WEB과 MOBILE이 같은 요청 body·상태 코드·오류를 쓰며 쿠키를 설정하지도 읽지도 않는다. 플랫폼 분기는 3.3.1절의 인증 세션 API에만 있다.
+
+**`POST /api/v1/email-verification-requests`**
+
+| 요청 필드 | 타입 | required | nullable |
+| --- | --- | :---: | :---: |
+| `email` | string | O | X |
+
+`email`이 누락·`null`·문자열이 아니거나 빈 문자열이거나 공백만 있으면 required 위반이다. 값이 있으면 trim 후 소문자로 정규화하고 유효한 이메일 형식과 254자 이하를 검사한다. required 위반과 형식 위반은 모두 `422 INVALID_ACCOUNT_INPUT`이다. 형식 오류는 어떤 계정에 대해서도 같게 거부되므로 계정 존재 단서가 되지 않는다.
+
+동기 요청 경로는 email 검증·정규화와 `mail_outbox` INSERT·commit까지 수행한다. 형식이 유효하면 계정을 조회하지 않고 purpose가 `EMAIL_VERIFICATION`인 작업을 INSERT하며, INSERT commit 성공이 확정되면 `202`와 빈 body를, INSERT 또는 commit이 실패하거나 commit 결과가 불확실하면 `503 AUTH_STATE_UNAVAILABLE`을 반환한다. 이 `202`는 메일 작업이 내구적으로 접수되었다는 뜻이며 계정 존재, 발송 적격 여부, action token 발급, 제공자 접수, 사용자 편지함 도달 중 어느 것도 뜻하지 않는다. 계정 조회와 `status`·`email_verified_at`·발송 적격 여부 판정은 동기 요청 경로에서 수행하지 않고 비동기 worker가 담당하며, 실제 인증 메일은 `status=ACTIVE`이면서 `email_verified_at`이 NULL인 계정에만 보낸다. 형식이 유효한 모든 요청은 계정 존재 여부와 무관하게 같은 종류의 outbox INSERT·commit 경로를 거치고, 계정 존재·상태·발송 적격 여부에 따른 동기 분기나 의도적인 차등 지연을 두지 않는다. `202`와 `503`의 차이는 오직 outbox 저장 결과에 따르며 계정 존재 여부에 따르지 않는다. 다만 실제 처리 시간을 정확히 같은 값으로 고정하거나 새로운 지연 SLA를 만들지는 않는다. 계정이 없거나 `ACTIVE`가 아니거나 이미 인증된 경우에도 동기 응답은 달라지지 않으며 HTTP 상태·body·명세된 응답 헤더도 달라지지 않는다.
+
+worker가 발송 대상으로 판정하면 같은 사용자·용도의 이전 활성 토큰을 무효화하고 새 토큰을 발급한다. 무효화된 토큰은 이후 제출되어도 `400 ACTION_TOKEN_INVALID`이며 가장 최근에 발급된 action token만 유효하다.
+
+오류: `422 INVALID_ACCOUNT_INPUT`, `503 AUTH_STATE_UNAVAILABLE`.
+
+**`POST /api/v1/email-verifications`**
+
+| 요청 필드 | 타입 | required | nullable |
+| --- | --- | :---: | :---: |
+| `token` | string | O | X |
+
+`token`은 opaque 문자열이므로 trim·정규화·대소문자 변환을 적용하지 않는다. 누락·`null`·문자열이 아니거나 빈 문자열이거나 공백만 있으면 `422 INVALID_ACCOUNT_INPUT`이다. 이는 요청이 계약 형식을 갖추지 못한 경우이며 토큰이나 계정의 상태와 무관하다. 그 외 문자열은 입력값 그대로 JWT 검증에 넘긴다. 앞뒤 공백이 포함된 non-empty 문자열도 trim하지 않으며 그 때문에 검증에 실패하면 `400 ACTION_TOKEN_INVALID`다.
+
+non-empty token은 다음 사전 판정을 모두 통과해야 한다.
+
+1. `token`의 누락·`null`·빈 문자열·공백 여부 검사
+2. 3.6.1절에 따른 JWT 서명·`alg`·`kid`·`typ`·`iss`·`aud`·`exp` 검증
+3. `purpose`가 `EMAIL_VERIFICATION`인지 검증
+4. `sub`가 가리키는 사용자를 조회하고 `status=ACTIVE`인지 확인
+
+Redis action token의 적격 조건은 `action-current`가 요청 `jti`를 가리키고, 상태가 `ACTIVE`이며, `tokenHash`가 일치하는 것이다. 이 조건은 별도의 선행 조회 호출을 요구하지 않는다. 실제 토큰 소비 시에는 3.6.1절의 `consumeActionToken`이 세 조건을 한 원자 연산에서 다시 검사하면서 `CONSUMED`로 전이해야 한다. Redis 조건 불일치 결과는 모두 `400 ACTION_TOKEN_INVALID`로 일반화한다.
+
+1의 실패는 `422 INVALID_ACCOUNT_INPUT`이다. 2~4의 실패와 위 Redis 조건 불일치는 외부에서 원인을 구분하지 않고 모두 `400 ACTION_TOKEN_INVALID`다. 위조·서명 불일치·만료·소비 완료·재발급으로 인한 무효화·용도 불일치·`aud`나 `typ` 불일치가 여기에 해당한다. 사용자를 찾을 수 없는 경우와 `status`가 `ACTIVE`가 아닌 경우도 같은 code로 일반화한다. 탈퇴는 `email_verified_at`을 NULL로 되돌리므로 재인증을 허용하지 않으며, 계정 상태를 드러내는 별도 code를 쓰지 않는다.
+
+성공은 `204`와 빈 body이며 `users.email_verified_at`이 값을 가진 상태로 확정되었음을 뜻한다. 위 사전 판정과 Redis 적격 조건을 모두 만족한 계정의 `email_verified_at`에 이미 값이 있으면 멱등하게 `204`를 반환하고 기존 값을 덮어쓰지 않으며, 그 토큰도 단일 사용 대상이다. 이 조건들을 만족하지 못한 토큰을 계정 상태만 보고 `204`로 처리하지 않는다.
+
+오류: `422 INVALID_ACCOUNT_INPUT`, `400 ACTION_TOKEN_INVALID`, `503 AUTH_STATE_UNAVAILABLE`.
+
+`consumeActionToken`의 `CONSUMED` 전이와 MariaDB `email_verified_at` 기록의 선후, 한쪽만 성공한 경우의 처리, `row_version` 경합 재시도, Redis·DB 장애의 HTTP 상태와 오류 code는 3.6.2절을 따른다. `mail_outbox` 스키마와 worker의 선점·재시도·종결 처리는 [ERD 3.5](./erd.md#table-mail_outbox)를 따른다. API별 클라이언트 복구는 3.7절을, 운영 경고·관측 기준은 3.8절을 따른다.
+
+### 3.4.2 비밀번호 재설정 API 계약 (요청·완료)
+
+두 API는 `X-Client-Platform`을 읽지 않는다. WEB과 MOBILE이 같은 요청 body·상태 코드·오류를 쓰며 쿠키를 설정하지도 읽지도 않는다. presentation에 플랫폼 분기를 두지 않는다.
+
+**`POST /api/v1/password-reset-requests`**
+
+| 요청 필드 | 타입 | required | nullable |
+| --- | --- | :---: | :---: |
+| `email` | string | O | X |
+
+`email`이 누락·`null`·문자열이 아니거나 빈 문자열이거나 공백만 있으면 required 위반이다. 값이 있으면 trim 후 소문자로 정규화하고 유효한 이메일 형식과 254자 이하를 검사한다. required 위반과 형식 위반은 모두 `422 INVALID_ACCOUNT_INPUT`이다.
+
+동기 요청 경로는 email 검증·정규화와 `mail_outbox` INSERT·commit까지 수행한다. 형식이 유효하면 계정을 조회하지 않고 purpose가 `PASSWORD_RESET`인 작업을 INSERT하며, INSERT commit 성공이 확정되면 `202`와 빈 body를, INSERT 또는 commit이 실패하거나 commit 결과가 불확실하면 `503 AUTH_STATE_UNAVAILABLE`을 반환한다. 이 `202`는 메일 작업이 내구적으로 접수되었다는 뜻이며 계정 존재, 발송 적격 여부, action token 발급, 제공자 접수, 사용자 편지함 도달 중 어느 것도 뜻하지 않는다. 계정 조회와 `status`·발송 적격 여부 판정은 동기 요청 경로에서 수행하지 않고 비동기 worker가 담당하며, 실제 재설정 메일은 `status=ACTIVE`인 계정에만 보내고 `email_verified_at`은 조건에 넣지 않는다. 미인증 계정도 재설정 대상이기 때문이며, 이메일 인증 요청이 `email_verified_at`이 NULL인 계정만 대상으로 삼는 것과 의도적으로 다르다. 형식이 유효한 모든 요청은 계정 존재 여부와 무관하게 같은 종류의 outbox INSERT·commit 경로를 거치고, 계정 존재·상태·발송 적격 여부에 따른 동기 분기나 의도적인 차등 지연을 두지 않는다. `202`와 `503`의 차이는 오직 outbox 저장 결과에 따르며 계정 존재 여부에 따르지 않는다. 다만 실제 처리 시간을 정확히 같은 값으로 고정하거나 새로운 지연 SLA를 만들지는 않는다. 발송하지 않는 경우에도 동기 응답은 달라지지 않고 계정 상태에 따라 HTTP 상태·body·명세된 응답 헤더가 달라지지 않는다.
+
+worker가 발송 대상으로 판정하면 같은 사용자·`PASSWORD_RESET` 용도의 이전 활성 토큰을 무효화하고 새 토큰을 발급한다. 무효화된 토큰은 이후 제출되어도 `400 ACTION_TOKEN_INVALID`이며 가장 최근에 발급된 action token만 유효하다.
+
+오류: `422 INVALID_ACCOUNT_INPUT`, `503 AUTH_STATE_UNAVAILABLE`.
+
+**`POST /api/v1/password-resets`**
+
+| 요청 필드 | 타입 | required | nullable |
+| --- | --- | :---: | :---: |
+| `token` | string | O | X |
+| `newPassword` | string | O | X |
+
+`token`은 opaque 문자열이므로 trim·정규화·대소문자 변환을 적용하지 않는다. 누락·`null`·문자열이 아니거나 빈 문자열이거나 공백만 있으면 `422 INVALID_ACCOUNT_INPUT`이다. 그 외 문자열은 입력값 그대로 JWT 검증에 넘기며, 앞뒤 공백이 포함된 non-empty 문자열도 trim하지 않고 그 때문에 검증에 실패하면 `400 ACTION_TOKEN_INVALID`다.
+
+`newPassword`는 누락·`null`·문자열이 아닌 값이면 `422 INVALID_ACCOUNT_INPUT`이다. 문자열로 전달되었으면 trim하지 않는다. 비밀번호는 공백을 허용하므로 앞뒤 공백이 값의 일부이며, 공백만 있다는 이유로 required 위반 처리하지 않고 아래 정책으로 판정한다.
+
+`newPassword` 정책 검증은 다음 순서로 한다. 먼저 NFC 정규화한다. 정규화된 문자열의 Unicode code point 수를 세어 15~64 code points여야 한다. Java 구현에서 UTF-16 code unit 수인 `String.length()`만 사용해서는 안 되며, 결합 문자와 supplementary character가 포함되어도 같은 규칙을 적용한다. 흔한 값·유출 값 검사도 정규화된 값을 대상으로 한다. 빈 문자열은 필드 누락이 아니라 0 code points이므로 길이 정책 위반이다. 위 정책을 만족하지 못하면 `422 INVALID_PASSWORD`다.
+
+처리는 다음 순서를 따른다.
+
+1. `token`과 `newPassword`의 필드 존재·`null`·타입 검사
+2. 3.6.1절의 검증 순서에 따라 JOSE Header, 서명과 모든 필수 claim 검증
+3. `purpose`가 `PASSWORD_RESET`인지 검증
+4. `sub`가 가리키는 사용자를 조회하고 `status=ACTIVE`인지 확인
+5. Redis action token 적격 조건을 비변경 조회로 확인
+6. `newPassword` 정책 검증
+7. Argon2id 해시 계산
+8. 상태 변경 처리
+
+5단계의 적격 조건은 `action-current`가 요청 `jti`를 가리키고, 상태가 `ACTIVE`이며, `tokenHash`가 일치하는 것이다. 이 조회는 값비싼 비밀번호 검사와 Argon2id를 반복 유발하지 못하게 하는 자원 보호용 사전 확인이며 정확성의 최종 근거가 아니다. 실제 소비 시에는 3.6.1절의 `consumeActionToken`이 같은 조건을 원자적으로 다시 검사하면서 `CONSUMED`로 전이해야 하고, 사전 확인과 소비 사이에 상태가 바뀌면 최종 소비가 실패해야 한다.
+
+5단계를 두는 이유는 이 endpoint가 인증 없이 호출되기 때문이다. 서명이 정상이지만 이미 `CONSUMED`이거나 `INVALIDATED`인 토큰을 반복 제출하면, 5단계가 없을 때 매번 유출 값 조회와 Argon2id 연산에 도달한다. 5단계는 위조 토큰뿐 아니라 이미 소비·무효화된 정상 서명 토큰도 7단계에 이르지 못하게 한다. 동시 요청으로 사전 확인 직후 상태가 바뀌는 경쟁은 `consumeActionToken`의 원자적 재검증이 차단한다.
+
+1의 실패는 `422 INVALID_ACCOUNT_INPUT`이다. 2~5의 실패는 외부에서 원인을 구분하지 않고 모두 `400 ACTION_TOKEN_INVALID`다. 위조·서명 불일치·만료·소비 완료·재발급으로 인한 무효화·용도 불일치·`aud`나 `typ` 불일치가 여기에 해당하며, 사용자를 찾을 수 없는 경우와 `status`가 `ACTIVE`가 아닌 경우, Redis 사전 확인 실패도 같은 code로 일반화한다. 6의 실패는 `422 INVALID_PASSWORD`다.
+
+정책 위반으로 실패한 요청은 action token을 소비하지 않는다. 6은 `CONSUMED` 전이보다 먼저 완료되어야 하며, 잘못된 새 비밀번호 때문에 30분짜리 정상 토큰이 소진되면 사용자가 메일을 다시 받아야 한다.
+
+7은 MariaDB 트랜잭션을 열거나 행 잠금을 잡기 전에 계산한다. Argon2id는 수백 밀리초가 걸리므로 잠금 안에서 계산하면 같은 계정의 로그인·탈퇴가 그동안 직렬화된다.
+
+MariaDB 상태 변경은 하나의 트랜잭션에서 `password_hash` 교체, `auth_version` +1, `failed_login_count`를 0으로, `locked_until`을 NULL로 확정한다. `row_version`은 기존 낙관적 잠금 계약대로 함께 증가한다. 잠금 상태를 함께 푸는 이유는 누적된 실패가 이미 교체된 비밀번호에 대한 것이어서 새 비밀번호를 막을 근거가 되지 않기 때문이다.
+
+이 갱신은 `status='ACTIVE'`와 4단계에서 조회한 `row_version`을 조건으로 갖는 조건부 갱신으로 수행한다. 갱신된 행이 없으면 `204`를 반환하지 않는다. 0행의 원인은 두 가지로 나뉜다. `status`가 더 이상 `ACTIVE`가 아니면 비밀번호를 변경하지 않고 `400 ACTION_TOKEN_INVALID`로 일반화한다. 탈퇴는 `password_hash`를 폐기된 무작위 값으로 교체하므로 탈퇴 뒤 재설정이 성립하면 로그인 가능한 계정이 되살아나기 때문이다. `status`는 `ACTIVE`인데 `row_version`만 달라진 경우는 다른 갱신과의 경합이며 이를 탈퇴로 단정하지 않는다. `ACTIVE` 상태에서의 `row_version` 경합 재시도 횟수와 최종 오류 응답, 경합 시 이미 계산한 Argon2id 해시를 다시 계산하지 않아도 되는 조건은 3.6.2절을 따른다. 어떤 경우에도 조건부 갱신 0행을 `204`로 숨기지 않는다.
+
+`email_verified_at`은 변경하지 않는다. 재설정 토큰은 그 주소로 메일이 도달했음을 보이지만 가입 절차 완료를 뜻하지 않으며, 재설정이 이메일 인증을 우회하는 경로가 되어서는 안 된다. 미인증 계정은 재설정 후에도 로그인 전에 이메일 인증을 마쳐야 한다.
+
+새 비밀번호가 기존 비밀번호와 같은지는 검사하지 않는다. 현재 정책을 통과하면 허용한다. 별도 password history를 두지 않는 구조에서 직전 값 하나만 막는 효과가 제한적이고, 비교를 위해 Argon2id 검증을 한 번 더 수행하는 비용이 크기 때문이다.
+
+성공은 `204`와 빈 body이며 다음을 모두 만족한다. MariaDB 변경 확정 시점에도 `status=ACTIVE`가 보장되었고, `password_hash`가 교체되었으며, `auth_version`이 +1 되어 기존 Access·Refresh 인증 세션이 무효화되었고, `failed_login_count`가 0이고 `locked_until`이 NULL이며, `row_version`이 증가했고, `email_verified_at`은 바뀌지 않았으며, 그 action token을 다시 쓸 수 없고, 응답으로 Access·Refresh를 발급하지 않아 사용자가 새 비밀번호로 다시 로그인해야 한다.
+
+오류: `422 INVALID_ACCOUNT_INPUT`, `422 INVALID_PASSWORD`, `400 ACTION_TOKEN_INVALID`, `503 AUTH_STATE_UNAVAILABLE`, `503 PASSWORD_POLICY_UNAVAILABLE`.
+
+`consumeActionToken`의 `CONSUMED` 전이와 MariaDB 트랜잭션의 선후, 한쪽만 성공한 경우의 처리, Redis·DB·유출 비밀번호 조회 장애의 HTTP 상태와 오류 code, Redis Refresh family 사후 정리 실패 처리는 3.6.2절을 따른다. `mail_outbox` 스키마와 worker의 선점·재시도·종결 처리는 [ERD 3.5](./erd.md#table-mail_outbox)를 따른다. API별 클라이언트 복구는 3.7절을, 운영 경고·관측 기준은 3.8절을 따른다.
 
 ### 3.5 계정·인증 오류
 
@@ -110,24 +302,316 @@ Access Token은 15분 유효 JWT이며 MariaDB·Redis에 원문을 저장하지 
 
 | HTTP | code | 적용 조건 |
 | --- | --- | --- |
-| 401 | `UNAUTHORIZED` | Access Token 없음·무효 또는 보호 자원 인증 실패 |
+| 401 | `UNAUTHORIZED` | Access Token 없음·무효·`authVersion` 불일치 또는 보호 자원 인증 실패 |
 | 401 | `INVALID_CREDENTIALS` | 알 수 없는 계정·비밀번호 오류·로그인 제한·탈퇴 계정. 외부에서 원인을 구분하지 않음 |
-| 401 | `INVALID_REFRESH_TOKEN` | Refresh Token 없음·무효·만료·폐기·재사용 |
+| 401 | `INVALID_REFRESH_TOKEN` | Refresh Token 없음·무효·만료·폐기·재사용 또는 `authVersion` 불일치 |
 | 403 | `EMAIL_VERIFICATION_REQUIRED` | 올바른 자격 증명이지만 이메일 미인증 |
 | 403 | `CURRENT_PASSWORD_MISMATCH` | 탈퇴의 현재 비밀번호 불일치 |
 | 409 | `ACCOUNT_IDENTIFIER_UNAVAILABLE` | username 또는 email 사용 불가 |
 | 422 | `INVALID_ACCOUNT_INPUT` | username·email 형식 또는 필수 입력 오류 |
 | 422 | `INVALID_PASSWORD` | 길이·정규화·흔한 값·유출 값 정책 위반 |
 | 400 | `ACTION_TOKEN_INVALID` | action token 무효·만료·사용 완료·용도 불일치. 외부에서 원인을 구분하지 않음 |
-| 400 | `INVALID_CLIENT_PLATFORM` | 플랫폼 헤더 누락·미지원 값 또는 신뢰하지 않는 브라우저의 MOBILE 주장 |
+| 400 | `INVALID_CLIENT_PLATFORM` | 플랫폼 헤더 누락·미지원 값, 금지 위치 전달·양쪽 동시 전달 또는 `Origin` 헤더가 있는 요청의 `MOBILE` 주장 |
+| 503 | `AUTH_STATE_UNAVAILABLE` | MariaDB 또는 Redis의 인증 상태를 읽거나 바꾸지 못했거나 결과가 불확실함. 저장소 종류를 외부에서 구분하지 않음 |
+| 503 | `PASSWORD_POLICY_UNAVAILABLE` | 유출 비밀번호 조회 실패로 비밀번호 정책을 완성할 수 없음 |
+
+`authVersion` 불일치는 Access 보호 API에서는 `401 UNAUTHORIZED`, Refresh 검증에서는 `401 INVALID_REFRESH_TOKEN`으로 일반화한다. 실제 세대 값이나 내부 비교 결과를 응답 body·헤더·로그에 기록하지 않으며 같은 code와 message를 쓴다.
 
 ### 3.6 Redis 저장 계약과 구현 전 승인 경계
 
-관계형 DB는 MariaDB 11.8.9, 인증 상태는 Redis Open Source 8.2.9를 사용한다. 토큰 테이블은 두지 않으며 저장 항목·TTL·재사용 탐지·사용자별 전체 폐기는 [ERD Redis 인증 상태](./erd.md#redis-auth)를 따른다. 기존 공개 endpoint·성공 DTO·유효기간·계정 존재 비노출 정책은 유지한다. 토큰 값의 형식만 서명 JWT로 변경하며 클라이언트가 payload를 권한 판단 근거로 사용하지 않는다.
+관계형 DB는 MariaDB 11.8.9, 인증 상태는 Redis Open Source 8.2.9를 사용한다. 토큰 테이블은 두지 않으며 저장 항목·TTL·재사용 탐지는 [ERD Redis 인증 상태](./erd.md#redis-auth)를 따른다. 사용자별 families 인덱스는 조회·정리를 위한 보조 구조이며, 기존 Access·Refresh 인증 세션 무효화의 권위는 `users.auth_version`과 `users.status`다. 기존 공개 endpoint·성공 DTO·유효기간·계정 존재 비노출 정책은 유지한다. 토큰 값의 형식만 서명 JWT로 변경하며 클라이언트가 payload를 권한 판단 근거로 사용하지 않는다.
 
-Redis 원자적 소비·회전은 MariaDB 변경까지 원자적으로 만들지 않는다. 비밀번호 재설정·탈퇴, 이메일 인증 완료에서 일부 성공을 정상 완료로 숨기지 않아야 한다. 구체 처리 순서·보상/재시도·동시 로그인과 폐기의 직렬화, Redis 장애 HTTP/code·클라이언트 안내는 추가 승인 후 확정한다. 위 오류 표에 장애를 임의로 INVALID_REFRESH_TOKEN 등으로 끼워 넣지 않는다. 기존 요청/재발송의 일반 202는 실제 발송 성공을 보장하지 않는다.
+Redis 원자적 소비·회전은 MariaDB 변경까지 원자적으로 만들지 않는다. action token 소비와 MariaDB 변경처럼 서로 다른 저장소에 걸친 복합 처리에서 일부 성공을 정상 완료로 숨기지 않는다. 반대로 MariaDB에 커밋된 `auth_version`·`status`의 무효화 효력은 Redis 사후 정리가 실패해도 되돌아가지 않는다. 각 API의 최종 응답과 복구 방식은 3.6.2절을 따른다. 이 절에서 확정된 것은 무효화 권위(users.auth_version과 users.status), 로그인 Snapshot 처리, Refresh 회전 경쟁의 불변식, Access·Refresh의 authVersion 비교, Redis 복원 정책이며 상세는 3.6.1절을 따른다. action token 소비와 MariaDB 변경의 순서, 한쪽만 성공한 경우의 재시도·복구, Redis·DB 장애의 HTTP 상태·오류 code는 3.6.2절에서 확정한다. `mail_outbox` 스키마와 worker의 선점·재시도·종결 처리는 [ERD 3.5](./erd.md#table-mail_outbox)에서 확정했다. API별 클라이언트 복구는 3.7절에서, 운영 경고·관측 기준은 3.8절에서 확정했다. 위 오류 표에 장애를 임의로 INVALID_REFRESH_TOKEN 등으로 끼워 넣지 않는다. 요청 API의 `202`는 메일 작업의 내구적 접수를 뜻하며 실제 발송 성공을 보장하지 않는다.
 
 승인 전에도 지켜야 할 기준은 만료·소비·폐기된 토큰 재허용 금지, Redis 검증 실패 시 서명만으로 통과시키는 우회 금지, 원문 토큰 로그 금지다. 일반 Access 보호 API에 새로운 Redis 블랙리스트 조회를 추가하는 승인은 아니며 users 상태 검증은 유지한다. 수업 WebSocket 60초 티켓의 기존 단일 인스턴스 메모리 보관과 Redis 전역 요청 제한 제외 범위도 변경하지 않는다.
+
+### 3.6.1 JWT와 Redis 인증 상태 계약
+
+**서명과 key ring.** 서명은 `HS256`으로 고정한다. key는 Access·Refresh·action의 독립된 세 ring으로 나누고 각 ring은 자기 종류의 토큰만 서명·검증한다. Access는 사용 빈도가 높고 수명이 짧아 회전 주기가 다르며, Refresh는 14일 수명 때문에 retired key를 오래 유지해야 하므로 두 종류가 key를 공유하면 한쪽의 유출 대응 회전이 다른 쪽 전체를 끌고 들어간다. action 두 종류는 수명이 짧고 성격이 같아 한 ring으로 묶고 `purpose`로 구분한다. 각 key는 CSPRNG로 생성한 256비트 이상 값을 Base64URL로 인코딩해 환경변수로 주입하고 소스·문서에 실제 값을 기록하지 않는다.
+
+**검증 순서.** 기대하는 토큰 종류와 key ring, `typ`, `aud`는 요청 endpoint와 유스케이스가 먼저 결정한다. 토큰에 실린 값으로 검증기나 ring을 고르지 않는다. 순서는 다음과 같다.
+
+1. endpoint와 유스케이스가 기대 토큰 종류, key ring, `typ`, `aud`를 정한다
+2. JOSE Header를 미검증 값으로 제한적으로만 파싱한다
+3. 헤더에서 `alg`가 정확히 `HS256`인지, `typ`이 1에서 정한 기대값과 같은지, `kid`가 있는지, `jku`·`x5u`가 없는지 확인한다. 하나라도 어긋나면 서명 검증에 들어가지 않고 거부한다
+4. 1에서 선택한 ring 안에서만 `kid`로 key를 조회한다. 그 ring에 없으면 거부한다
+5. 토큰의 `alg`가 아니라 서버가 고정한 `HS256`으로 서명을 검증한다
+6. 서명 검증에 성공한 뒤 payload의 `iss`·`aud`·`sub`·`iat`·`exp`·`jti`와 종류별 claim을 검증한다
+
+`kid`가 전역 유일하더라도 4단계에서 ring을 넓히지 않으며 이 순서를 생략하지 않는다. 미검증 `typ`·`kid`·`alg`는 검증기나 ring을 선택하는 근거가 아니라 거부 판단에만 사용한다. `jku`·`x5u` 등 외부 key 조회를 유발하는 헤더는 지원하지 않으며, 목록에 없는 `kid`는 즉시 거부한다.
+
+**key rotation.** 종류별로 active signing key 1개와 retired verification key 0개 이상을 둔다. 서명은 항상 active key로만 하고 검증은 해당 ring의 active와 retired 전체에서 조회한다. retired key는 그 key로 마지막에 발급한 토큰이 모두 만료될 때까지 유지한 뒤 제거하며 보유 개수를 미리 제한하지 않는다. key 유출은 정상 회전과 구분해 해당 key를 retired로 옮기지 않고 즉시 제거하며, 그 key로 서명된 토큰은 수명이 남아 있어도 무효가 된다. `kid`는 세 ring을 통틀어 유일해야 한다.
+
+**JOSE Header.** `typ`은 payload claim이 아니라 JOSE Header 파라미터다. `typ`은 endpoint가 기대하는 값과 같은지 검사하는 대상이며, `typ` 값을 읽어 검증기나 ring을 고르는 데 쓰지 않는다. 아래 값은 이 서비스 전용이며 RFC 9068 전체 프로필을 채택하지 않는다.
+
+| 헤더 | Access | Refresh | Email verification | Password reset |
+| --- | --- | --- | --- | --- |
+| `alg` | `HS256` | `HS256` | `HS256` | `HS256` |
+| `kid` | Access ring | Refresh ring | action ring | action ring |
+| `typ` | `itda-access+jwt` | `itda-refresh+jwt` | `itda-email-verification+jwt` | `itda-password-reset+jwt` |
+
+**Payload claim.** 필수 claim이 없으면 거부한다.
+
+| claim | Access | Refresh | Email verification | Password reset |
+| --- | --- | --- | --- | --- |
+| `iss` | O | O | O | O |
+| `aud` | `itda-api` | `itda-refresh` | `itda-email-verification` | `itda-password-reset` |
+| `sub` | O | O | O | O |
+| `iat`·`exp` | O | O | O | O |
+| `jti` | O | O | O | O |
+| `authVersion` | O | O | — | — |
+| `role` | O | — | — | — |
+| `familyId` | — | O | — | — |
+| `purpose` | — | — | `EMAIL_VERIFICATION` | `PASSWORD_RESET` |
+| 유효기간 | 15분 | 14일 | 24시간 | 30분 |
+
+`iss`는 배포 환경별 논리 이름을 환경변수로 주입한다: `itda-backend-local`, `itda-backend-test`, `itda-backend-prod`. 운영 도메인을 `iss`나 `aud`에 넣지 않으며 `aud`를 WEB·MOBILE로 나누지 않는다.
+
+값 형식은 다음과 같다. `sub`는 `users.id`의 BIGINT 10진수 문자열, `jti`와 `familyId`는 CSPRNG 기반 UUID v4, `iat`와 `exp`는 UTC NumericDate 정수 초다. `authVersion`은 `users.auth_version`의 0 이상 정수이며 claim 누락·음수·DB 현재 값 불일치는 모두 거부한다.
+
+**시각 검증.** `now >= exp`이면 즉시 만료이며 `exp` 허용 오차는 0초다. `iat`는 현재보다 최대 30초 미래인 것까지만 허용한다. `iat <= exp`를 필수로 검사한다. `nbf`는 사용하지 않는다. Redis 만료는 기존 계약대로 `exp`와 일치시키며, Refresh와 action의 유효기간을 시각 오차 허용으로 연장하지 않는다.
+
+**종류 분리.** ring 분리에 더해 종류별로 다른 `aud`, 헤더 `typ`, 전용 발급기와 전용 검증기, 서로 다른 필수 claim 집합을 모두 적용한다. action token은 `purpose`까지 추가 검증한다. 범용 검증기 하나에 종류를 파라미터로 넘기지 않으며, 종류가 다르면 다른 코드 경로를 타게 한다. Access를 갱신·action endpoint에, Refresh를 보호 API·action endpoint에, 서로 다른 용도의 action token을 상대 endpoint에 넣는 모든 조합이 실패하는 테스트를 계약으로 요구한다.
+
+**Redis prefix.** 환경변수 `AUTH_REDIS_KEY_PREFIX`로 환경을 분리한다. 값은 `local` 환경에서 `local`, `test` 환경에서 `test`, `prod` 환경에서 `prod`다. `prod`에서 값이 누락되거나 허용 값이 아니면 기동에 실패한다. Redis DB index로 환경을 분리하지 않는다. DB index는 Cluster에서 쓸 수 없고 잘못된 설정이 조용히 다른 환경 데이터를 읽게 만든다.
+
+**Redis 키 표기.** 중괄호는 Redis hash tag 문법 그대로이며 `userId` 값에만 적용한다. prefix와 나머지 자리표시자는 꺾쇠로 표기한다. 예를 들어 `<prefix>:auth:{<userId>}:refresh:<jti>`는 실제로 `local:auth:{42}:refresh:3f2a9c1e-...`처럼 만들어지며 slot 계산에 쓰이는 값은 `42`뿐이다. 현재 배포는 단일 인스턴스 전제이지만 hash tag를 두어 키 설계가 Cluster의 same-slot 제약을 깨지 않게 한다.
+
+| 논리 키 | 자료구조 | 값 | 만료 시각 |
+| --- | --- | --- | --- |
+| `<prefix>:auth:{<userId>}:refresh:<jti>` | Hash | `userId`, `familyId`, `tokenHash`, `expiresAt`, `status` | 그 Refresh JWT의 `exp` |
+| `<prefix>:auth:{<userId>}:family:<familyId>` | Hash | `userId`, `currentJti`, `status` | 계열에 남은 Refresh 중 가장 늦은 `exp` |
+| `<prefix>:auth:{<userId>}:families` | ZSET | member `familyId`, score 계열 만료 epoch | 사용자의 계열 중 가장 늦은 계열 만료 시각 |
+| `<prefix>:auth:{<userId>}:action:<purpose>:<jti>` | Hash | `userId`, `purpose`, `tokenHash`, `expiresAt`, `status` | 그 action JWT의 `exp` |
+| `<prefix>:auth:{<userId>}:action-current:<purpose>` | String | 현재 활성 `jti` | 그 action JWT의 `exp` |
+
+위 열은 키가 사라지는 절대 시각을 뜻하며 값 자리에 epoch 숫자를 넣는다는 의미가 아니다. 구현은 Redis의 만료 설정으로 이 시각을 지정하고, `expiresAt` 필드는 조회용으로 같은 시각을 담는다.
+
+Refresh 회전 시 만료는 다음과 같이 움직인다. 기존 토큰 키는 `ROTATED`로 바뀌되 원래 `exp`를 그대로 유지하고 만료를 앞당기지 않는다. 그래야 아직 유효 기간이 남은 이전 토큰의 재사용을 판별할 수 있다. 신규 토큰 키는 신규 토큰의 `exp`에 만료한다. family 키와 `families` 인덱스의 만료는 신규 토큰의 `exp`까지 연장한다. 계열이나 인덱스가 그 안의 유효한 토큰보다 먼저 사라지면 회전과 재사용 탐지에 필요한 연결이 끊기기 때문이다.
+
+action token 키와 `action-current` 키는 모두 해당 action token의 `exp`에 만료한다. `CONSUMED`·`INVALIDATED`로 바뀐 뒤에도 만료를 앞당기지 않는다.
+
+상태 값은 Refresh가 `ACTIVE`·`ROTATED`·`REVOKED`, action이 `ACTIVE`·`CONSUMED`·`INVALIDATED`, family가 `ACTIVE`·`REVOKED`다. `tokenHash`는 compact JWT 원문의 ASCII 바이트에 대한 SHA-256을 Base64URL(padding 없음)로 인코딩한 값이며 토큰 원문·비밀번호·이메일을 Redis 값이나 키, 로그에 넣지 않는다.
+
+action의 `CONSUMED`·`INVALIDATED`와 Refresh의 `ROTATED` 상태는 원래 `exp`까지 유지한다. 조기에 삭제하면 재사용 시도를 존재하지 않는 토큰과 구분할 수 없기 때문이다.
+
+**원자 연산.** 상태 확인과 전이 사이에 다른 요청이 끼어들지 않도록 Lua 스크립트로 처리한다.
+
+| 스크립트 | 처리 | 내부 반환 사유 |
+| --- | --- | --- |
+| `issueRefreshFamily` | 새 `familyId`의 family를 `ACTIVE`로 만들고 첫 Refresh를 `ACTIVE`로 등록하며 `families`에 추가. 같은 `familyId`나 `jti`가 이미 있으면 덮어쓰지 않는다 | `OK` / `ALREADY_EXISTS` |
+| `rotateRefresh` | 토큰 존재·`ACTIVE`·`tokenHash` 일치·family `ACTIVE`를 모두 확인한 뒤 기존 토큰을 `ROTATED`, 신규를 `ACTIVE`로 바꾸고 `currentJti`와 만료를 갱신. 동시 요청 중 하나만 성공 | `OK` / `NOT_FOUND` / `HASH_MISMATCH` / `REUSED` / `FAMILY_REVOKED` |
+| `revokeFamily` | family `status`를 `REVOKED`로 변경 | `OK` / `NOT_FOUND` |
+| `issueActionToken` | 같은 사용자·용도의 이전 활성 토큰을 `INVALIDATED`로 바꾸고 새 토큰을 `ACTIVE`로 등록하며 `action-current`를 새 `jti`로 갱신. 같은 `jti`가 이미 있으면 덮어쓰지 않는다 | `OK` / `ALREADY_EXISTS` |
+| `consumeActionToken` | `action-current`가 가리키는 `jti`와 요청 `jti`의 일치, 토큰 `ACTIVE`, `tokenHash` 일치를 한 연산에서 확인한 뒤 토큰을 `CONSUMED`로 바꾸고 `action-current`가 더 이상 활성 토큰을 가리키지 않도록 함께 정리한다 | `OK` / `NOT_FOUND` / `NOT_CURRENT` / `HASH_MISMATCH` / `ALREADY_CONSUMED` / `INVALIDATED` |
+
+`ALREADY_EXISTS`는 새 `jti` 또는 `familyId`가 이미 존재해 덮어쓰기를 거부한 경우다. application은 새 UUID를 만들어 유한 횟수로 다시 시도하며, 이 내부 사유를 HTTP 응답에 노출하지 않는다.
+
+접근하는 모든 키를 `KEYS` 인자로 명시해 전달하고 스크립트 안에서 키 이름을 조립하지 않는다. 한 스크립트가 접근하는 키는 같은 `userId` hash tag에 둔다. `rotateRefresh`가 기존 토큰의 `ROTATED`·`REVOKED`를 감지하면 같은 스크립트 안에서 해당 family를 `REVOKED`로 바꿔 탐지와 폐기 사이에 다른 요청이 끼어들지 못하게 한다. 어떤 스크립트도 `families` ZSET 전체를 무제한 순회하지 않으며, 순회가 필요하면 배치 단위로 끊는다. Redis는 단일 스레드이므로 긴 순회가 전체 서비스를 멈추기 때문이다. `EVALSHA`는 `NOSCRIPT` 오류가 났을 때만 `EVAL`로 재시도한다.
+
+**사용자 인증 세션 전체 무효화.** 비밀번호 재설정은 `password_hash` 변경과 `users.auth_version` +1을, 탈퇴는 `status=WITHDRAWN`·가명화·폐기 `password_hash`와 `users.auth_version` +1을 각각 같은 MariaDB 트랜잭션에서 커밋한다. Access와 Refresh는 `authVersion`을 필수 claim으로 실으며, 보호 API와 갱신 API가 DB의 현재 값과 비교해 다르면 거부한다. 비밀번호 재설정 후 기존 Access를 즉시 거부하는 것은 기존 계약의 충돌 해소가 아니라 새로 채택하는 보안 강화 정책이다. 탈퇴는 `status`와 `authVersion` 두 조건으로 차단하며 Access 블랙리스트는 추가하지 않는다.
+
+Redis token·family 값에는 `authVersion`을 복제하지 않는다. 권위가 DB에 있어 복제본은 검증에 쓰이지 않고 어긋날 지점만 늘리기 때문이다. Redis 계열 정리는 사후 정리이며 무효화의 최종 권위는 `users.auth_version`과 `users.status`다.
+
+갱신은 DB에서 확인한 Snapshot의 `auth_version`을 신규 토큰 claim에 그대로 쓴다. 회전 도중 `auth_version`이 증가해도 신규 토큰이 새 세대로 승격되지 않게 하기 위해서다. 회전 후 DB 재확인은 필수이며 상세는 3.3.1절을 따른다. 재확인 직후에도 다시 경쟁이 생길 수 있으므로 저장소 간 완전한 원자성은 주장하지 않는다. 어떤 경쟁에서도 새로 발급된 Access의 보호 API 사용이 DB `auth_version` 비교로 거부된다는 것이 불변식이며, 최종 차단 권위는 보호 API의 DB 비교다.
+
+**내부 사유의 비노출.** 위 반환 사유는 application 내부 판정용이다. `HASH_MISMATCH`·`REUSED`·`NOT_CURRENT`·`ALREADY_EXISTS` 같은 내부 원인을 HTTP 응답 body나 헤더에 노출하지 않으며, 외부 응답은 3.5절의 일반화된 code만 사용한다.
+
+**계층 경계.** application은 공통 JWT·Redis port를 사용하고 WEB과 MOBILE은 동일한 infrastructure adapter를 사용한다. 플랫폼 분기는 presentation의 쿠키·body 변환에만 둔다.
+
+**동시성 검증.** 후속 구현은 실제 Redis를 사용해 동일 Refresh Token 동시 갱신에서 하나만 성공하는 것, 재사용 감지 후 family가 폐기되는 것, 동일 action token 동시 소비에서 하나만 성공하는 것을 검증한다. Redis mock만으로 원자성 검증이 완료되었다고 판단하지 않는다.
+
+### 3.6.2 인증 저장소 장애와 부분 성공 계약
+
+MariaDB와 Redis를 하나의 트랜잭션으로 묶지 않으므로 두 저장소 사이에 부분 성공이 생길 수 있다. 모든 처리는 fail-closed다. 상태를 확인하거나 바꿀 수 없으면 인증·인가를 진행하지 않고 토큰을 발급하지 않으며, 결과가 불확실한 처리를 성공으로 단정하지 않는다.
+
+저장소 장애는 `503 AUTH_STATE_UNAVAILABLE`, 유출 비밀번호 조회 실패는 `503 PASSWORD_POLICY_UNAVAILABLE`이다. 어느 경우에도 장애를 `INVALID_CREDENTIALS`·`INVALID_REFRESH_TOKEN`·`ACTION_TOKEN_INVALID`로 위장하지 않는다.
+
+반대로 저장소가 정상 응답해 얻은 결정적 결과를 장애로 바꾸지도 않는다. `AUTH_STATE_UNAVAILABLE`은 Redis 연결·명령 실행 실패, 타임아웃, 명령 적용 여부를 알 수 없는 결과, MariaDB 읽기·commit 결과 불확실, 허용된 재시도 뒤에도 지속되는 DB 경합에만 쓴다. 다음 결정적 결과는 기존 오류를 그대로 유지한다. Refresh Token 없음·만료·폐기·재사용·상태 불일치는 `401 INVALID_REFRESH_TOKEN`과 기존 family 폐기 규칙을 따른다. action token의 `NOT_FOUND`·`NOT_CURRENT`·`HASH_MISMATCH`·`ALREADY_CONSUMED`·`INVALIDATED`는 `400 ACTION_TOKEN_INVALID`다. 로그아웃에서 Redis 조회가 정상인데 토큰이 식별되지 않으면 `401 INVALID_REFRESH_TOKEN`이고, 이미 폐기된 family임을 확인하면 `204`다.
+
+`AUTH_STATE_UNAVAILABLE`을 받은 클라이언트는 작업이 성공했다고도, 현재 인증 상태가 어떠하다고도 가정하지 않는다. 같은 요청을 그대로 재시도해도 되는지는 API와 실패 시점에 따라 다르다. action token은 소비 전 장애라면 다시 쓸 수 있고, 소비 결과가 불확실하거나 소비 뒤 장애라면 다시 쓸 수 없을 수 있다. 이 code가 링크를 항상 폐기하라거나 흐름을 항상 처음부터 다시 시작하라는 뜻은 아니며, 클라이언트는 현재 화면에서의 재시도, 새 링크 요청, 재로그인 같은 API별 복구 경로를 제공한다. `PASSWORD_POLICY_UNAVAILABLE`은 인증 상태를 바꾸기 전에, 비밀번호 재설정에서는 action token을 소비하기 전에 실패한다. 따라서 회원가입은 같은 입력으로, 비밀번호 재설정은 같은 입력과 같은 token으로 서비스 복구 후 다시 시도할 수 있다는 점이 다르다. 이 code는 사용자가 비밀번호를 바꿔야 한다는 뜻이 아니며, 유출 여부를 검사할 수 없는 동안 다른 비밀번호로 우회하도록 안내하지 않는다.
+
+**action 완료 API의 저장소 순서.** 이메일 인증 완료와 비밀번호 재설정 완료는 모든 요청 형식·JWT·`purpose`·사용자 상태 검증과 비밀번호 정책 검증을 먼저 끝낸다. 비밀번호 재설정은 Argon2id 해시도 트랜잭션 밖에서 먼저 계산한다. 그다음 Redis `consumeActionToken`을 원자적으로 성공시켜 단일 사용을 확정하고, 마지막으로 MariaDB 조건부 갱신을 수행한다.
+
+MariaDB를 먼저 바꾸고 Redis 소비를 나중에 하면, DB 성공 후 소비가 실패했을 때 같은 재설정 토큰으로 비밀번호를 한 번 더 바꿀 수 있다. Redis를 먼저 소비하면 이후 DB가 실패해도 토큰만 소진되고 사용자는 새 메일을 요청해 복구한다. 재사용 가능한 토큰을 남기는 것보다 fail-closed로 소진하는 쪽이 안전하다. action token 완료 처리의 Redis와 MariaDB 사이 원자성을 만들기 위한 `PROCESSING`·`RESERVED` 중간 상태, DB token 테이블, action 처리용 outbox는 도입하지 않는다. 이 제한은 action token 완료 처리에만 적용된다. 메일 전달 신뢰성에는 이미 [ERD 3.5](./erd.md#table-mail_outbox)의 MariaDB `mail_outbox`를 사용하며, action token 완료 처리용 outbox와 메일 발송용 `mail_outbox`는 서로 다른 목적이므로 혼동하지 않는다.
+
+**Redis 소비 결과가 불확실한 경우.** `consumeActionToken` 호출 결과를 알 수 없으면 실제로 `CONSUMED`가 되었을 수도, 되지 않았을 수도 있다. 이때 소비 성공을 확정할 수 없으므로 MariaDB 변경을 시작하지 않고 `503 AUTH_STATE_UNAVAILABLE`을 반환한다. 토큰을 `ACTIVE`로 되돌리는 보상은 하지 않는다. 같은 토큰으로 다시 시도하면 실제 Redis 결과에 따라 처리가 다시 진행되거나 `400 ACTION_TOKEN_INVALID`가 된다. 어느 쪽인지 추측해 DB 변경을 진행하지 않는다.
+
+**Redis 소비가 확정적으로 성공한 뒤 MariaDB가 실패한 경우.** `204`를 반환하지 않고 `503 AUTH_STATE_UNAVAILABLE`을 반환한다. `CONSUMED` 토큰을 `ACTIVE`로 되돌리지 않으므로 같은 토큰을 다시 제출하면 `400 ACTION_TOKEN_INVALID`가 된다.
+
+이 경우 MariaDB 결과를 두 가지로 나눈다. rollback되었거나 commit 전에 실패한 것이 확정되었다면 본 요청에 의한 MariaDB 변경은 없다. 이메일 인증에서는 기존 `email_verified_at` 값을 그대로 유지하고, 비밀번호 재설정에서는 기존 `password_hash`와 `auth_version`을 그대로 유지한다. 이는 본 요청이 아무것도 바꾸지 않았다는 뜻이며 다른 동시 요청이 그 사이 상태를 바꿨을 가능성까지 부정하지 않는다. 반면 commit 성공 여부 자체가 불확실하다면 목적 상태가 변경되었을 수도 있고 아닐 수도 있다. 이때 외부에 어느 쪽이라고 단정하지 않으며, action token은 복원하지 않는다. 사용자는 로그인을 시도해 현재 상태를 확인하거나 새 인증·재설정 메일 요청 흐름을 시작할 수 있다.
+
+**`row_version` 경합 재시도.** 아래 재시도는 action token을 이미 소비한 뒤이며, 실패해도 토큰은 복원되지 않는다. 재시도는 각 API에서 최대 1회이고 무제한 재시도를 하지 않는다.
+
+이메일 인증 완료는 조건부 갱신이 0행이면 사용자를 다시 읽는다. `status`가 `ACTIVE`가 아니면 `400 ACTION_TOKEN_INVALID`다. 재조회에 성공했고 결과가 불확실하지 않으며 `status`가 `ACTIVE`이고 `email_verified_at`에 이미 값이 있으면 목적 상태가 달성된 것이므로 `204`를 반환하고 덮어쓰지 않는다. DB 조회 장애나 결과 불확실을 목적 상태 달성으로 추측해 `204`로 처리하지 않으며 그때는 `503 AUTH_STATE_UNAVAILABLE`이다. `ACTIVE`이고 미인증이며 `row_version`만 달라졌으면 최신 `row_version`으로 한 번만 재시도한다. 재시도가 성공하면 `204`, 다시 0행이면 `503 AUTH_STATE_UNAVAILABLE`이다.
+
+비밀번호 재설정 완료는 조건부 갱신이 0행이면 사용자를 다시 읽는다. `status`가 `ACTIVE`가 아니면 `400 ACTION_TOKEN_INVALID`다. `password_hash` 또는 `auth_version`이 최초 Snapshot과 달라졌으면 그 사이 다른 인증 변경이 확정된 것이므로 기존 계산 결과로 덮어쓰지 않고 `503 AUTH_STATE_UNAVAILABLE`을 반환한다. `status`·`password_hash`·`auth_version`이 모두 같고 `row_version`만 달라졌으면 이미 계산한 Argon2id 해시를 재사용해 최신 `row_version`으로 한 번만 재시도한다. 이미 계산된 encoded Argon2id 해시는 새 비밀번호와 salt, 알고리즘 파라미터를 모두 포함한 저장 가능한 결과이므로, 관련 인증 필드가 그대로인 한 DB 상태와 무관하게 같은 새 비밀번호를 나타낸다. 재시도가 성공하면 `204`, 다시 0행이면 `503 AUTH_STATE_UNAVAILABLE`이다. 어떤 경합도 `204`로 숨기지 않는다.
+
+**API별 fail-closed 처리.**
+
+| API | MariaDB 장애 | Redis 장애 |
+| --- | --- | --- |
+| 회원가입 | `users`와 `mail_outbox` 등록은 같은 MariaDB 트랜잭션이며 `201`은 두 INSERT의 commit 성공이 확정될 때만 반환한다. username·email UNIQUE 위반이 결정적으로 확인되면 commit 단계에서 드러나도 `409 ACCOUNT_IDENTIFIER_UNAVAILABLE`이고, 그 밖의 MariaDB 명령 실패·commit 실패·commit 결과 불확실은 `503 AUTH_STATE_UNAVAILABLE` | 회원가입 동기 트랜잭션은 Redis action token 발급이나 메일 제공자 호출을 `201`의 성공 조건으로 삼지 않는다. commit 성공 뒤 worker의 action token 발급 또는 메일 발송이 실패해도 회원가입을 롤백하지 않고 이미 반환한 `201`도 바꾸지 않으며, 사용자는 이메일 인증 요청 API로 새 작업을 접수한다 |
+| 내 정보 | `503 AUTH_STATE_UNAVAILABLE` | 해당 없음 |
+| 탈퇴 | `503 AUTH_STATE_UNAVAILABLE` | family 정리 실패는 `204` 유지 |
+| 로그인 | 첫 조건부 갱신 0행은 아래 절차를 따르고, 두 번째 갱신도 실패하거나 DB 결과가 불확실하면 `503`. 토큰을 발급하지 않음 | 세션 상태 저장 실패나 불확실은 `503`. Access·Refresh를 응답하지 않음 |
+| Access 갱신 (초기 검증) | 사용자 조회 자체가 실패하면 회전하지 않고 `503`. 조회는 성공했으나 `status`·`authVersion`·`emailVerified`가 계약과 다르면 기존 `401`·`403` | Token·family 상태 조회가 정상인데 상태가 유효하지 않으면 기존 `401`. 조회 명령 실패·타임아웃·결과 불확실은 `503` |
+| Access 갱신 (회전) | 해당 없음 | 결정적 재사용·상태 불일치는 기존 `401`과 family 폐기 규칙. 회전 명령 실패나 결과 불확실은 `503`이며 신규 토큰을 반환하지 않음 |
+| Access 갱신 (회전 후 재확인) | 재확인 자체가 실패하면 `503`. 값이 달라졌으면 `401 INVALID_REFRESH_TOKEN` | 재확인 실패 시 family 폐기를 가능한 범위에서 시도 |
+| 로그아웃 | 해당 없음 | 폐기 실패나 불확실은 `503`. `204`로 성공 처리하지 않음 |
+| 이메일 인증 완료 | 소비 확정 뒤 실패는 `503` | `consumeActionToken`의 결정적 적격 조건 실패는 `400`. Redis 명령 실패나 결과 불확실은 `503` |
+| 비밀번호 재설정 완료 | 소비 확정 뒤 실패는 `503` | `consumeActionToken`의 결정적 적격 조건 실패는 `400`. Redis 명령 실패나 결과 불확실은 `503` |
+
+회원가입에서 commit 결과가 불확실하면 사용자와 메일 작업이 생성되지 않았다고 단정하지 않는다. 두 요청 API도 같다. `mail_outbox` INSERT commit 결과가 불확실해 `503`을 반환했더라도 작업이 저장되었을 수 있으므로 `503`은 메일 작업 미접수를 보장하지 않으며 이후 메일이 발송될 수 있다. 클라이언트가 재시도하면 작업과 메일이 중복될 수 있고 중복 요청은 허용하며, 가장 최근에 발급된 action token만 유효하다. 이 동작은 계정 존재 여부와 무관하게 두 요청 API에 동일하다.
+
+로그인의 조건부 갱신이 0행이면 즉시 `503`이 아니라 [ERD 3.1](./erd.md#table-users)의 기존 계약대로 사용자 상태를 다시 읽는다. `password_hash` 또는 `auth_version`이 달라졌거나 현재 조건이 로그인 불가라면 기존 일반화된 `401 INVALID_CREDENTIALS` 계약을 유지한다. `password_hash`·`auth_version`과 인증 조건이 같고 `row_version`만 바뀌었으면 최신 `row_version`으로 최대 1회 재시도한다. 두 번째 조건부 갱신도 실패하거나 DB 결과가 불확실할 때만 `503 AUTH_STATE_UNAVAILABLE`이며, 이때 토큰을 발급하지 않는다.
+
+Access 갱신은 초기 검증, 회전, 회전 후 DB 재확인 세 구간이며 DB 검사는 두 번으로 유지하고 합치지 않는다. 초기 검증에서는 Redis의 Token·family 활성 상태를 조회하고 MariaDB에서 사용자를 조회한다. Redis 조회가 정상인데 상태가 유효하지 않거나 MariaDB 조회가 성공했는데 값이 계약과 다르면 기존 `401`·`403`이고, 두 저장소의 조회 명령 자체가 실패하거나 결과가 불확실하면 `503`이다. 회전 구간에서는 결정적 재사용·상태 불일치를 기존 `401`과 family 폐기 규칙으로 처리하고, Redis 명령 실패나 결과 불확실만 `503`으로 다루며 어느 쪽이든 신규 토큰을 반환하지 않는다. 회전 후 재확인은 응답 전에 `auth_version`과 `status`를 다시 본다. 회전 후 재확인에서 값이 달라졌으면 family를 폐기하고 `401 INVALID_REFRESH_TOKEN`, 재확인 자체가 실패하면 가능한 범위에서 family 폐기를 시도하고 `503`이다. family 폐기 시도가 실패하더라도 DB에서 `authVersion` 불일치나 비활성 상태가 확정되었다면 신규 Access·Refresh를 반환하지 않는다.
+
+로그아웃의 `503`은 3.3절 멱등 `204` 규칙의 예외다. 멱등 `204`는 Redis가 정상 응답해 이미 폐기된 상태를 확인한 경우에만 성립하며, 폐기 명령 자체가 실패했거나 결과를 알 수 없으면 성공으로 보고하지 않는다. `X-Client-Platform: WEB`이고 전달 경로 충돌이 없는 요청에는 서버 판정이 `503`이어도 발급 때와 같은 속성의 쿠키 삭제 응답을 함께 보낸다. 서버 상태를 정리하지 못했더라도 브라우저에 토큰을 남길 이유가 없기 때문이다. MOBILE의 로컬 보안 저장소 삭제는 계속 클라이언트 책임이다.
+
+**Refresh 회전 결과의 불확실성.** 기존 엄격한 회전과 재사용 탐지를 그대로 유지하며 idempotency grace나 회전 결과 캐시를 추가하지 않는다. 회전 응답이 유실된 뒤 구 Refresh Token을 다시 보내면 재사용으로 판정되어 계열이 폐기되고 재로그인이 필요하다. grace를 두면 그만큼 재사용 탐지 창이 열리고, 프론트엔드가 동시 갱신을 single-flight로 합치므로 응답 유실 빈도도 낮다. Redis 명령 결과가 불확실하면 내부 상태를 추측해 `INVALID_REFRESH_TOKEN`으로 응답하지 않고 `503 AUTH_STATE_UNAVAILABLE`을 반환한다.
+
+**Refresh family 사후 정리 실패.** 비밀번호 재설정과 탈퇴의 MariaDB 트랜잭션이 확정적으로 성공했고 `auth_version` 또는 `status`로 무효화 효력이 달성되었다면, Redis family 정리 실패를 이유로 DB를 롤백하지 않고 응답도 바꾸지 않는다. 두 API는 그대로 `204`다. 무효화 권위가 `users.auth_version`과 `users.status`이므로 남은 family의 Refresh Token은 DB 재검증에서 거부되며 보안 효과는 이미 달성되어 있다. 여기서 `503`을 반환하면 이미 성공한 작업을 실패로 보고하게 되고, 사용자는 이미 바뀐 비밀번호로 재시도하다 혼란에 빠진다. Redis family 정리 성공을 `204`의 필수 조건으로 만들지 않는다. 남은 family는 best-effort 재시도 대상이며 TTL로 최종 제거하고, 정리 실패는 내부 metric과 운영 경고로 남긴다. 오래된 family가 서명과 Redis 상태만으로 통과하는 우회는 허용하지 않는다. 이 규칙은 DB 성공이 확정된 경우에만 적용하며, DB 성공 여부가 불확실한 경우에는 적용하지 않는다.
+
+**유출 비밀번호 조회 장애.** 가입과 비밀번호 재설정 모두 fail-closed다. 유출 값 검사를 생략하고 진행하지 않으며 `503 PASSWORD_POLICY_UNAVAILABLE`을 반환한다. 비밀번호가 실제로 정책을 위반한 `422 INVALID_PASSWORD`와 구분한다. 회원가입은 인증 상태를 바꾸기 전에 실패하므로 같은 입력으로 서비스 복구 후 다시 시도할 수 있다. 비밀번호 재설정은 이 검사가 끝나기 전에 action token을 소비하지 않으므로 토큰이 소진되지 않고 같은 입력과 같은 token으로 서비스 복구 후 다시 시도할 수 있다. 어느 경우에도 다른 비밀번호로 우회하도록 안내하지 않는다. 입력 비밀번호 원문과 전체 해시를 외부 서비스나 로그에 노출하지 않는다. 구체적인 연동 방식은 구현 이슈의 범위이며 이 절은 장애의 의미만 정한다.
+
+**`204` 성공 조건.** 이메일 인증 완료와 비밀번호 재설정 완료는 action token을 다시 쓸 수 없고, MariaDB 목적 상태가 커밋되었으며, 각 절의 무효화 불변식을 충족하고, 결과가 불확실하지 않을 때만 `204`다. Redis Refresh family 사후 정리는 `auth_version`·`status`로 효력이 대체되는 cleanup이므로 `204`의 필수 조건에 포함하지 않는다.
+
+**응답과 로그.** 실패 body는 최상위 `{code, message}`다. 저장소 종류·호스트·명령·SQL·스택 트레이스를 외부에 노출하지 않는다. 같은 장애 code의 `message`를 API별로 다르게 만들어 어떤 저장소가 실패했는지 추측하게 하지 않는다. 토큰 원문·`tokenHash`·비밀번호·JWT claim 전체를 로그에 남기지 않는다. 내부 관측에는 request·correlation ID, API, 실패 단계, 저장소 종류, 재시도 횟수만 기록한다.
+
+### 3.7 메일 요청·완료 API 클라이언트 복구
+
+이 절은 계정 메일과 관련된 다섯 API에서 클라이언트가 무엇을 확정해도 되고 무엇을 확정하면 안 되는지, 사용자에게 어떤 복구 경로를 제공할지를 정한다. 저장소 장애의 판정 규칙 자체는 3.6.2절을 따르며 여기서 다시 정의하지 않는다. 새 endpoint·오류 code·DB 컬럼·Redis key를 추가하지 않는다.
+
+공통 원칙은 셋이다. 첫째, 성공 응답이 보장하는 범위를 넘어 화면에 적지 않는다. `201`은 계정 생성과 이메일 인증 `mail_outbox` 작업의 내구적 접수를 보장하고, `202`는 `mail_outbox` 작업의 내구적 접수만 보장한다. 어느 응답도 action token 발급·제공자 접수·편지함 도달을 보장하지 않는다. 둘째, `503 AUTH_STATE_UNAVAILABLE`은 실패 확정이 아니라 결과를 알 수 없다는 뜻일 수 있으므로 성공으로도 미접수로도 단정하지 않는다. 셋째, 계정 존재·상태·발송 적격 여부를 화면 문구나 오류 종류로 구분해 노출하지 않는다.
+
+메일 도착을 확인하기 위한 조회 API·polling·WebSocket·push 알림을 추가하지 않는다. `mail_outbox` 상태를 외부에 노출하는 endpoint도 두지 않는다. 메일이 오지 않으면 사용자는 해당 요청 API로 새 작업을 접수해 복구한다. 요청 제한 시간과 화면 재요청 대기 시간의 구체 수치는 이 절에서 정하지 않는다.
+
+이 절의 POST 요청은 클라이언트나 네트워크 계층이 투명하게 자동 재시도하지 않는다. 특히 `AUTH_STATE_UNAVAILABLE`은 commit 결과가 불확실할 수 있어 자동 재시도가 중복 `mail_outbox` 작업과 중복 메일을 만들 수 있다. 같은 입력·같은 email·같은 token으로 다시 보내는 것이 계약상 허용되는 경우에도 사용자가 화면에서 명시적으로 선택할 때만 실행한다. `PASSWORD_POLICY_UNAVAILABLE` 뒤의 재시도 역시 비밀번호 원문을 보관해 자동 실행하지 않고 사용자가 다시 제출한다. 상태 확인용 로그인도 자동·반복 호출하지 않는다.
+
+| API | 응답 | 클라이언트가 확정해도 되는 것 | 확정하면 안 되는 것 | 다음 행동 |
+| --- | --- | --- | --- | --- |
+| `POST /api/v1/users` | `201` | 계정 생성과 이메일 인증 메일 작업의 내구적 접수 | 메일 발송·도달, action token 발급 | 이메일 인증 안내 화면으로 이동. 메일이 오지 않으면 이메일 인증 요청 API로 새 작업을 접수 |
+| `POST /api/v1/users` | `409` | username 또는 email을 쓸 수 없음 | 어느 값 때문인지, 직전 요청이 그 계정을 만들었는지 | 입력을 바꿔 다시 시도. 직전 응답이 `503`이었다면 사용자가 명시적으로 같은 자격 증명으로 로그인해 현재 접근 가능한지 확인 |
+| `POST /api/v1/users` | `422` | 입력 형식 또는 비밀번호 정책 위반 | 계정 존재 여부 | 해당 입력만 수정 |
+| `POST /api/v1/users` | `503 PASSWORD_POLICY_UNAVAILABLE` | 계정과 메일 작업이 생성되지 않음 | — | 서비스 복구 후 사용자가 같은 입력을 다시 제출. 다른 비밀번호로 우회하도록 안내하지 않음 |
+| `POST /api/v1/users` | `503 AUTH_STATE_UNAVAILABLE` | 없음 | 계정과 메일 작업이 생성되지 않았다는 것 | 사용자가 같은 입력으로 다시 시도. `409`가 나오면 사용자가 명시적으로 로그인해 현재 접근 가능한지 확인하되 직전 요청의 성공 여부로 해석하지 않음 |
+| 두 요청 API | `202` | 메일 작업의 내구적 접수 | 계정 존재, 발송 적격, action token 발급, 제공자 접수, 편지함 도달 | 계정을 구분하지 않는 동일 안내. 메일이 오지 않으면 사용자가 같은 email로 다시 요청 |
+| 두 요청 API | `422` | email 형식 위반 | 계정 존재 여부 | email을 고쳐 다시 요청 |
+| 두 요청 API | `503 AUTH_STATE_UNAVAILABLE` | 없음 | 작업이 접수되지 않았다는 것 | 사용자가 같은 email로 다시 요청할 수 있음. 중복 작업과 중복 메일이 생길 수 있음 |
+| `POST /api/v1/email-verifications` | `204` | `email_verified_at`이 값을 가진 상태로 확정 | — | 로그인 화면으로 이동 |
+| `POST /api/v1/email-verifications` | `400` (일반) | 그 token을 쓸 수 없음 | 만료·사용 완료·재발급 교체 중 무엇인지 | 원인을 구분하지 않고 새 인증 메일 요청 안내 |
+| `POST /api/v1/email-verifications` | `400` (직전 `503` 뒤 같은 token 재시도) | 그 token을 더 쓸 수 없음 | 인증이 실패했다는 것, 아직 미인증이라는 것 | 실패 화면으로 끝내지 않음. 사용자가 명시적으로 로그인해 상태를 확인하거나 새 인증 메일을 요청 |
+| `POST /api/v1/email-verifications` | `422` | 요청 형식 위반 | — | 형식을 고쳐 다시 제출 |
+| `POST /api/v1/email-verifications` | `503 AUTH_STATE_UNAVAILABLE` | 없음 | 인증 성공·실패와 token 소비 여부 | 같은 화면에서 사용자가 같은 token으로 다시 시도. `400`이 나와도 실패로 단정하지 않고 로그인 확인 또는 새 인증 메일 요청으로 이어감 |
+| `POST /api/v1/password-resets` | `204` | 비밀번호 교체, `auth_version` 증가, 그 token의 소진 | — | 새 비밀번호로 직접 로그인. 자동 로그인하지 않음 |
+| `POST /api/v1/password-resets` | `400` | 그 token을 쓸 수 없음 | 만료·사용 완료·재발급 교체 중 무엇인지 | 원인을 구분하지 않고 새 재설정 메일 요청 안내 |
+| `POST /api/v1/password-resets` | `422 INVALID_ACCOUNT_INPUT` | 요청 형식 위반 | — | 형식을 고쳐 다시 제출 |
+| `POST /api/v1/password-resets` | `422 INVALID_PASSWORD` | 새 비밀번호가 정책 위반 | — | 다른 새 비밀번호를 입력해 같은 token으로 다시 제출 |
+| `POST /api/v1/password-resets` | `503 PASSWORD_POLICY_UNAVAILABLE` | action token이 소비되지 않음 | — | 서비스 복구 후 사용자가 같은 token과 같은 입력을 다시 제출 |
+| `POST /api/v1/password-resets` | `503 AUTH_STATE_UNAVAILABLE` | 없음 | 비밀번호 변경, `auth_version` 증가, token 소비 여부 | 성공 화면을 표시하거나 자동 로그인하지 않음. 사용자가 명시적으로 그 비밀번호로 로그인해 다음 경로로 이동하거나 새 재설정 메일을 요청 |
+
+**회원가입의 불확실.** `503 AUTH_STATE_UNAVAILABLE`을 받으면 사용자와 메일 작업이 생성되지 않았다고 단정하지 않는다. 사용자가 같은 입력으로 다시 가입을 시도할 수 있고 그 결과는 `201`·`409`·`503` 중 하나일 수 있다. 앞선 요청이 실제로 커밋되었다면 같은 값이 이미 쓰이고 있으므로 `409`가 된다. 이때도 username과 email 중 어느 값 때문인지 노출하지 않는다. 사용자는 명시적으로 같은 자격 증명으로 로그인해 다음 경로를 고를 수 있으나, 로그인 결과는 현재 그 자격 증명이 받아들여지는지만 알려 주고 직전 회원가입 요청이 그 계정을 만들었는지는 증명하지 않는다. 로그인이 성공하면 제출한 username과 password가 현재 받아들여지고 접근 가능한 상태이며, `403 EMAIL_VERIFICATION_REQUIRED`면 받아들여지지만 미인증이므로 이메일 인증 요청 흐름으로 이동할 수 있다. `401 INVALID_CREDENTIALS`는 계정 없음·비밀번호 오류·로그인 제한·탈퇴를 구분하지 못해 상태를 확정할 수 없고, `503 AUTH_STATE_UNAVAILABLE`이면 로그인으로도 상태를 확인하지 못한 것이므로 어느 쪽으로도 추측하지 않고 나중에 다시 시도한다. 클라이언트는 비밀번호 원문을 자동 재시도를 위해 보관하지 않으며 사용자가 다시 입력하게 한다.
+
+**두 요청 API의 불확실.** `503 AUTH_STATE_UNAVAILABLE`을 접수 실패로 단정하지 않는다. 작업이 이미 저장되어 메일이 나중에 도착할 수 있고, 사용자가 같은 email로 다시 요청하면 작업과 메일이 중복될 수 있다. 중복 요청은 허용하며 가장 최근에 발급된 action token만 유효하다. 메일 도착 순서는 토큰 유효성의 근거가 아니므로 나중에 도착한 메일이 항상 유효하다고 안내하지 않는다. 무효한 링크를 연 사용자에게는 유효하지 않다는 안내와 함께 다시 요청할 경로를 제공한다.
+
+**이메일 인증 완료의 불확실.** `503 AUTH_STATE_UNAVAILABLE`은 인증이 됐는지도, token이 소비됐는지도 알려 주지 않는다. 3.6.2절에 따라 같은 token을 다시 제출하면 처리가 다시 진행되거나 `400 ACTION_TOKEN_INVALID`가 되므로, 같은 화면에서 사용자가 명시적으로 다시 시도할 수 있게 한다. 클라이언트가 이 재시도를 대신 수행하지 않는다.
+
+직전에 `503`을 받고 같은 token을 다시 제출해 받은 `400`은 일반적인 `400`과 문맥이 다르다. 앞선 요청에서 token이 이미 소비되었을 가능성이 있고, 그때 MariaDB 변경이 성공했는지 실패했는지는 `400`만으로 알 수 없다. 따라서 이 `400`을 인증 실패나 미인증으로 단정하지 않으며 바로 실패 화면으로 끝내지 않는다. 사용자가 명시적으로 로그인해 상태를 확인하거나 새 인증 메일을 요청할 수 있는 두 경로를 함께 제공한다. 확인 로그인이 `503`이면 상태를 확인하지 못한 것이므로 인증 여부를 추측하지 않고 새 인증 메일 요청 경로를 그대로 둔다.
+
+**비밀번호 재설정 완료의 불확실.** `503 AUTH_STATE_UNAVAILABLE`에서는 비밀번호가 바뀌었는지, `auth_version`이 올랐는지, token이 소비됐는지를 모두 단정하지 않는다. 성공 화면을 표시하거나 자동으로 로그인하지 않는다. 성공 화면과 자동 이동은 `204`를 받았을 때만 허용한다.
+
+사용자 복구의 목표는 이번 재설정 트랜잭션이 실행됐음을 사후에 증명하는 것이 아니라 다음에 쓸 수 있는 경로로 이동하는 것이다. 이 명세는 새 비밀번호가 기존 비밀번호와 같은지 검사하지 않으므로, 그 비밀번호로 로그인에 성공하더라도 이번 요청이 실행되었는지 `auth_version`이 증가했는지는 알 수 없다. 사용자가 명시적으로 그 비밀번호로 로그인해 접근하거나, `403`이면 이메일 인증 흐름으로 가거나, `401`이면 새 재설정 메일을 요청한다. 확인 로그인이 `503`이면 상태를 확인하지 못한 것이므로 변경 여부를 추측하지 않고 나중에 다시 시도하거나 새 재설정 메일을 요청한다.
+
+**상태 확인용 로그인.** 위 세 흐름의 확인은 별도 조회 API를 만들지 않기 위해 기존 로그인 응답을 그대로 쓰는 것이며, 언제나 사용자의 명시적 행동으로만 수행한다. 로그인 응답의 의미는 확인하려는 대상에 따라 다르다.
+
+| 로그인 응답 | 회원가입 불확실 확인에서 | 이메일 인증 확인에서 | 비밀번호 재설정 확인에서 |
+| --- | --- | --- | --- |
+| 성공 | 제출한 username과 password가 현재 받아들여지고 접근 가능한 상태임. 직전 회원가입 요청이 그 계정을 생성했다고 증명하지는 않음 | 이메일 인증이 완료된 것이 확인됨 | 현재 계정이 입력한 비밀번호를 받아들이고 접근 가능하다는 것만 확인됨 |
+| `403 EMAIL_VERIFICATION_REQUIRED` | 제출한 username과 password가 현재 받아들여지지만 미인증 상태임. 직전 회원가입 commit이 실행됐다고 증명하지는 않으며 이메일 인증 요청 흐름으로 이동 가능 | 아직 미인증인 것이 확인되므로 새 인증 메일을 요청 | 입력한 비밀번호가 현재 비밀번호와 일치하지만 이메일이 미인증임. 재설정 트랜잭션 실행이나 `auth_version` 증가는 증명하지 못함 |
+| `401 INVALID_CREDENTIALS` | 계정 없음·비밀번호 오류·로그인 제한·탈퇴를 구분할 수 없어 상태를 확정할 수 없음 | 같은 이유로 인증 상태를 확정할 수 없음. 인증 실패로 단정하지 않고 새 인증 메일 요청 경로를 제공 | 같은 이유로 상태를 확정할 수 없고 재설정 실패도 증명하지 못함. 새 재설정 메일 요청 경로를 제공 |
+| `503 AUTH_STATE_UNAVAILABLE` | 로그인으로도 현재 상태를 확인하지 못함. 직전 회원가입 결과를 추측하지 않음 | 로그인으로도 현재 상태를 확인하지 못함. 인증 여부를 추측하지 않음 | 로그인으로도 현재 상태를 확인하지 못함. 비밀번호 변경 여부를 추측하지 않음 |
+
+`503`을 받은 경우 자동 또는 반복 로그인을 하지 않고, 사용자가 나중에 다시 시도하거나 해당 메일 요청 흐름을 선택할 수 있게 한다. `422 INVALID_ACCOUNT_INPUT`과 `400 INVALID_CLIENT_PLATFORM`은 먼저 고쳐야 하는 요청 오류이며 계정 상태 판정의 근거로 쓰지 않는다. `401 INVALID_CREDENTIALS`는 원인을 구분하지 않아 상태를 좁히지 못하고 로그인 실패는 로그인 제한을 소모하므로, 상태 확인을 위한 로그인은 반복하지 않는다.
+
+### 3.8 메일 outbox 운영 경고·관측 기준
+
+이 절은 `mail_outbox` 처리의 상태를 운영자가 어떻게 관측하고 무엇을 경고로 올릴지를 정한다. 저장 모델과 worker 동작은 [ERD 3.5](./erd.md#table-mail_outbox)를, 클라이언트 복구는 3.7절을 따르며 여기서 다시 정의하지 않는다.
+
+이 절은 계정·인증 공개 API를 추가하지 않고, `mail_outbox` 상태를 사용자나 관리자에게 노출하는 API도 두지 않으며, 외부에 공개되는 metrics endpoint를 금지한다. 내부 metrics를 어떤 방식으로 내보낼지와 그 수집 수단은 후속 구현에서 정한다. 이 문서 변경 자체로는 endpoint·DB 컬럼·Redis key·의존성·배포 설정을 추가하지 않는다. 지표의 수집 시스템·저장 위치·보존 기간·샘플링과 알림 채널·대시보드는 2.1절이 후속 운영 범위로 남긴 것을 그대로 유지한다.
+
+**상태의 의미.** `PROVIDER_ACCEPTED`는 제공자가 요청을 접수했다는 뜻이며 사용자 편지함 도달이 아니므로 전달 성공 지표로 쓰지 않는다. `SKIPPED`는 계정 부재·비활성·이미 인증됨처럼 발송 대상이 아니어서 끝난 정상 결과다. 두 상태의 개별 사건은 초기 경고 대상이 아니며, 이후 비율·추세 경고를 도입하는 것을 금지하지는 않는다. `FAILED`는 재시도를 종료했다는 뜻이지 메일이 절대 전달되지 않았다는 증명이 아니다. `PENDING`은 최초 대기, backoff 대기, 가시성 만료 뒤 재처리 대기를 모두 포함하므로 그 자체가 이상은 아니다. 클라이언트에 반환한 `201`·`202`는 작업 접수를 뜻하므로 메일 발송 성공 지표로 계산하지 않는다.
+
+**지표의 출처.** 아래 세 지표는 `mail_outbox`의 현재 행을 읽어 계산할 수 있다.
+
+| 논리 지표 | 종류 | 단위 | label | 의미 |
+| --- | --- | --- | --- | --- |
+| `mail_outbox.pending.count` | gauge | 건 | `purpose` | purpose별 `PENDING` 작업 수 |
+| `mail_outbox.pending.ready.count` | gauge | 건 | `purpose` | `next_attempt_at`이 지나 지금 처리 가능한 `PENDING` 수 |
+| `mail_outbox.pending.ready.oldest_wait` | gauge | 초 | `purpose` | 처리 가능해진 뒤 가장 오래 기다린 시간 |
+
+나머지 지표는 현재 행으로 복원할 수 없고 API와 worker가 런타임에 직접 계측해 외부로 내보내야 한다. 종결 행은 보존 기간이 지나면 삭제되고 재시도·재선점 과정에서 같은 행의 상태가 덮어써지므로, 사건 발생 횟수와 지연 시간과 장기 추세를 `mail_outbox`만으로 되살릴 수 없다.
+
+| 논리 지표 | 종류 | 단위 | label | 의미 |
+| --- | --- | --- | --- | --- |
+| `mail_outbox.worker.last_success_at` | gauge | UTC Unix epoch 초 | 없음 | 그 worker 프로세스가 마지막으로 `QUERY` 단계를 정상 완료한 시각 |
+| `mail_outbox.terminal.count` | counter | 누적 건 | `purpose`, `status` | purpose·종결 상태별 처리 건수 |
+| `mail_outbox.attempt_count.distribution` | histogram | 시도 횟수 | `purpose` | 종결 시점의 `attempt_count` 분포 |
+| `mail_outbox.retry.count` | counter | 누적 건 | `purpose` | `PENDING`으로 되돌린 재시도 건수 |
+| `mail_outbox.reclaimed.count` | counter | 누적 건 | `purpose` | 가시성 만료 뒤 다시 선점된 건수 |
+| `mail_outbox.terminal.max_attempts_exceeded` | counter | 누적 건 | `purpose` | 최대 시도 초과로 종결한 건수 |
+| `mail_outbox.terminal.delivery_deadline_exceeded` | counter | 누적 건 | `purpose` | 발송 기한 초과로 종결한 건수 |
+| `mail_provider.request` | counter | 누적 건 | `purpose`, `result` | 제공자 호출 결과별 건수 |
+| `mail_provider.latency` | histogram | 초 | `purpose` | 제공자 호출 지연 시간 |
+| `mail_outbox.enqueue` | counter | 누적 건 | `api`, `result` | 접수 트랜잭션 결과별 건수 |
+| `mail_outbox.worker.db_operation` | counter | 누적 건 | `stage`, `result` | worker의 MariaDB 처리 단계별 결과 |
+
+`mail_outbox.terminal.count`는 모든 종결 전이를 상태별로 세고, 최대 시도 초과와 발송 기한 초과 전용 counter는 그중 운영 경고가 필요한 `FAILED` 원인의 부분집합을 센다. 해당 종결 전이는 `mail_outbox.terminal.count`와 적용되는 전용 counter 하나에 함께 기록되므로 이들을 서로 배타적인 건수처럼 합산하지 않는다. 최대 시도와 발송 기한 조건이 동시에 성립하면 ERD 3.5의 판정 순서대로 `DELIVERY_DEADLINE_EXCEEDED`만 전용 counter에 기록한다. 제공자 인증·설정 오류는 별도 counter를 두지 않고 `mail_provider.request`의 `result=AUTH_CONFIG_ERROR`로만 기록한다.
+
+논리 이름은 제품에 독립적이므로 구현에서 제품별 naming convention에 맞게 바꿀 수 있지만 단위와 의미는 바꾸지 않는다. 이 계약을 구현하려면 새 DB 컬럼이 아니라 API와 worker의 런타임 계측과 외부 집계가 필요하다. 현재 저장소에는 그 수단이 없으므로 도입 방식은 후속 구현에서 정한다.
+
+**label의 닫힌 값.** 아래 값만 label로 쓴다. `result`는 지표마다 집합이 다르므로 지표 이름과 함께 구분한다. 새 값이 필요하면 이 표를 먼저 고친다.
+
+| label | 허용 값 |
+| --- | --- |
+| `purpose` | `EMAIL_VERIFICATION`, `PASSWORD_RESET` |
+| `status` | `PROVIDER_ACCEPTED`, `SKIPPED`, `FAILED` |
+| `stage` | `QUERY`, `CLAIM`, `UPDATE` |
+| `api` | `SIGN_UP`, `EMAIL_VERIFICATION_REQUEST`, `PASSWORD_RESET_REQUEST` |
+| `mail_outbox.worker.db_operation`의 `result` | `SUCCESS`, `FAILURE` |
+| `mail_outbox.enqueue`의 `result` | `SUCCESS`, `UNAVAILABLE` |
+| `mail_provider.request`의 `result` | `ACCEPTED`, `REJECTED`, `AUTH_CONFIG_ERROR`, `RETRYABLE`, `UNCERTAIN` |
+
+**제공자 호출 결과의 구분.** 다섯 값은 서로 배타적이며 판정 기준은 제공자의 접수 여부다. `ACCEPTED`는 제공자가 요청 접수를 명시적으로 확인한 경우다. `REJECTED`는 결정적 영구 거부이며 재시도하지 않는다. `AUTH_CONFIG_ERROR`는 인증·권한·필수 설정 오류다. `RETRYABLE`은 제공자가 접수하지 않았음이 확정된 일시적 실패이며 다시 시도할 수 있다. `UNCERTAIN`은 요청을 보낸 뒤 시간 초과나 연결 단절 등으로 제공자의 접수 여부를 확정할 수 없는 경우다. 단순한 시간 초과를 무조건 `RETRYABLE`로 분류하지 않는다. 제공자가 접수하지 않았다는 사실이 확인되지 않으면 `UNCERTAIN`이다. 각 제공자 어댑터가 기술 오류를 이 의미로 분류하며 제공자 원문 오류를 label 값으로 쓰지 않는다.
+
+**DB 처리 결과의 구분.** `mail_outbox.worker.db_operation`의 `SUCCESS`는 MariaDB 명령 실행 결과가 확정적으로 정상 반환된 경우다. `FAILURE`는 연결·명령 실행 실패, 시간 초과, 적용 결과 불확실이다. `QUERY` 결과가 0건이어도 `SUCCESS`이며 처리 후보 없음은 실패가 아니다. `CLAIM`과 `UPDATE`가 낙관적 조건 불일치나 선점 경쟁 때문에 0행을 변경했더라도 DB 명령 자체가 정상 완료됐다면 `SUCCESS`다. 이런 0행 결과는 업무 경쟁의 정상 결과이지 저장소 장애가 아니다. `mail_outbox.worker.last_success_at`은 `QUERY`가 `SUCCESS`일 때 갱신하는 진단 지표이며 worker 비가동 경고에 사용하지 않는다. 인스턴스 식별자를 애플리케이션 지표 label에 넣지 않는다.
+
+**접수 결과의 구분.** `mail_outbox.enqueue`의 `SUCCESS`는 해당 API에서 계약상 필요한 MariaDB commit 성공이 확정된 경우다. 회원가입은 `users`와 `mail_outbox`를 함께 커밋하는 트랜잭션의 성공이 확정됐을 때만 `SUCCESS`이고, 이메일 인증 요청과 비밀번호 재설정 요청은 `mail_outbox` 접수 commit 성공이 확정됐을 때 `SUCCESS`다. `UNAVAILABLE`은 INSERT·commit 실패 또는 commit 결과 불확실로 `AUTH_STATE_UNAVAILABLE`을 반환한 경우다. `PASSWORD_POLICY_UNAVAILABLE`처럼 outbox 접수 이전에 끝난 실패는 이 지표의 `UNAVAILABLE`에 넣지 않는다.
+
+**금지 label.** `recipient_email`·`userId`·`username`·token·`tokenHash`·`jti`·JWT claim 전체·`mail_outbox` 행 id·요청 식별자·인스턴스 식별자·`last_error_kind`·제공자 원문 오류·예외 message는 어떤 지표의 label로도 쓰지 않는다. `last_error_kind`를 label로 쓰지 않는 이유는 [ERD 3.5](./erd.md#table-mail_outbox)가 그 값을 닫힌 열거로 정의하지 않아 cardinality를 보장할 수 없기 때문이며, 이 값은 접근이 통제된 구조화 로그 필드로만 유지한다. 제공자 원문 오류·예외 message·SQL은 지표 label로도 로그 값으로도 쓰지 않는다.
+
+**빈 집합의 의미.** 처리 가능한 `PENDING`이 하나도 없으면 `mail_outbox.pending.ready.count`는 0이고 `mail_outbox.pending.ready.oldest_wait`는 값을 내보내지 않고 미관측으로 둔다. 후자를 0으로 채우지 않는다. 0은 방금 처리 가능해진 작업과 구분되지 않기 때문이다. 경고 평가는 값이 관측된 경우에만 수행하고 미관측을 정체로 판정하지 않는다.
+
+**로그의 요청 식별자.** 원래 HTTP 요청의 `X-Request-Id`를 `mail_outbox`에 저장하지 않는다. worker는 각 처리 시도를 시작할 때 2.1절과 같은 방식으로 새 UUID v4 요청 식별자를 만들어 그 시도의 구조화 로그에 쓴다. 한 작업의 여러 시도를 잇는 것은 지표 label이 아니라 접근이 통제된 로그의 `mail_outbox` 작업 id다. 이를 위해 새 DB 컬럼을 추가하지 않는다. 로그에 남길 필드와 금지 항목은 [ERD 3.5](./erd.md#table-mail_outbox)를 따른다.
+
+**경고.** 새로운 수치 상수는 추가하지 않는다. worker 정체에는 [ERD 3.5](./erd.md#table-mail_outbox)에서 작업 처리 안전값으로 확정한 가시성 만료 기본값 5분을 최초 운영 경고 임계값으로 재사용한다. 신규 수치 상수는 0개이고, 새로 적용하는 알림 임계값은 이 하나뿐이다.
+
+| 경고 | 심각도 | 발생 조건 | 해제 조건 | 중복 억제 |
+| --- | --- | --- | --- | --- |
+| 제공자 인증·설정 오류 | 높음 | 한 `purpose`에서 `mail_provider.request`의 `result`가 `AUTH_CONFIG_ERROR`로 처음 기록됨 | 같은 `purpose`가 동일하게 구성된 제공자 경로에서 `result`가 `ACCEPTED`로 관측됨. 제공자 경로 복구를 뜻할 뿐 편지함 도달의 증명은 아님 | `purpose` 단위로 한 건 |
+| 발송 포기 종결 | 보통 | 한 `purpose`에서 `mail_outbox.terminal.max_attempts_exceeded` 또는 `mail_outbox.terminal.delivery_deadline_exceeded`가 증가 | 자동 회복 신호 없음. 확인·종료 절차는 후속 알림 시스템에서 정함 | `purpose` 단위로 집계하며 개별 수신자 단위로 보내지 않음 |
+| worker 정체 | 보통 | 값이 관측된 `mail_outbox.pending.ready.oldest_wait`가 가시성 만료를 넘김 | 관측된 최장 대기가 가시성 만료 미만으로 회복 | `purpose` 단위로 한 건 |
+| 저장소 장애 | 보통 | 한 `stage`에서 `mail_outbox.worker.db_operation`의 `result`가 `FAILURE`로 기록됨 | 같은 `stage`에서 `result`가 `SUCCESS`로 관측됨 | `stage` 단위로 집계 |
+| 접수 불가 | 보통 | 한 `api`에서 `mail_outbox.enqueue`의 `result`가 `UNAVAILABLE`로 기록됨 | 같은 `api`에서 `result`가 `SUCCESS`로 관측됨 | `api` 단위로 집계 |
+
+다섯 경고는 발생·해제·중복 억제가 모두 같은 label 값을 기준으로 판정된다.
+
+worker 정체는 개별 인스턴스가 아니라 `mail_outbox` 전체의 서비스 수준 상태를 뜻한다. 가시성 만료는 한 작업의 처리 제한이지 worker의 poll 주기가 아니므로, 처리할 작업이 없는 상태에서 프로세스나 인스턴스가 살아 있는지는 이 경고로 판정하지 않는다. 인스턴스 생존 감시는 health check와 배포·런타임 관측의 범위이며, 이를 위해 poll 주기·기동 유예 시간·인스턴스별 heartbeat 계약을 이 절에서 만들지 않는다.
+
+집계 시간창과 알림 반복 정책은 후속 수집·알림 시스템 설정에서 정한다. 제공자 실패율, API `503` 비율, 대기 건수, 처리 지연 percentile 같은 비율·분위 기준은 실제 트래픽 기준선과 수집 인프라가 있어야 의미가 있으므로 이 절에서 수치를 정하지 않는다. 도입하려면 기준선을 먼저 측정하고 별도로 승인한다.
+
+**관측과 복구의 경계.** 경고는 관측 결과일 뿐 이미 반환된 API 응답을 사후에 바꾸지 않는다. worker의 token 발급·메일 발송 실패가 이미 반환한 `201`·`202`를 바꾸지 않는다. 운영자는 `mail_outbox` 행을 임의로 `PENDING`으로 되돌리거나 `attempt_count`를 초기화하지 않으며 원문 action token을 복원·재사용하지 않는다. 재처리는 ERD 3.5의 원자적 선점·낙관적 잠금·최대 시도·발송 기한 계약 안에서만 일어난다. 이를 위한 수동 DB 수정 절차나 관리자 API를 새로 만들지 않는다. 종결되어 수신 주소가 지워진 작업의 복구는 사용자가 요청 API로 새 작업을 접수하는 3.7절의 경로를 따른다.
 
 ## 4. 커리큘럼·자가 진단·세션 업무 계약
 
