@@ -17,7 +17,7 @@ MVP는 스마트폰을 독립적으로 사용하는 저시력 시각장애인을
 | --- | --- | --- | --- |
 | F-01 | 회원가입·로그인·인증 상태 관리 | username 로그인, 공개 가입 LEARNER, 단일 역할 관리, Access/Refresh Token으로 본인 식별 | 복수 역할·역할 전환 없음. Argon2id, 15분/14일 토큰, Refresh 회전, 5회 실패·10분 제한. 계정 공개 HTTP·DTO·오류는 |
 | F-02 | 이메일 인증·재발송·복구 | 인증 24시간·복구 30분의 일회성 토큰, 이메일 인증 완료 기록·재발송·비밀번호 재설정 | users.email·email_verified_at와 Redis 계정 작업 토큰 상태 사용. 토큰 원문 미저장, 단일 사용, 계정 존재 비노출. 공개 HTTP·오류는 |
-| F-03 | 회원 탈퇴 | 현재 비밀번호 확인 후 ACTIVE → WITHDRAWN, 직접 식별정보 가명화, 전체 Refresh Token 폐기 | 로그인·신규 학습 차단, 가명 처리된 과거 기록 보존, identifier 재사용·재가입 새 ID. 현재 비밀번호 body의 POST API는 계정 API 계약, 법적 보존 기간은 운영 정책 |
+| F-03 | 회원 탈퇴 | 현재 비밀번호 확인 후 ACTIVE → WITHDRAWN, 직접 식별정보 가명화, auth_version +1로 기존 Access·Refresh 인증 세션 무효화 | 로그인·신규 학습 차단, 가명 처리된 과거 기록 보존, identifier 재사용·재가입 새 ID. 현재 비밀번호 body의 POST API는 계정 API 계약, 법적 보존 기간은 운영 정책 |
 | F-04 | 접근성 설정·학습 안내 | 음성·햅틱·글자 크기·대비 및 접근성 탐색 지원 | 계정별 프론트 로컬 저장, 백엔드 설정 API·컬럼 없음. 도움말 재노출, 로컬 초기화 시 소실·재안내 가능 |
 
 화면·상태·오류를 음성과 시각 정보로 전달하고 색상만으로 구분하지 않는다. 실제 입력과 접근성 탐색의 충돌은 기기 테스트로 검수한다. TTS가 현재 독립 풀이의 정답을 미리 안내하지 않도록 설명·문제·결과를 구분한다.
@@ -40,9 +40,9 @@ Access Token을 짧은 15분 JWT로 두고 Refresh JWT의 상태를 Redis에 14�
 
 계정 기능은 `/api/v1`의 명사형 HTTP 리소스 10개로 제공한다. 가입·내 정보·탈퇴, 로그인·Access 갱신·로그아웃, 이메일 인증 요청/완료, 비밀번호 재설정 요청/완료를 구분한다. 가입은 username·email·password만 받아 LEARNER를 만들고 인증 메일을 보낸다. 인증 전에는 토큰을 발급하지 않는다. 사용자 응답은 userId·username·email·role·emailVerified·level·createdAt을 포함하며 level은 자가 진단 전 학습자와 INSTRUCTOR·ADMIN에서 null, 진단 후 학습자에서 열린 최고 L1~L6이다. 접근성 설정·일반 프로필·역할 변경은 포함하지 않는다.
 
-로그인·갱신·로그아웃 요청은 `X-Client-Platform`으로 WEB/MOBILE 전달 방식을 명시한다. 이 값은 권한 판단에 사용하지 않는다. WEB Refresh Token은 `__Host-refreshToken` Secure·HttpOnly·SameSite=Strict 쿠키, MOBILE Refresh Token은 응답/body와 운영체제 보안 저장소를 사용한다. 브라우저의 MOBILE 위장은 Origin·CORS 검사로 거부한다. 프론트는 Access Token을 가능한 한 메모리에 두고 동시 갱신을 single-flight로 합치며 엄격한 회전 뒤 구 Refresh Token을 재사용하지 않는다.
+로그인·갱신·로그아웃 요청은 `X-Client-Platform`으로 WEB/MOBILE 전달 방식을 명시한다. 이 값은 권한 판단에 사용하지 않는다. WEB Refresh Token은 `__Host-refreshToken` Secure·HttpOnly·SameSite=Strict 쿠키, MOBILE Refresh Token은 응답/body와 운영체제 보안 저장소를 사용한다. `Origin` 헤더가 있는 요청의 `MOBILE` 주장은 허용 목록과 무관하게 거부하고, 허용 Origin 검사는 CORS에서 별도로 수행한다. 프론트는 Access Token을 가능한 한 메모리에 두고 동시 갱신을 single-flight로 합치며 엄격한 회전 뒤 구 Refresh Token을 재사용하지 않는다.
 
-이메일 인증·비밀번호 재설정 요청은 계정 존재나 실제 발송 여부와 관계없이 항상 같은 `202` 결과를 보여 계정 열거를 막는다. 원문 action token은 링크의 프론트 화면/deep link·fragment에서 받아 POST body로만 백엔드에 전달한다. 비밀번호 재설정은 모든 Refresh Token을 폐기하고 자동 로그인하지 않는다. 탈퇴는 currentPassword를 다시 확인하고 즉시 가명화·인증 폐기하며, 남은 Access Token도 보호 API의 ACTIVE 재검증으로 차단한다.
+형식이 유효한 이메일 인증·비밀번호 재설정 요청은 계정을 조회하지 않고 `mail_outbox` 작업을 접수하며, INSERT commit 성공이 확정되면 `202`와 빈 body를, INSERT 또는 commit이 실패하거나 commit 결과가 불확실하면 `503 AUTH_STATE_UNAVAILABLE`을 반환한다. `202`와 `503`의 차이는 저장소 결과에만 따르고 계정 존재·상태·발송 적격 여부에 따르지 않으므로 계정 열거를 막는다. `202`는 내구적 작업 접수만 뜻하고 실제 메일 발송이나 편지함 도달을 뜻하지 않는다. 원문 action token은 링크의 프론트 화면/deep link·fragment에서 받아 POST body로만 백엔드에 전달한다. 비밀번호 재설정은 `users.auth_version`을 증가시켜 기존 Access와 Refresh를 모두 무효화하고 자동 로그인하지 않는다. 탈퇴는 currentPassword를 다시 확인하고 즉시 가명화·인증 폐기하며, 남은 Access Token은 보호 API의 status·auth_version 재검증으로 차단한다.
 
 클라이언트는 오류 code를 임의 문자열 비교가 아니라 고정 계약으로 처리한다. 로그인 실패 원인은 `INVALID_CREDENTIALS`, Refresh 실패 원인은 `INVALID_REFRESH_TOKEN`, action token 실패 원인은 `ACTION_TOKEN_INVALID`로 일반화한다. API 전문과 상태 코드는 [API 명세 V2 3절](./api-spec.md#3-계정인증-업무-계약)을 따른다. 접근성 설정 화면·저장 방식은 F-04의 프론트 로컬 범위를 유지한다.
 
@@ -50,9 +50,9 @@ Access Token을 짧은 15분 JWT로 두고 Refresh JWT의 상태를 Redis에 14�
 
 관계형 데이터는 MariaDB 11.8.9, 인증 토큰 상태는 Redis Open Source 8.2.9를 사용한다. 토큰 전용 RDB 테이블은 없다. learning_sessions.assigned_problems의 JSON과 기존 학습 저장 구조는 유지한다. JWT 원문 보관은 클라이언트, 서명 검증·Redis 상태 검증과 폐기는 백엔드의 책임이다. 상세 저장소·버전 근거는 [ERD V2](./erd.md#physical-rules)를 따른다.
 
-동시 action 제출은 한 번만 성공하고 Refresh 회전·재사용 탐지·현재 계열/사용자 전체 폐기가 동작해야 한다. 토큰 종류를 바꿔 다른 API에 넣기, 만료·폐기 토큰과 Redis 상태 누락을 통한 우회를 거부한다. 이전 토큰의 재사용 탐지에 필요한 상태를 조기에 삭제하지 않는다.
+동시 action 제출은 한 번만 성공하고 Refresh 회전·재사용 탐지·현재 Redis family 폐기와 auth_version 기반 사용자 인증 세션 전체 무효화가 동작해야 한다. 토큰 종류를 바꿔 다른 API에 넣기, 만료·폐기 토큰과 Redis 상태 누락을 통한 우회를 거부한다. 이전 토큰의 재사용 탐지에 필요한 상태를 조기에 삭제하지 않는다.
 
-MariaDB 변경과 Redis 폐기를 하나의 SQL 트랜잭션이라고 설명하지 않는다. 저장소 일부 실패·재시작·복원·동시 로그인에서 폐기된 인증이 살아나지 않아야 한다. 구체 복구 순서와 장애 HTTP/code·화면 안내는 [API V2 3.6절](./api-spec.md#36-redis-저장-계약과-구현-전-승인-경계)의 추가 승인 후 검수한다.
+MariaDB 변경과 Redis 폐기를 하나의 SQL 트랜잭션이라고 설명하지 않는다. 저장소 일부 실패·재시작·복원·동시 로그인에서 폐기된 인증이 살아나지 않아야 한다. 구체 복구 순서와 장애 HTTP/code는 [API V2 3.6.2절](./api-spec.md#362-인증-저장소-장애와-부분-성공-계약)을, 화면 안내는 [API V2 3.7절](./api-spec.md#37-메일-요청완료-api-클라이언트-복구)을 따른다.
 
 ## 3. 자가 진단·개인 학습·복습
 
@@ -220,7 +220,7 @@ DB 고유 제약은 응답 캐시 만료 후에도 유지한다. 멱등 키의 �
 | N-06 / NFR#6 | 저장소 파트별 구조·예외·API 규칙을 따르고 정상/실패/경계값 테스트와 변경 추적을 유지 | 채점·변환·멱등·권한 테스트, 규칙 변경 회귀 검사, 명세-테스트 연결 | 전 파트 DDD 4계층 강제·핵심 로직 커버리지 90%는 확인 필요. 파트별 문서 차이를 임의 통일하지 않음 |
 | N-07 / NFR#7 | 최종 저장 성공과 임시 결과 구분, 재전송 중복 방지, 오류 공통 형식 준수, 장애 후 확정 결과 확인 | 하나의 수업 최대 30명 동시 제출에서 성공 응답 DB 누락·최종 풀이/BKT 중복·미검증 문제·타인 접근 0건 확인 | 5xx 비율·장애 손실 SLA는 측정 뒤 승인. 불변 조건은 지연 목표 때문에 완화하지 않음 |
 | N-08 / NFR#8 | 접근성 탐색·입력·포커스·오류 안내·글자 크기/대비와 구분 가능한 햅틱 제공 | Android TalkBack 핵심 흐름, 6점 입력 충돌, 200% 확대, 색상 비의존 정오답/오류, TTS·햅틱 검사 | Android MVP 게이트는 접근성·장치 범위. WCAG 전체 적합 선언·햅틱 구분률과 기기별 수치는 별도 측정 |
-| N-09 / NFR#9 | 장애 원인·구간 지연·실패를 추적할 수 있도록 필요한 로그·지표·요청 연계를 설계 | 제출→저장→분석/추천 구간에서 UUID v4 `X-Request-Id`를 응답·AI 호출·로그로 연결하고 비밀값·직접 식별정보 비노출 검사 | 기본 로그·health check는 MVP. 보존/수집/알림 임계값·Prometheus/Grafana·traceparent/OpenTelemetry는 후속 |
+| N-09 / NFR#9 | 장애 원인·구간 지연·실패를 추적할 수 있도록 필요한 로그·지표·요청 연계를 설계 | 제출→저장→분석/추천 구간에서 UUID v4 `X-Request-Id`를 응답·AI 호출·로그로 연결하고 비밀값·직접 식별정보 비노출 검사 | 기본 로그·health check는 MVP. 메일 outbox의 최초 사건·정체 경고 조건은 [API 명세 3.8절](./api-spec.md#38-메일-outbox-운영-경고관측-기준)에서 확정하며 새 수치 상수 없이 가시성 만료 기본값을 재사용. 비율/percentile 임계값·보존/수집·Prometheus/Grafana·알림 채널·traceparent/OpenTelemetry는 후속 |
 | N-10 / NFR#10 | 승인된 학습 기록을 복구할 수 있는 백업·복원 계획과 복원 시험을 마련 | 실제 사용자 데이터 전 영속 DB·Migration/rollback·백업 절차와 최소 1회 별도 환경 복원·일관성 확인 | 확정 RPO/RTO·법적 보존·자동 파기·백업 제거 시각은 운영 배포 전 별도 승인 |
 
 ### 10.1 접근성

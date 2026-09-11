@@ -10,7 +10,7 @@
 <title>ERD</title>
 <polygon fill="white" stroke="none" points="-36,36 -36,-1072.2 1869,-1072.2 1869,36 -36,36"/>
 <text xml:space="preserve" text-anchor="middle" x="916.5" y="-1010.6" font-family="Malgun Gothic" font-size="24.00">I:EUM ERD V2 | 전체 관계도</text>
-<text xml:space="preserve" text-anchor="middle" x="916.5" y="-981.8" font-family="Malgun Gothic" font-size="24.00">15 tables / 101 columns / 24 physical FK relationships</text>
+<text xml:space="preserve" text-anchor="middle" x="916.5" y="-981.8" font-family="Malgun Gothic" font-size="24.00">16 tables / 114 columns / 24 physical FK relationships</text>
 <text xml:space="preserve" text-anchor="middle" x="916.5" y="-953" font-family="Malgun Gothic" font-size="24.00">Arrow: child FK &#45;&gt; parent key | dashed: nullable FK | teal: JSON reference</text>
 <text xml:space="preserve" text-anchor="middle" x="916.5" y="-924.2" font-family="Malgun Gothic" font-size="24.00">Reference nodes show parent keys only. Reserved fields are NULL in MVP.</text>
 <!-- lectures&#45;&gt;users -->
@@ -219,10 +219,19 @@
 <polygon fill="none" stroke="#d8e0ea" points="1443,-541.6 1443,-584 1833,-584 1833,-541.6 1443,-541.6"/>
 <text xml:space="preserve" text-anchor="start" x="1454" y="-558.7" font-family="Arial" font-weight="bold" font-size="17.00" fill="white">users</text>
 <polygon fill="none" stroke="#d8e0ea" points="1443,-504 1443,-541.6 1833,-541.6 1833,-504 1443,-504"/>
-<text xml:space="preserve" text-anchor="start" x="1454" y="-517.6" font-family="Malgun Gothic" font-size="13.00">계정·역할·인증·탈퇴 · 13 columns</text>
+<text xml:space="preserve" text-anchor="start" x="1454" y="-517.6" font-family="Malgun Gothic" font-size="13.00">계정·역할·인증·탈퇴 · 15 columns</text>
+</g>
+<!-- mail_outbox -->
+<g id="node2" class="node">
+<title>mail_outbox</title>
+<polygon fill="#304973" stroke="none" points="0,-620.6 0,-663 390,-663 390,-620.6 0,-620.6"/>
+<polygon fill="none" stroke="#d8e0ea" points="0,-620.6 0,-663 390,-663 390,-620.6 0,-620.6"/>
+<text xml:space="preserve" text-anchor="start" x="11" y="-637.7" font-family="Arial" font-weight="bold" font-size="17.00" fill="white">mail_outbox</text>
+<polygon fill="none" stroke="#d8e0ea" points="0,-583 0,-620.6 390,-620.6 390,-583 0,-583"/>
+<text xml:space="preserve" text-anchor="start" x="11" y="-596.6" font-family="Malgun Gothic" font-size="13.00">계정 메일 발송 작업·재시도 · 11 columns</text>
 </g>
 <!-- lectures -->
-<g id="node2" class="node">
+<g id="node3" class="node">
 <title>lectures</title>
 <polygon fill="#304973" stroke="none" points="962,-742.6 962,-785 1352,-785 1352,-742.6 962,-742.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="962,-742.6 962,-785 1352,-785 1352,-742.6 962,-742.6"/>
@@ -231,7 +240,7 @@
 <text xml:space="preserve" text-anchor="start" x="973" y="-718.6" font-family="Malgun Gothic" font-size="13.00">실제 수업·현재 문제 · 11 columns</text>
 </g>
 <!-- participants -->
-<g id="node3" class="node">
+<g id="node4" class="node">
 <title>participants</title>
 <polygon fill="#304973" stroke="none" points="481,-870.6 481,-913 871,-913 871,-870.6 481,-870.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="481,-870.6 481,-913 871,-913 871,-870.6 481,-870.6"/>
@@ -240,7 +249,7 @@
 <text xml:space="preserve" text-anchor="start" x="492" y="-846.6" font-family="Malgun Gothic" font-size="13.00">수업 참여·퇴장 · 4 columns</text>
 </g>
 <!-- lecture_problems -->
-<g id="node4" class="node">
+<g id="node5" class="node">
 <title>lecture_problems</title>
 <polygon fill="#304973" stroke="none" points="481,-624.6 481,-667 871,-667 871,-624.6 481,-624.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="481,-624.6 481,-667 871,-667 871,-624.6 481,-624.6"/>
@@ -249,7 +258,7 @@
 <text xml:space="preserve" text-anchor="start" x="492" y="-600.6" font-family="Malgun Gothic" font-size="13.00">수업과 문제 연결 · 3 columns</text>
 </g>
 <!-- curriculum_stages -->
-<g id="node5" class="node">
+<g id="node6" class="node">
 <title>curriculum_stages</title>
 <polygon fill="#176b65" stroke="none" points="1443,-302.6 1443,-345 1833,-345 1833,-302.6 1443,-302.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="1443,-302.6 1443,-345 1833,-345 1833,-302.6 1443,-302.6"/>
@@ -258,7 +267,7 @@
 <text xml:space="preserve" text-anchor="start" x="1454" y="-278.6" font-family="Malgun Gothic" font-size="13.00">학습 단계 정의 · 5 columns</text>
 </g>
 <!-- curriculum_problems -->
-<g id="node6" class="node">
+<g id="node7" class="node">
 <title>curriculum_problems</title>
 <polygon fill="#176b65" stroke="none" points="481,-377.6 481,-420 871,-420 871,-377.6 481,-377.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="481,-377.6 481,-420 871,-420 871,-377.6 481,-377.6"/>
@@ -267,7 +276,7 @@
 <text xml:space="preserve" text-anchor="start" x="492" y="-353.6" font-family="Malgun Gothic" font-size="13.00">단계 후보·기본 순서 · 3 columns</text>
 </g>
 <!-- problems -->
-<g id="node7" class="node">
+<g id="node8" class="node">
 <title>problems</title>
 <polygon fill="#176b65" stroke="none" points="962,-605.6 962,-648 1352,-648 1352,-605.6 962,-605.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="962,-605.6 962,-648 1352,-648 1352,-605.6 962,-605.6"/>
@@ -276,7 +285,7 @@
 <text xml:space="preserve" text-anchor="start" x="973" y="-581.6" font-family="Malgun Gothic" font-size="13.00">검증된 문제 원본 · 7 columns</text>
 </g>
 <!-- problem_cells -->
-<g id="node8" class="node">
+<g id="node9" class="node">
 <title>problem_cells</title>
 <polygon fill="#176b65" stroke="none" points="481,-744.6 481,-787 871,-787 871,-744.6 481,-744.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="481,-744.6 481,-787 871,-787 871,-744.6 481,-744.6"/>
@@ -285,7 +294,7 @@
 <text xml:space="preserve" text-anchor="start" x="492" y="-720.6" font-family="Malgun Gothic" font-size="13.00">위치별 정답 점형 · 4 columns</text>
 </g>
 <!-- learning_skills -->
-<g id="node9" class="node">
+<g id="node10" class="node">
 <title>learning_skills</title>
 <polygon fill="#176b65" stroke="none" points="962,-37.6 962,-80 1352,-80 1352,-37.6 962,-37.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="962,-37.6 962,-80 1352,-80 1352,-37.6 962,-37.6"/>
@@ -294,7 +303,7 @@
 <text xml:space="preserve" text-anchor="start" x="973" y="-13.6" font-family="Malgun Gothic" font-size="13.00">학습 요소 사전 · 5 columns</text>
 </g>
 <!-- problem_skills -->
-<g id="node10" class="node">
+<g id="node11" class="node">
 <title>problem_skills</title>
 <polygon fill="#176b65" stroke="none" points="481,-251.6 481,-294 871,-294 871,-251.6 481,-251.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="481,-251.6 481,-294 871,-294 871,-251.6 481,-251.6"/>
@@ -303,7 +312,7 @@
 <text xml:space="preserve" text-anchor="start" x="492" y="-227.6" font-family="Malgun Gothic" font-size="13.00">문제와 평가 요소 연결 · 2 columns</text>
 </g>
 <!-- problem_attempts -->
-<g id="node11" class="node">
+<g id="node12" class="node">
 <title>problem_attempts</title>
 <polygon fill="#69448f" stroke="none" points="481,-500.6 481,-543 871,-543 871,-500.6 481,-500.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="481,-500.6 481,-543 871,-543 871,-500.6 481,-500.6"/>
@@ -312,7 +321,7 @@
 <text xml:space="preserve" text-anchor="start" x="492" y="-476.6" font-family="Malgun Gothic" font-size="13.00">독립 풀이·최종 채점 · 13 columns</text>
 </g>
 <!-- attempt_cells -->
-<g id="node12" class="node">
+<g id="node13" class="node">
 <title>attempt_cells</title>
 <polygon fill="#69448f" stroke="none" points="0,-500.6 0,-543 390,-543 390,-500.6 0,-500.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="0,-500.6 0,-543 390,-543 390,-500.6 0,-500.6"/>
@@ -321,7 +330,7 @@
 <text xml:space="preserve" text-anchor="start" x="11" y="-476.6" font-family="Malgun Gothic" font-size="13.00">Cell별 정답·입력·차이 · 7 columns</text>
 </g>
 <!-- attempt_skill_results -->
-<g id="node13" class="node">
+<g id="node14" class="node">
 <title>attempt_skill_results</title>
 <polygon fill="#69448f" stroke="none" points="0,-210.6 0,-253 390,-253 390,-210.6 0,-210.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="0,-210.6 0,-253 390,-253 390,-210.6 0,-210.6"/>
@@ -330,7 +339,7 @@
 <text xml:space="preserve" text-anchor="start" x="11" y="-186.6" font-family="Malgun Gothic" font-size="13.00">요소별 정오답·오류 수 · 6 columns</text>
 </g>
 <!-- user_skill_memory -->
-<g id="node14" class="node">
+<g id="node15" class="node">
 <title>user_skill_memory</title>
 <polygon fill="#69448f" stroke="none" points="481,-118.6 481,-161 871,-161 871,-118.6 481,-118.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="481,-118.6 481,-161 871,-161 871,-118.6 481,-118.6"/>
@@ -339,7 +348,7 @@
 <text xml:space="preserve" text-anchor="start" x="492" y="-94.6" font-family="Malgun Gothic" font-size="13.00">요소별 현재 BKT 상태 · 11 columns</text>
 </g>
 <!-- learning_sessions -->
-<g id="node15" class="node">
+<g id="node16" class="node">
 <title>learning_sessions</title>
 <polygon fill="#69448f" stroke="none" points="962,-403.6 962,-446 1352,-446 1352,-403.6 962,-403.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="962,-403.6 962,-446 1352,-446 1352,-403.6 962,-403.6"/>

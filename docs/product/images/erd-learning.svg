@@ -10,7 +10,7 @@
 <title>ERD</title>
 <polygon fill="white" stroke="none" points="-36,36 -36,-1494.2 2941,-1494.2 2941,36 -36,36"/>
 <text xml:space="preserve" text-anchor="middle" x="1452.5" y="-1432.6" font-family="Malgun Gothic" font-size="24.00">I:EUM ERD V2 | 개인 세션·풀이·평가·숙련도</text>
-<text xml:space="preserve" text-anchor="middle" x="1452.5" y="-1403.8" font-family="Malgun Gothic" font-size="24.00">15 tables / 101 columns / 24 physical FK relationships</text>
+<text xml:space="preserve" text-anchor="middle" x="1452.5" y="-1403.8" font-family="Malgun Gothic" font-size="24.00">16 tables / 114 columns / 24 physical FK relationships</text>
 <text xml:space="preserve" text-anchor="middle" x="1452.5" y="-1375" font-family="Malgun Gothic" font-size="24.00">Arrow: child FK &#45;&gt; parent key | dashed: nullable FK | teal: JSON reference</text>
 <text xml:space="preserve" text-anchor="middle" x="1452.5" y="-1346.2" font-family="Malgun Gothic" font-size="24.00">Reference nodes show parent keys only. Reserved fields are NULL in MVP.</text>
 <!-- learning_sessions&#45;&gt;users -->
@@ -756,7 +756,7 @@
 <polygon fill="none" stroke="#d8e0ea" points="2335,-1160.6 2335,-1203 2905,-1203 2905,-1160.6 2335,-1160.6"/>
 <text xml:space="preserve" text-anchor="start" x="2346" y="-1177.7" font-family="Arial" font-weight="bold" font-size="17.00" fill="white">users</text>
 <polygon fill="none" stroke="#d8e0ea" points="2335,-1123 2335,-1160.6 2905,-1160.6 2905,-1123 2335,-1123"/>
-<text xml:space="preserve" text-anchor="start" x="2346" y="-1136.6" font-family="Malgun Gothic" font-size="13.00">계정·역할·인증·탈퇴 · 13 columns · reference</text>
+<text xml:space="preserve" text-anchor="start" x="2346" y="-1136.6" font-family="Malgun Gothic" font-size="13.00">계정·역할·인증·탈퇴 · 15 columns · reference</text>
 <polygon fill="#edf2f7" stroke="none" points="2335,-1085.4 2335,-1123 2430,-1123 2430,-1085.4 2335,-1085.4"/>
 <polygon fill="none" stroke="#d8e0ea" points="2335,-1085.4 2335,-1123 2430,-1123 2430,-1085.4 2335,-1085.4"/>
 <text xml:space="preserve" text-anchor="start" x="2369.14" y="-1099" font-family="Malgun Gothic" font-size="13.00">KEY</text>

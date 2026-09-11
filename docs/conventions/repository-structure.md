@@ -100,6 +100,7 @@ S15P21B201/
 │  │  ├─ erd.md                  # 테이블·컬럼·관계
 │  │  ├─ user-flow.md            # 사용자 여정·화면 상태
 │  │  ├─ curriculum.md           # 학습 단계·진단·추천 규칙
+│  │  ├─ erd-tools/              # erd.md에서 ERD 도식을 생성하는 스크립트
 │  │  └─ images/                 # ERD 도식 (PNG 삽입용 + SVG 확대용)
 │  ├─ infra/                      # 인프라 문서 (README.md가 입구)
 │  ├─ solutions/                  # 해결한 문제의 축적 (README.md가 기록 규칙)

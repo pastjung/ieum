@@ -10,7 +10,7 @@
 <title>ERD</title>
 <polygon fill="white" stroke="none" points="-36,36 -36,-1002.8 2102.58,-1002.8 2102.58,36 -36,36"/>
 <text xml:space="preserve" text-anchor="middle" x="1033.29" y="-941.2" font-family="Malgun Gothic" font-size="24.00">I:EUM ERD V2 | 실시간 수업</text>
-<text xml:space="preserve" text-anchor="middle" x="1033.29" y="-912.4" font-family="Malgun Gothic" font-size="24.00">15 tables / 101 columns / 24 physical FK relationships</text>
+<text xml:space="preserve" text-anchor="middle" x="1033.29" y="-912.4" font-family="Malgun Gothic" font-size="24.00">16 tables / 114 columns / 24 physical FK relationships</text>
 <text xml:space="preserve" text-anchor="middle" x="1033.29" y="-883.6" font-family="Malgun Gothic" font-size="24.00">Arrow: child FK &#45;&gt; parent key | dashed: nullable FK | teal: JSON reference</text>
 <text xml:space="preserve" text-anchor="middle" x="1033.29" y="-854.8" font-family="Malgun Gothic" font-size="24.00">Reference nodes show parent keys only. Reserved fields are NULL in MVP.</text>
 <!-- lectures&#45;&gt;lecture_problems -->
@@ -347,7 +347,7 @@
 <polygon fill="none" stroke="#d8e0ea" points="1496.58,-762.8 1496.58,-805.2 2066.58,-805.2 2066.58,-762.8 1496.58,-762.8"/>
 <text xml:space="preserve" text-anchor="start" x="1507.58" y="-779.9" font-family="Arial" font-weight="bold" font-size="17.00" fill="white">users</text>
 <polygon fill="none" stroke="#d8e0ea" points="1496.58,-725.2 1496.58,-762.8 2066.58,-762.8 2066.58,-725.2 1496.58,-725.2"/>
-<text xml:space="preserve" text-anchor="start" x="1507.58" y="-738.8" font-family="Malgun Gothic" font-size="13.00">계정·역할·인증·탈퇴 · 13 columns · reference</text>
+<text xml:space="preserve" text-anchor="start" x="1507.58" y="-738.8" font-family="Malgun Gothic" font-size="13.00">계정·역할·인증·탈퇴 · 15 columns · reference</text>
 <polygon fill="#edf2f7" stroke="none" points="1496.58,-687.6 1496.58,-725.2 1591.58,-725.2 1591.58,-687.6 1496.58,-687.6"/>
 <polygon fill="none" stroke="#d8e0ea" points="1496.58,-687.6 1496.58,-725.2 1591.58,-725.2 1591.58,-687.6 1496.58,-687.6"/>
 <text xml:space="preserve" text-anchor="start" x="1530.73" y="-701.2" font-family="Malgun Gothic" font-size="13.00">KEY</text>

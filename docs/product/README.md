@@ -24,11 +24,11 @@ ERD 도식을 둔다. 도식마다 본문 삽입용 PNG와 확대·검색용 SVG
 
 | 파일 | 범위 |
 | --- | --- |
-| `erd-overview.*` | 15개 테이블 전체 관계도 |
+| `erd-overview.*` | 16개 테이블 전체 관계도 |
 | `erd-full.*` | 모든 테이블의 모든 컬럼을 담은 전체 상세도 |
 | `erd-accounts.*` | 계정·인증 영역 |
 | `erd-lectures.*` | 실시간 수업 영역 |
 | `erd-content.*` | 커리큘럼·문제 영역 |
 | `erd-learning.*` | 풀이·평가·학습 상태 영역 |
 
-도식은 [erd.md](./erd.md)의 컬럼 표에서 생성하므로, 표를 고치면 도식도 함께 갱신한다.
+도식은 [erd.md](./erd.md)의 컬럼 표에서 생성하므로, 표를 고치면 도식도 함께 갱신한다. 생성 도구와 실행·재현 조건은 [erd-tools/README.md](./erd-tools/README.md)에 있다.

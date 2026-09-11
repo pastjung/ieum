@@ -6,7 +6,7 @@
 
 ## 1. 문서 범위와 표기
 
-이 문서는 15개 도메인 테이블·101개 컬럼의 저장 목적과 관계·제약을 정의한다. 전체 관계도와 영역별 상세도는 아래 컬럼 표에서 생성하므로 테이블 이름·컬럼·키·NULL 허용 여부가 본문과 일치한다. 관계의 조건부 필수 여부와 업무 검증은 각 테이블 설명을 함께 읽는다.
+이 문서는 16개 영속 테이블·114개 컬럼의 저장 목적과 관계·제약을 정의한다. 전체 관계도와 영역별 상세도는 아래 컬럼 표에서 생성하므로 테이블 이름·컬럼·키·NULL 허용 여부가 본문과 일치한다. 관계의 조건부 필수 여부와 업무 검증은 각 테이블 설명을 함께 읽는다.
 
 - PK는 기본 키, FK는 외래 키, UK는 고유 제약, NN은 NOT NULL이다.
 - 그림의 실선·점선 화살표는 자식 FK에서 부모 키로 향한다. 점선은 NULL 가능한 FK이며 양쪽 관계 수를 표시한다. 복합 고유 제약의 묶음은 본문의 제약 설명을 따른다.
@@ -16,7 +16,7 @@
 
 ## 2. 전체 관계도와 테이블 지도
 
-> 도식 범위: 최종 15개 테이블·101개 컬럼·물리 FK 24개와 배정 JSON 참조 1개를 반영했다.
+> 도식 범위: 최종 16개 영속 테이블·114개 컬럼·물리 FK 24개와 배정 JSON 참조 1개를 반영했다.
 
 ![ERD V2 전체 관계도](./images/erd-overview.png)
 
@@ -24,9 +24,9 @@
 
 ### 전체 컬럼 통합 이미지
 
-아래 이미지는 15개 테이블의 101개 컬럼과 관계를 한 장에 모두 표시한다. 컬럼명·타입·키·NULL 허용 여부를 확인할 때는 원본 PNG를 확대하거나 SVG를 연다. 데이터 설계는 본문과 동일하며, 기존 영역별 상세도도 유지한다.
+아래 이미지는 16개 테이블의 114개 컬럼과 관계를 한 장에 모두 표시한다. 컬럼명·타입·키·NULL 허용 여부를 확인할 때는 원본 PNG를 확대하거나 SVG를 연다. 데이터 설계는 본문과 동일하며, 기존 영역별 상세도도 유지한다.
 
-![ERD V2 전체 상세도 · 15개 테이블의 모든 컬럼](./images/erd-full.png)
+![ERD V2 전체 상세도 · 16개 테이블의 모든 컬럼](./images/erd-full.png)
 
 [전체 상세도 PNG](./images/erd-full.png) · [확대용 전체 상세도 SVG](./images/erd-full.svg)
 
@@ -35,6 +35,7 @@
 | 영역 | 테이블 | 역할 |
 | --- | --- | --- |
 | 계정 | `users` | 로그인·단일 역할·인증·로그인 제한·탈퇴 상태 |
+| 계정 메일 | `mail_outbox` | 이메일 인증·비밀번호 재설정 메일 발송 작업 |
 | 실제 수업 | `lectures` | 한 번의 수업과 진행 상태 |
 | 수업 참여 | `participants` | 수업·사용자의 참여 관계 |
 | 수업 문제 | `lecture_problems` | 수업·문제 연결 |
@@ -76,10 +77,33 @@
 | `withdrawn_at` | DATETIME(6) | NULL | — | MVP | UTC 탈퇴 시각. ACTIVE이면 NULL, WITHDRAWN이면 값이 있어야 한다. |
 | `failed_login_count` | INT | NN | DEFAULT, CHECK | MVP | 연속 로그인 실패 횟수. DEFAULT 0, 0 이상이며 성공 시 0으로 초기화한다. |
 | `locked_until` | DATETIME(6) | NULL | — | MVP | 5회 연속 실패 시 기록하는 UTC 제한 종료 시각. 제한이 없거나 해제되면 NULL이다. |
+| `auth_version` | BIGINT | NN | DEFAULT, CHECK | MVP | 기존 Access·Refresh 인증 세션 무효화 세대. DEFAULT 0, CHECK로 0 이상을 보장한다. 비밀번호 재설정·탈퇴에서 해당 트랜잭션과 함께 +1 한다. Access·Refresh JWT의 authVersion claim과 다르면 거부한다. action token은 이 세대의 대상이 아니며 기존 Redis 단일 사용 계약을 따른다. |
+| `row_version` | BIGINT | NN | DEFAULT, CHECK | MVP | JPA @Version 낙관적 잠금 값. DEFAULT 0, CHECK로 0 이상을 보장한다. JPA와 조건부 SQL이 증가시키며 음수를 허용하지 않는다. 행이 바뀔 때마다 증가해 stale write를 막으며 인증 판정에는 쓰지 않는다. |
+
+auth_version과 row_version은 역할이 다르므로 하나로 합치지 않는다. auth_version은 의도적으로 증가해 JWT claim으로 실리고, row_version은 외부에 노출되지 않으며 행 갱신마다 증가한다. 합치면 로그인 실패 카운터 갱신만으로 사용자의 모든 세션이 끊긴다.
+
+로그인은 password_hash·auth_version·row_version·status·email_verified_at·failed_login_count·locked_until을 하나의 Snapshot으로 읽는다. Argon2id 검증 뒤 토큰 발급 전에 그 Snapshot의 row_version과 auth_version이 그대로인지 조건부 갱신으로 확인하고, 성공한 경우에만 Snapshot의 auth_version으로 Access·Refresh를 발급한다. 최신 auth_version을 기존 Snapshot으로 검증한 비밀번호에 붙이지 않는다.
+
+조건부 갱신이 0행이면 사용자 행을 다시 읽는다. password_hash 또는 auth_version이 Snapshot과 다르면 구 자격 증명으로 인증한 세션을 만들지 않고 401 INVALID_CREDENTIALS다. status·email_verified_at·locked_until을 다시 검사해 현재 조건이 로그인 불가라면 기존 일반화된 실패 응답을 쓴다. password_hash·auth_version과 인증 조건이 그대로이고 row_version만 달라졌다면 최신 row_version으로 조건부 갱신을 최대 1회만 재시도한다. 동일 password_hash임이 확인되면 Argon2id를 다시 실행하지 않는다. 두 번째 조건부 갱신도 실패하면 토큰을 발급하지 않으며, 지속 충돌과 DB 실패는 [API 명세 3.6.2절](./api-spec.md#362-인증-저장소-장애와-부분-성공-계약)의 `503 AUTH_STATE_UNAVAILABLE`이다.
+
+로그인 실패 카운터와 성공 시 초기화는 조건부 원자 갱신으로 처리한다.
+
+```text
+UPDATE users
+   SET failed_login_count = <실패는 +1, 성공은 0>,
+       locked_until       = <한계 도달 시 제한 종료 시각, 성공은 NULL, 그 외 유지>,
+       row_version        = row_version + 1,
+       updated_at         = <UTC now>
+ WHERE id = <userId>
+   AND status = 'ACTIVE'
+   AND <성공 초기화일 때만> row_version = <snapshot> AND auth_version = <snapshot>
+```
+
+위는 구현 방법을 고정하지 않는 의사 코드다. failed_login_count와 locked_until을 한 문장에서 갱신하고 row_version도 같은 문장에서 증가시킨다. status 조건을 WHERE에 두어 탈퇴 처리와 경쟁한 뒤 WITHDRAWN 행을 갱신하지 않는다. 카운터 반영을 포기하고 401만 반환하면 실패를 반복해 잠금을 우회할 수 있으므로 그렇게 하지 않는다. 이런 bulk 갱신 뒤에는 stale JPA entity를 그대로 저장하지 않는다.
 
 공개 가입은 LEARNER만 생성하고 INSTRUCTOR·ADMIN은 관리자 통제 등록이나 초기 데이터로만 만든다. 이메일 인증 전에는 status가 ACTIVE여도 로그인·학습을 허용하지 않는다. 로그인 5회 연속 실패 시 10분 제한하며 성공 시 실패 상태를 초기화한다. 이 상태는 프론트 표시가 아니라 백엔드 검증과 DB 값을 기준으로 한다.
 
-탈퇴는 사용자 행 물리 삭제가 아니라 같은 트랜잭션에서 status=WITHDRAWN·withdrawn_at 기록, email_verified_at 초기화, username/email 가명화, 비밀번호를 폐기된 무작위 비밀의 Argon2id 해시로 교체하는 처리다. 모든 Refresh Token은 Redis에서 별도로 폐기하며 저장소 간 처리·복구 계약은 아래 Redis 인증 상태 절을 따른다. 기존 직접 식별자는 즉시 재가입에 사용할 수 있고 재가입은 새 users.id를 받으며 과거 기록과 다시 연결하지 않는다. 학습·수업 기록과 사용자 행은 가명 상태로 보존하고 모든 users 참조 FK는 ON DELETE RESTRICT·ON UPDATE RESTRICT를 사용한다. 운영 배포의 법적 보존 기간·백업 제거 시점은 별도 운영 정책이다.
+탈퇴는 사용자 행 물리 삭제가 아니라 같은 트랜잭션에서 status=WITHDRAWN·withdrawn_at 기록, email_verified_at 초기화, username/email 가명화, 비밀번호를 폐기된 무작위 비밀의 Argon2id 해시로 교체하는 처리다. 같은 트랜잭션에서 auth_version을 +1 하여 기존 Access·Refresh 인증 세션을 즉시 무효화한다. Redis family 폐기는 커밋 뒤의 사후 정리이며, 저장소 간 상세 실패 처리는 아래 Redis 인증 상태 절을 따른다. 기존 직접 식별자는 즉시 재가입에 사용할 수 있고 재가입은 새 users.id를 받으며 과거 기록과 다시 연결하지 않는다. 학습·수업 기록과 사용자 행은 가명 상태로 보존하고 모든 users 참조 FK는 ON DELETE RESTRICT·ON UPDATE RESTRICT를 사용한다. 운영 배포의 법적 보존 기간·백업 제거 시점은 별도 운영 정책이다.
 
 <a id="redis-auth"></a>
 ### 3.1.1 Redis 인증 상태 저장
@@ -93,15 +117,15 @@ Access JWT는 15분 유효하며 MariaDB와 Redis에 원문을 저장하지 않�
 | 계정 작업 토큰 | userId, purpose, jti, tokenHash, expiresAt, 사용·무효 상태 | 사용자·용도별 활성 토큰 식별. 인증 24시간·복구 30분. 재발급 시 이전 토큰 무효화, 완료 시 단일 사용 |
 | Refresh 토큰 | userId, familyId, jti, tokenHash, expiresAt, 활성·회전·폐기 상태 | 발급별 14일. 같은 로그인 계열의 회전과 이전 토큰 재사용을 판별 |
 | 로그인 계열 | userId, familyId, 현재 활성 토큰 식별, 계열 폐기 상태 | 현재 기기 로그아웃·재사용 탐지 시 계열 폐기. 유효한 하위 토큰이 남아 있는 동안 상태 유지 |
-| 사용자별 계열 조회 | userId에 속한 familyId 목록 또는 동등한 조회 구조 | 비밀번호 재설정·탈퇴 시 전체 계열을 빠짐없이 폐기. 유효 계열보다 먼저 조회 정보가 사라지면 안 됨 |
+| 사용자별 계열 조회 | userId에 속한 familyId 목록 또는 동등한 조회 구조 | 만료 정리와 계열 조회를 위한 보조 인덱스. 기존 Access·Refresh 인증 세션 무효화의 권위는 users.auth_version이므로 이 인덱스의 완전성에 의존하지 않는다 |
 
-tokenHash는 전달된 JWT 원문의 SHA-256 해시이며 토큰 원문·비밀번호·이메일을 Redis 값이나 키·로그에 넣지 않는다. 위 표는 논리 저장 요구사항이며 실제 키 이름·자료구조·스크립트는 구현 계획에서 확인받는다. RedisJSON 모듈은 필요하지 않으며 String·Hash·Set 등 기본 자료구조로 구현할 수 있다.
+tokenHash는 전달된 JWT 원문의 SHA-256 해시이며 토큰 원문·비밀번호·이메일을 Redis 값이나 키·로그에 넣지 않는다. 위 표는 논리 저장 요구사항이며 실제 키 이름·자료구조·스크립트는 [API 명세 3.6.1절](./api-spec.md#361-jwt와-redis-인증-상태-계약)을 따른다. RedisJSON 모듈은 필요하지 않으며 String·Hash·Sorted Set(ZSET) 등 기본 자료구조로 구현할 수 있다.
 
 Redis TTL은 JWT의 exp와 맞추고 서버도 exp를 검증한다. 회전된 토큰을 즉시 흔적 없이 삭제하면 재사용을 판별할 수 없으므로, 아직 만료되지 않은 이전 JWT를 식별할 수 있는 상태와 family 연결을 유지한다. 계열·사용자별 조회 정보의 수명은 그 안의 유효 토큰 수명을 포함해야 한다. 활성 상태가 없거나 폐기된 JWT는 서명만 정상이라는 이유로 허용하지 않는다.
 
-동시 단일 사용·회전은 Redis의 원자적 비교·상태 변경으로 보장한다. GET 후 별도 DEL만 수행하는 경쟁 조건을 허용하지 않는다. 여러 키를 함께 갱신하는 구체 방식은 구현 시 검증한다. Redis 스크립트의 원자성은 MariaDB 트랜잭션까지 포함하지 않는다. [Redis 원자적 스크립트](https://redis.io/docs/latest/develop/programmability/eval-intro/)
+동시 단일 사용·회전은 Redis의 원자적 비교·상태 변경으로 보장한다. GET 후 별도 DEL만 수행하는 경쟁 조건을 허용하지 않는다. 여러 키를 함께 갱신하는 구체 방식은 [API 명세 3.6.1절](./api-spec.md#361-jwt와-redis-인증-상태-계약)의 원자 연산 계약을 따른다. Redis 스크립트의 원자성은 MariaDB 트랜잭션까지 포함하지 않는다. [Redis 원자적 스크립트](https://redis.io/docs/latest/develop/programmability/eval-intro/)
 
-로그아웃은 현재 계열, 비밀번호 재설정·탈퇴는 사용자 전체 계열을 폐기한다. 기존 Access JWT를 로그아웃 즉시 차단하는 새로운 블랙리스트 정책은 추가하지 않는다. 보호 API는 기존대로 users의 ACTIVE·이메일 인증 상태를 확인해 탈퇴 사용자를 차단한다.
+로그아웃은 Redis에서 현재 계열을 폐기한다. 비밀번호 재설정과 탈퇴는 users.auth_version을 같은 트랜잭션에서 증가시켜 기존 Access·Refresh 인증 세션을 무효화하고, Redis 계열 정리는 그 뒤의 사후 정리다. action token은 이 무효화의 대상이 아니며 기존 단일 사용 계약을 유지한다. 기존 Access JWT를 로그아웃 즉시 차단하는 새로운 블랙리스트 정책은 추가하지 않는다. 보호 API는 users의 status·email_verified_at과 auth_version을 확인해 탈퇴·재설정된 사용자를 차단한다.
 
 WEB은 __Host-refreshToken Secure·HttpOnly·SameSite=Strict 쿠키, MOBILE은 응답/body와 운영체제 보안 저장소를 사용한다. X-Client-Platform은 전달 방식만 선택하며 권한 근거가 아니다. action JWT는 인증·재설정 완료 POST body로만 받으며 요청·재발송의 계정 존재 비노출 규칙도 유지한다.
 
@@ -109,7 +133,13 @@ WEB은 __Host-refreshToken Secure·HttpOnly·SameSite=Strict 쿠키, MOBILE은 �
 
 users 변경은 MariaDB 트랜잭션, 토큰 소비·폐기는 Redis 원자 연산이다. 두 저장소를 하나의 SQL 트랜잭션으로 묶는다고 명세하지 않는다. 토큰 검증이 불가능하면 서명 검증만으로 통과시키거나 작업 성공을 응답해서는 안 된다.
 
-비밀번호 변경·탈퇴의 처리 순서, 한쪽만 성공한 경우의 재시도·복구, 동시 로그인/갱신과 전체 폐기의 경쟁 방지는 구현 전에 승인받아야 한다. Redis 장애의 HTTP 상태·오류 code, 영속화·재시작·백업 복원 시 오래된 토큰 상태의 부활 방지 역시 추가 승인 항목이다. 기존 요청/재발송의 일반 202는 계정 존재와 발송 성공을 보장하지 않으며 장애를 이유로 계정별로 다른 응답을 내지 않는다. 저장소 변경 자체는 확정이나 이 장애 계약까지 확정되었다고 보지 않는다.
+비밀번호 재설정과 탈퇴의 무효화 권위는 users.auth_version과 users.status다. 두 값은 각각의 MariaDB 트랜잭션에서 password_hash·상태 변경과 함께 커밋되므로 비밀번호 변경과 무효화가 엇갈리지 않는다. Redis 계열 정리는 사후 정리이며 실패해도 무효화가 되돌아가지 않는다. action token 소비와 MariaDB 변경의 상세 순서, 한쪽만 성공한 경우의 재시도·복구, Redis·DB 장애의 HTTP 상태·오류 code는 [API 명세 3.6.2절](./api-spec.md#362-인증-저장소-장애와-부분-성공-계약)을 따른다. 메일 발송 실패의 worker 재시도·종결은 [3.5절](#table-mail_outbox)을, 클라이언트 복구는 [API 명세 3.7절](./api-spec.md#37-메일-요청완료-api-클라이언트-복구)을, 운영 경고·관측은 [API 명세 3.8절](./api-spec.md#38-메일-outbox-운영-경고관측-기준)을 따른다.
+
+백업 복원은 두 경우를 구분한다. MariaDB가 현재이고 Redis만 유실되거나 과거로 복원된 경우에는 Redis 인증 namespace를 비우고 전 사용자 재로그인을 요구한다. auth_version과 status가 MariaDB에 있어 이미 폐기한 인증은 되살아나지 않는다.
+
+MariaDB와 Redis가 함께 과거로 복원된 경우에는 auth_version도 함께 되돌아가므로 auth_version만으로 방어할 수 없다. 이때는 정상 rotation과 구분되는 key 교체를 수행한다. Access·Refresh·action 세 ring의 기존 active key를 제거하고, 기존 retired verification key도 모두 제거한다. 기존 kid는 재사용하지 않으며 새 CSPRNG key와 새 kid로 세 ring을 다시 구성한다. 기존 key를 retired 상태로 남겨 과거 토큰 검증을 허용하지 않는다. Redis 인증 namespace를 비운 뒤에 서비스 트래픽을 재개한다.
+
+기존 요청/재발송의 일반 202는 계정 존재와 발송 성공을 보장하지 않으며 장애를 이유로 계정별로 다른 응답을 내지 않는다.
 
 ![실시간 수업 상세 ERD](./images/erd-lectures.png)
 
@@ -166,6 +196,57 @@ users 변경은 MariaDB 트랜잭션, 토큰 소비·폐기는 Redis 원자 연�
 | `problem_id` | BIGINT | NN | FK, UK(복합) | MVP | problems.id 참조. lecture_id와 복합 UNIQUE를 이룬다. |
 
 같은 수업·문제 쌍은 한 번만 연결한다. SCHEDULED에서는 연결·해제할 수 있고 OPEN에서는 새 문제 연결과 전달은 가능하지만 기존 연결을 삭제하지 않는다. CLOSED에서는 연결·해제·전달을 모두 금지한다. current_lecture_problem_id는 같은 수업의 연결 행만 가리켜야 한다. 사전 순서 컬럼, 실제 출제 시각, 별도 출제 이벤트 이력은 추가하지 않으며 문제는 수업에서 사용하지 않아도 검증 통과 후 등록할 수 있다.
+
+<a id="table-mail_outbox"></a>
+### 3.5 `mail_outbox`
+
+계정 메일 인프라 테이블이다. 업무 상태 자체를 담지 않고 이메일 인증·비밀번호 재설정 요청과 회원가입 인증 메일의 발송 작업만 내구성 있게 접수하고 재시도한다. 요청 API는 계정을 조회하지 않고 이 테이블에 작업만 남기므로 응답 시간으로 계정 존재 여부가 드러나지 않는다. 회원가입은 users INSERT와 이 테이블의 작업 등록을 같은 트랜잭션으로 커밋한다. 메일 본문·인증 토큰·비밀번호는 저장하지 않는다.
+
+| 컬럼 | 타입 | NULL | 키 | 용도 | 저장 내용·역할 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | BIGINT | NN | PK | MVP | AUTO_INCREMENT로 DB가 발급하는 발송 작업 식별자. |
+| `purpose` | ENUM | NN | — | MVP | 발송 종류: EMAIL_VERIFICATION / PASSWORD_RESET. 회원가입 인증 메일도 EMAIL_VERIFICATION을 사용한다. |
+| `recipient_email` | VARCHAR(254) | NULL | — | MVP | 정규화한 수신 주소. 종결 전이와 같은 UPDATE에서 NULL로 지우고 재시도 전이에서는 유지한다. |
+| `status` | ENUM | NN | — | MVP | PENDING / PROVIDER_ACCEPTED / SKIPPED / FAILED. 기본값 PENDING이며 처리 중을 뜻하는 별도 상태는 두지 않는다. |
+| `attempt_count` | INT | NN | — | MVP | worker가 선점에 성공한 횟수. 조회·토큰 발급 단계에서 실패해도 증가하므로 제공자 호출 횟수보다 클 수 있다. 선점 이후 갱신을 제한하는 값으로도 쓴다. |
+| `next_attempt_at` | DATETIME(6) | NULL | IX | MVP | 다음 처리 가능 시각이자 선점한 작업의 가시성 만료 시각. PENDING에서만 값을 가진다. |
+| `delivery_deadline_at` | DATETIME(6) | NN | IX | MVP | 접수 시각 기준 발송 기한. PASSWORD_RESET은 30분, EMAIL_VERIFICATION은 24시간이다. |
+| `completed_at` | DATETIME(6) | NULL | IX | MVP | 종결 시각. 종결 상태에서만 값을 가지며 보존 기간 정리의 기준이다. |
+| `last_error_kind` | VARCHAR(40) | NULL | — | MVP | 실패 분류값. MAX_ATTEMPTS_EXCEEDED, DELIVERY_DEADLINE_EXCEEDED 등을 쓰며 제공자 원문 오류는 저장하지 않는다. |
+| `created_at` | DATETIME(6) | NN | — | MVP | 작업 접수 시각. |
+| `updated_at` | DATETIME(6) | NN | — | MVP | 마지막 상태 변경 시각. |
+
+이 테이블은 FK를 갖지 않는다. 계정 식별자를 저장하지 않고 수신 주소만 남기므로 탈퇴·계정 삭제와 독립적으로 정리된다. 같은 주소의 중복 요청을 막지 않으므로 UNIQUE 제약도 두지 않는다.
+
+CHECK는 네 개다. attempt_count는 0 이상이고 delivery_deadline_at은 created_at보다 크다. PENDING에서는 recipient_email과 next_attempt_at이 있고 completed_at이 없다. PROVIDER_ACCEPTED·SKIPPED·FAILED에서는 recipient_email과 next_attempt_at이 없고 completed_at이 있다. 뒤의 두 불변식은 여러 컬럼을 함께 보므로 컬럼 레벨이 아니라 테이블 레벨 명명 제약으로 정의한다.
+
+인덱스는 세 개다. (status, next_attempt_at)은 선점 후보와 가시성 만료 작업 조회, (status, delivery_deadline_at)은 기한 초과 종결, (status, completed_at)은 보존 기간 정리에 쓴다.
+
+worker는 status가 PENDING이고 next_attempt_at이 현재 시각 이하인 행을 조건부 UPDATE 한 번으로 선점한다. 선점은 attempt_count를 1 증가시키고 next_attempt_at을 현재 시각에 가시성 만료 시간을 더한 값으로 민다. 조건에는 조회 당시의 attempt_count와 next_attempt_at을 그대로 넣고, 기한이 남아 있으며 시도 횟수가 상한 미만이라는 조건도 함께 넣는다. 갱신된 행이 없으면 다른 worker가 이미 가져간 것이므로 그 행을 처리하지 않는다.
+
+선점에 성공한 worker는 증가한 attempt_count와 자신이 기록한 next_attempt_at을 이후 갱신의 조건으로 사용한다. 재시도와 종결 UPDATE는 id와 status만이 아니라 이 두 값을 함께 조건으로 걸어야 한다. 가시성 시간이 지나 다른 worker가 다시 선점하면 두 값이 모두 바뀌므로 앞선 worker의 늦은 갱신은 0행으로 실패하고 최신 상태를 덮어쓰지 못한다.
+
+이 조건은 시각의 정확한 일치에 의존하므로 정밀도 규칙을 함께 고정한다. 조회 당시의 next_attempt_at과 선점 때 기록할 가시성 만료 시각은 애플리케이션에서 DATETIME(6)에 맞게 마이크로초 단위로 절삭한 뒤 SQL 파라미터로 전달한다. 선점 UPDATE에 실제로 바인딩한 가시성 만료 시각은 그 worker의 처리 문맥에 보관한다. 이후 재시도·종결 UPDATE에서는 현재 시각으로 그 값을 다시 계산하지 않고 선점 때 전달한 동일한 값을 그대로 비교 조건에 사용한다. DB에서 읽은 DATETIME(6) 값을 Java LocalDateTime의 나노초 값과 정규화 없이 비교하지 않는다.
+
+재시도 전이는 status를 PENDING으로 유지한 채 next_attempt_at만 다음 시각으로 옮기고 recipient_email과 NULL인 completed_at을 유지한다. 종결 전이는 PROVIDER_ACCEPTED·SKIPPED·FAILED 중 하나로 가며 recipient_email과 next_attempt_at을 지우고 completed_at을 기록한다. PROVIDER_ACCEPTED와 SKIPPED에서는 last_error_kind를 NULL로 정리한다. 종결 상태는 다시 PENDING으로 되돌리지 않는다.
+
+처리 실패 시 판정 순서는 다음과 같다. 결정적 영구 실패는 FAILED로 종결한다. 현재 시각이나 계산한 다음 시도 시각이 delivery_deadline_at 이상이면 FAILED와 DELIVERY_DEADLINE_EXCEEDED로 종결한다. attempt_count가 최대 처리 시도 횟수에 도달했으면 FAILED와 MAX_ATTEMPTS_EXCEEDED로 종결한다. 나머지 재시도 가능한 실패만 다음 시각을 잡아 PENDING으로 남긴다. 제공자가 지시한 재시도 시각은 기한 안이면 존중하며, 내부 지수 backoff의 상한은 그 지시를 더 이른 시각으로 앞당기는 근거로 쓰지 않는다.
+
+worker가 마지막 시도 도중 중단되면 스스로 FAILED로 종결하지 못한다. 그래서 별도 정리 절차를 둔다. status가 PENDING이고 next_attempt_at이 현재 시각 이하이며 기한이 지났거나 시도 횟수가 상한 이상인 행을 FAILED로 종결한다. 두 조건이 동시에 해당하면 DELIVERY_DEADLINE_EXCEEDED를 우선 기록한다.
+
+기한이 지난 작업에서는 인증 토큰을 발급하거나 제공자를 호출하지 않는다. 인증 토큰은 각 시도 직전에 새로 발급하므로 대기 시간이 토큰 자체의 유효기간을 깎지는 않는다. 발송 기한은 토큰 유효기간 보존이 아니라 오래된 요청이 뒤늦게 실행되는 것을 막기 위한 별도 계약이다.
+
+PROVIDER_ACCEPTED는 제공자가 요청을 접수했다는 뜻일 뿐 사용자 편지함 도달을 보장하지 않는다. FAILED는 재시도를 종료했다는 뜻이며 메일이 절대 전달되지 않았다는 뜻이 아니다. 처리 시간이 가시성 만료를 넘으면 다른 worker가 다시 선점할 수 있어 중복 발송은 여전히 가능하다. 위 조건부 갱신은 DB 상태의 일관성만 보장한다.
+
+배포 스크립트가 전환 후에도 이전 슬롯 backend 컨테이너를 롤백용으로 유지하므로 worker는 단일 인스턴스를 가정하지 않는다. 구버전과 신버전 backend가 동시에 같은 테이블을 polling할 수 있으며 위 조건부 선점과 가시성 만료가 그 전제에서 필수다. 상태값과 스키마 변경은 두 버전이 함께 실행되는 동안 양쪽 모두 해석할 수 있어야 하므로, 상태값 제거나 의미 변경은 두 단계 배포로 나눈다.
+
+처리 중임을 나타내는 별도 상태가 없으므로 선점된 행과 대기 중인 행은 status만으로 구분되지 않는다. 진행 중 작업 수는 next_attempt_at이 미래인 PENDING 행으로 근사한다. 구조를 줄이는 대신 관측 정밀도를 낮춘 선택이다.
+
+설정값은 논리 이름과 기본값으로 고정하고 실제 환경변수 키는 구현에서 정한다. 최초 처리는 접수 직후이며 재시도는 최대 5회로 worker 처리 시도는 최대 6회다. 지수 backoff는 30초·1분·2분·4분·8분이고 내부 상한은 10분, 지터는 ±20%다. 제공자 호출 제한 시간은 60초, 가시성 만료는 5분, 종결 행 보존은 7일이다. 가시성 만료는 사용자 조회·대상 판정·토큰 발급·본문 생성·제공자 호출·상태 갱신을 포함한 한 번의 처리 시간보다 길어야 한다. 모든 외부 호출 제한 시간의 합에 안전 여유를 더한 값이 가시성 만료보다 작도록 구성한다.
+
+종결 행에는 수신 주소가 남지 않지만 남은 메타데이터가 개인정보와 무관하다고 단정하지 않는다. 다른 로그와 결합될 수 있으므로 접근을 통제하고 보존을 최소화한다. 로그에는 작업 id·목적·상태·시도 횟수·오류 분류값·요청 식별자만 남기며 수신 주소·사용자 식별자·토큰·제공자 원문 오류는 남기지 않는다. 장기 실패 추세는 이 테이블의 장기 보존이 아니라 개인정보와 연결되지 않는 집계 지표로 남긴다. 종결 행은 보존 기간이 지나면 삭제되고 재시도 과정에서 상태가 덮어써지므로 사건 횟수와 지연 시간은 이 테이블이 아니라 API와 worker의 런타임 계측으로 남긴다. 수집할 지표의 의미와 label, 경고 기준은 [API 명세 3.8절](./api-spec.md#38-메일-outbox-운영-경고관측-기준)을 따르고, 지표의 저장 위치와 수집 시스템은 후속 관측성 작업에서 정한다.
+
+제공자 인증·설정 오류는 기한과 최대 시도 범위 안에서 재시도하되 즉시 높은 등급으로 운영자에게 알린다. 설정을 고치면 아직 PENDING인 작업은 자동으로 복구되지만 이미 FAILED로 종결되어 수신 주소가 지워진 작업은 자동으로 되살리지 않는다. 사용자는 이메일 인증 또는 비밀번호 재설정 요청 API로 새 작업을 만든다.
 
 ## 4. 커리큘럼·문제·학습 요소 영역
 
