@@ -25,6 +25,7 @@ public enum ErrorCode {
 
   // auth (docs/product/api-spec.md 3.5절)
   UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
+  AUTH_STATE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."),
 
   // braille
   PATTERN_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "패턴 값이 허용 범위(0~63)를 벗어났습니다.");

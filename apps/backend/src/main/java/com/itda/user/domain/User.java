@@ -95,6 +95,17 @@ public class User {
   @Column(name = "locked_until")
   private LocalDateTime lockedUntil;
 
+  /**
+   * 기존 Access·Refresh 인증 세션 무효화 세대 (ERD 3.1절). 보호 API는 Access Token의 authVersion claim을 이 값과 비교한다.
+   *
+   * <p>증가는 비밀번호 재설정·탈퇴가 각자의 트랜잭션에서 수행한다. 이번 이슈는 비교에 필요한 매핑만 두고 전이 메서드를 만들지 않는다.
+   *
+   * <p>ERD의 CHECK(auth_version >= 0)와 DEFAULT 0은 스키마 원본을 엔티티로 정한 결과 DB에 반영되지 않는다. 생성 시 0으로 두는 아래
+   * 불변식이 그 역할을 대신한다.
+   */
+  @Column(name = "auth_version", nullable = false)
+  private long authVersion;
+
   private User(
       String username, String passwordHash, UserRole role, Email email, LocalDateTime now) {
     this.username = normalizeUsername(username);
@@ -103,6 +114,7 @@ public class User {
     this.email = requireNonNull(email, "이메일");
     this.status = UserStatus.ACTIVE;
     this.failedLoginCount = 0;
+    this.authVersion = 0;
     this.createdAt = requireNonNull(now, "생성 시각");
     this.updatedAt = now;
   }

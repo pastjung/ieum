@@ -45,6 +45,14 @@ dependencies {
     // Argon2PasswordEncoder가 요구하는 저수준 구현. Boot BOM이 관리하지 않아 버전을 명시 고정한다.
     implementation 'org.bouncycastle:bcprov-jdk18on:1.85.2'
 
+    // Access Token 공통 인증 (docs/product/api-spec.md 3.6.1). SecurityFilterChain과 인증 경계만 쓴다.
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    // Access JWT 서명·검증. Boot BOM이 관리하지 않아 버전을 명시 고정한다.
+    // tink는 EdDSA 경로 전용이라 HS256만 쓰는 이 서비스에서는 2.4MB를 그대로 얹을 이유가 없다.
+    implementation('com.nimbusds:nimbus-jose-jwt:10.4') {
+        exclude group: 'com.google.crypto.tink', module: 'tink'
+    }
+
     // lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
@@ -61,6 +69,17 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+
+    // Access 서명 key를 테스트 실행마다 새로 만든다. 저장소에 key 문자열을 남기지 않기 위해서다.
+    // doFirst에 두어 task 입력에 포함시키지 않는다 (매번 값이 바뀌어 up-to-date 판정이 무의미해지는 것을 피한다).
+    doFirst {
+        byte[] keyBytes = new byte[32]
+        new java.security.SecureRandom().nextBytes(keyBytes)
+        systemProperty 'AUTH_JWT_ISSUER', 'itda-backend-test'
+        systemProperty 'AUTH_ACCESS_ACTIVE_KID', 'test-active'
+        systemProperty 'AUTH_ACCESS_ACTIVE_KEY',
+                java.util.Base64.urlEncoder.withoutPadding().encodeToString(keyBytes)
+    }
 }
 
 spotless {

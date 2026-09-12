@@ -1,7 +1,10 @@
 package com.itda.support.web;
 
 import com.itda.global.braille.BraillePattern;
+import com.itda.global.error.ErrorCode;
+import com.itda.global.error.ErrorCodeAttribute;
 import jakarta.servlet.Filter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -96,6 +99,18 @@ public class WebTestEndpoints {
 
     @GetMapping("/send-error/{status}")
     void sendError(@PathVariable int status, HttpServletResponse response) throws IOException {
+      response.sendError(status);
+    }
+
+    /** 필터가 의도한 ErrorCode를 남기고 sendError로 끝내는 상황을 흉내 낸다. */
+    @GetMapping("/send-error/{status}/with-code/{code}")
+    void sendErrorWithCode(
+        @PathVariable int status,
+        @PathVariable String code,
+        HttpServletRequest request,
+        HttpServletResponse response)
+        throws IOException {
+      ErrorCodeAttribute.set(request, ErrorCode.valueOf(code));
       response.sendError(status);
     }
 
