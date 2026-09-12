@@ -41,6 +41,9 @@ build/
 !**/src/**/build/
 out/
 **/out/
+# DDD outbound port 패키지는 IDE 빌드 산출물이 아니라 소스 코드다.
+!**/src/**/port/out/
+!**/src/**/port/out/**
 *.class
 *.jar
 !**/gradle/wrapper/gradle-wrapper.jar
