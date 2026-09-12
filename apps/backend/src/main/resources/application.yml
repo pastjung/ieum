@@ -18,6 +18,12 @@ server:
   servlet:
     context-path: /api/v1
 
+logging:
+  pattern:
+    # 요청 처리 중의 모든 로그 줄에 X-Request-Id를 붙인다. 값은 RequestTracingFilter가 MDC에 넣는다.
+    # Boot 기본 콘솔 패턴은 MDC를 출력하지 않아, 이 설정이 없으면 로그와 응답 헤더를 이을 수 없다.
+    correlation: "[%X{requestId:-}] "
+
 ---
 # ---------- local: MariaDB (docker-compose의 db 서비스) ----------
 # 컨테이너에서 실행하면 DB_HOST=db, 호스트에서 bootRun하면 기본값 localhost:3306을 쓴다.

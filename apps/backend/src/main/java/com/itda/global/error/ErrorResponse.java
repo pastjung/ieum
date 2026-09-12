@@ -1,15 +1,13 @@
 package com.itda.global.error;
 
-/** 공통 에러 응답. API 명세서 0-3 참고!! { "success": false, "error": { "code": "...", "message": "..." } } */
-public record ErrorResponse(boolean success, ErrorBody error) {
-
-  public record ErrorBody(String code, String message) {}
+/**
+ * 공통 오류 body. 최상위에 code와 message만 둔다 (docs/conventions/code/api.md "에러 응답").
+ *
+ * <p>순수 DTO다. HTTP 상태·헤더·Accept 처리는 {@link ErrorHttpResponseFactory}가 맡는다.
+ */
+public record ErrorResponse(String code, String message) {
 
   public static ErrorResponse of(ErrorCode errorCode) {
-    return new ErrorResponse(false, new ErrorBody(errorCode.getCode(), errorCode.getMessage()));
-  }
-
-  public static ErrorResponse of(String code, String message) {
-    return new ErrorResponse(false, new ErrorBody(code, message));
+    return new ErrorResponse(errorCode.getCode(), errorCode.getMessage());
   }
 }

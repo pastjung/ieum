@@ -37,11 +37,19 @@
 
 ### 2.1 공통 요청 추적
 
-Backend는 외부 HTTP 요청 또는 백그라운드 작업 시작마다 UUID v4 `X-Request-Id`를 생성한다. HTTP 응답 헤더에 같은 값을 반환하고 AI 호출 헤더에도 전달해 Backend·AI 구조화 로그에서 같은 처리 흐름을 찾을 수 있게 한다. 클라이언트가 이 값을 필수로 만들거나 업무 body에 넣지 않으며, 도메인 DB와 응답 body에는 저장·포함하지 않는다. AI는 받은 값을 로그에 기록하고 응답 헤더에 돌려준다.
+Backend는 외부 HTTP 요청 또는 백그라운드 작업 시작마다 UUID v4 `X-Request-Id`를 생성한다. HTTP 응답 헤더에 같은 값을 반환하고 AI 호출 헤더에도 전달해 Backend·AI 구조화 로그에서 같은 처리 흐름을 찾을 수 있게 한다. 클라이언트가 이 값을 필수로 만들거나 업무 body에 넣지 않으며, 도메인 DB와 응답 body에는 저장·포함하지 않는다. AI는 받은 값을 로그에 기록하고 응답 헤더에 돌려준다. 클라이언트가 보낸 `X-Request-Id`는 형식과 관계없이 신뢰하거나 로그에 기록하지 않는다. 유효한 UUID v4여도 그대로 쓰지 않고, 이 헤더 때문에 요청을 거부하지도 않는다. 외부 요청 하나에는 요청 식별자 하나만 생성하고, 응답 헤더와 로그에는 Backend가 생성한 값만 쓴다. 응답의 `X-Request-Id`는 공통 요청 추적 계층만 설정하며 개별 API가 덮어쓰지 않는다.
 
 `X-Request-Id`는 관측용이며 재전송 중복을 막지 않는다. 답안·문제 등록의 `Idempotency-Key`, 수업 WebSocket 알림의 `eventId`, DB 기본 키와 서로 대체할 수 없다. 기본 요청 로그와 health check는 MVP 필수다. 메일 outbox의 최초 사건·정체 경고 조건은 3.8절에서 확정하며, 정체 경고는 새 수치 상수를 만들지 않고 ERD 3.5의 가시성 만료 기본값을 재사용한다. 그 밖의 비율·percentile·트래픽 기반 임계값과 로그 보존 기간·수집 시스템·샘플링·관측 제품·알림 채널, W3C `traceparent`·OpenTelemetry는 후속 운영 범위다.
 
 역할은 LEARNER / INSTRUCTOR / ADMIN 중 하나다. roles 배열·역할 전환을 제공하지 않는다. 사용자 식별·권한을 요청 body의 주장만으로 신뢰하지 않으며, 타인의 학습 결과를 노출하지 않는다. ADMIN·INSTRUCTOR는 통제된 Seed/운영 절차로만 발급하고 MVP 관리자 공개 API·화면과 ADMIN의 강사/문제 자동 권한은 두지 않는다.
+
+### 2.2 공통 HTTP 오류
+
+모든 공개 endpoint에 [API 컨벤션의 공통 HTTP 오류 code](../conventions/code/api.md#공통-http-오류-code)와 [오류 상태 보존·body 생략 규칙](../conventions/code/api.md#오류-상태-보존과-body-생략)을 적용한다. 공통 HTTP 오류는 각 절의 업무 오류 표에서 반복하지 않으며, 같은 상황에 업무 code가 정의되어 있으면 업무 code가 우선한다.
+
+요청 body를 DTO로 읽지 못한 요청은 공통 `400 MALFORMED_REQUEST_BODY`다. body를 읽은 뒤의 업무 입력 검증은 해당 API의 `422` 계약(예: `INVALID_ACCOUNT_INPUT`, `INVALID_PROBLEM_INPUT`)을 따르고, API가 업무 code를 정의하지 않은 경우에만 공통 `422 INVALID_REQUEST_INPUT`을 쓴다.
+
+오류 응답은 원래 HTTP 상태를 유지한다. 오류가 난 요청의 `Accept`가 JSON을 허용하지 않으면 원래 오류 상태를 유지하고 body만 생략하며, 이를 `406`으로 바꾸지 않는다. `406`은 정상 응답의 표현을 `Accept`에 맞춰 만들 수 없을 때만 body 없이 쓴다. 업무 code 없이 인증·필터·컨테이너 단계에서 발생한 `403`·`413`·`429`·`503` 등 공통 code가 아직 없는 상태는 원래 상태를 유지하고 body를 비우며, 그 code는 해당 기능의 후속 계약에서 이 문서에 먼저 추가한다. body가 없는 응답에도 `X-Request-Id`를 포함한다.
 
 ## 3. 계정·인증 업무 계약
 

@@ -5,29 +5,34 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 
 /**
- * 공통 에러 코드. API 명세서 0-3의 코드 접두 규칙을 따릅니다. 400 XXX_4xxx / 401 AUTH_4010 / 403 AUTH_4030 / 404
- * XXX_4040 / 409 XXX_4090 / 500 SYS_5000 이거는 임의이고 추가도 자유입니다!
+ * 외부 오류 code. 외부에 나가는 code 문자열은 enum 이름 그대로다 — 이름과 값이 따로 놀 여지를 없앤다.
+ *
+ * <p>공통 HTTP 오류의 원본은 docs/conventions/code/api.md "공통 HTTP 오류 code" 표다. 계약 문서에 없는 code를 여기에 먼저 추가하지
+ * 않는다.
  */
 @Getter
 @RequiredArgsConstructor
 public enum ErrorCode {
 
-  // common
-  INVALID_INPUT(HttpStatus.BAD_REQUEST, "COMMON_4000", "잘못된 요청입니다."),
-  INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "SYS_5000", "서버 내부 오류입니다."),
+  // 공통 HTTP 오류
+  MALFORMED_REQUEST_BODY(HttpStatus.BAD_REQUEST, "요청 본문 형식을 확인해 주세요."),
+  INVALID_REQUEST_PARAMETER(HttpStatus.BAD_REQUEST, "요청 값을 확인해 주세요."),
+  ENDPOINT_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 API를 찾을 수 없습니다."),
+  UNSUPPORTED_HTTP_METHOD(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 요청 방식입니다."),
+  UNSUPPORTED_CONTENT_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다."),
+  INVALID_REQUEST_INPUT(HttpStatus.UNPROCESSABLE_CONTENT, "입력값을 확인해 주세요."),
+  INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."),
 
-  // auth
-  UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "AUTH_4010", "인증이 필요합니다."),
-  FORBIDDEN(HttpStatus.FORBIDDEN, "AUTH_4030", "권한이 없습니다."),
-  DUPLICATE_EMAIL(HttpStatus.CONFLICT, "AUTH_4090", "이미 가입된 이메일입니다."),
-
-  // user
-  USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_4040", "사용자를 찾을 수 없습니다."),
+  // auth (docs/product/api-spec.md 3.5절)
+  UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
 
   // braille
-  PATTERN_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "BRAILLE_4001", "패턴 값이 허용 범위(0~63)를 벗어났습니다.");
+  PATTERN_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "패턴 값이 허용 범위(0~63)를 벗어났습니다.");
 
   private final HttpStatus status;
-  private final String code;
   private final String message;
+
+  public String getCode() {
+    return name();
+  }
 }
