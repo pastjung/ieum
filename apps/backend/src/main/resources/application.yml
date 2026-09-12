@@ -18,6 +18,22 @@ server:
   servlet:
     context-path: /api/v1
 
+itda:
+  security:
+    password:
+      # 기능 명세 2.1절이 정한 Argon2id 최소 설정이 기본값이다. 배포 환경 측정 결과에 따라 올릴 수는 있어도
+      # 내릴 수는 없다 — 범위 밖 값은 Argon2idProperties가 기동 단계에서 거부한다.
+      argon2:
+        memory-kib: 19456
+        iterations: 2
+        parallelism: 1
+      # 유출 비밀번호 조회(Pwned Passwords range API). API key가 없어 비밀값이 아니므로 .env를 쓰지 않는다.
+      # 검사를 끄는 스위치는 두지 않는다 (API 명세 3.6.2절 fail-closed).
+      breach:
+        base-url: https://api.pwnedpasswords.com/range/
+        connect-timeout: 2s
+        read-timeout: 3s
+
 logging:
   pattern:
     # 요청 처리 중의 모든 로그 줄에 X-Request-Id를 붙인다. 값은 RequestTracingFilter가 MDC에 넣는다.

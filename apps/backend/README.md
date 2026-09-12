@@ -75,10 +75,12 @@ com.itda
 │   └── braille/             # BraillePattern — 6비트 셀 shared kernel
 ├── user/                    # users — 계정·인증. 아래 "계정·인증 목표 구조" 참고
 │   ├── domain/              # [현재] User(애그리거트), Email(VO), UserRole, UserStatus, UserRepository(인터페이스)
-│   ├── application/         # [예정] 유스케이스 + port/out (JWT·Redis·메일·비밀번호 해시 outbound port)
+│   ├── application/         # [일부 현재] 비밀번호 정책 유스케이스 + port/out (PasswordHasher·CompromisedPasswordChecker)
+│                            # [예정] JWT·Redis·메일 outbound port와 나머지 유스케이스
 │   ├── presentation/        # [예정] HTTP DTO·상태 코드·쿠키/body 변환
-│   └── infrastructure/      # [현재] UserRepositoryImpl(JPA 어댑터), UserJpaRepository
-│                            # [예정] Argon2id·JWT·Redis·메일 adapter
+│   └── infrastructure/      # [현재] UserRepositoryImpl(JPA 어댑터), UserJpaRepository,
+│                            #        Argon2idPasswordHasher, HibpRangePasswordChecker, 설정 properties·구성
+│                            # [예정] JWT·Redis·메일 adapter
 ├── lecture/domain/          # Lecture(애그리거트), LectureProblem, Participant, ParticipantId, LectureStatus
 ├── curriculum/domain/       # CurriculumStage, CurriculumProblem, CurriculumProblemId
 ├── problem/domain/          # Problem(애그리거트 + ProblemCell), LearningSkill, ProblemSkill, enum 3개
@@ -86,9 +88,9 @@ com.itda
                              # UserSkillMemory, AssignedProblem, CellSubmission, enum 4개
 ```
 
-현재 `dev`에는 `domain`과 `infrastructure` 일부만 있다. `application/`·`presentation/`과 `global/security/`는
-아직 존재하지 않으며, 후속 계정 API 구현 이슈에서 순차적으로 추가할 목표 구조다.
-지금은 `user/`가 `domain`↔`infrastructure` 참조 패턴의 예시다.
+현재 `user/`에는 `domain`·`application`(비밀번호 정책 유스케이스와 `port/out`)·`infrastructure`가 있다.
+`presentation/`과 `global/security/`는 아직 존재하지 않으며, 후속 계정 API 구현 이슈에서 추가할 목표 구조다.
+비밀번호 정책·Argon2id·유출 조회 경로가 `domain`→`application`→`port/out`→`infrastructure` 방향의 예시다.
 
 ### 규칙
 
@@ -107,7 +109,7 @@ com.itda
 | 계층 | 담당 | 담당하지 않음 |
 | --- | --- | --- |
 | `user/domain` [현재] | 계정 상태와 핵심 불변식(상태 전이·정규화), `UserRepository` 포트 | 트랜잭션 경계, 토큰 발급, HTTP, 외부 port 직접 호출 |
-| `user/application` [예정] | 유스케이스, 트랜잭션 경계, outbound port 호출 조정 | HTTP 상태 코드, 쿠키, 플랫폼 분기 |
+| `user/application` [일부 현재] | 유스케이스, 트랜잭션 경계, outbound port 호출 조정 | HTTP 상태 코드, 쿠키, 플랫폼 분기 |
 | `user/presentation` [예정] | HTTP DTO, 상태 코드, 쿠키↔body 변환 | 비즈니스 규칙, 트랜잭션 |
 | `user/infrastructure` [일부 현재] | JPA, Argon2id, JWT, Redis, 메일 adapter | 유스케이스 순서, 정책 판단 |
 | `global/security` [예정] | Access Token 공통 인증, 역할 기반 인가 | 로그인·회원가입·Refresh 검증 |

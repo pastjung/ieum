@@ -39,6 +39,12 @@ dependencies {
     // 인증 토큰 상태 저장소 (docs/product/erd.md 3.1.1) — 관계형 토큰 테이블을 두지 않는다
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+    // 비밀번호 해시 Argon2id (docs/product/feature-spec.md 2.1). starter-security가 아니라 crypto 모듈만 쓴다 —
+    // 이 모듈에는 auto-configuration이 없어 인증 필터가 켜지지 않는다. 버전은 Boot BOM이 관리한다.
+    implementation 'org.springframework.security:spring-security-crypto'
+    // Argon2PasswordEncoder가 요구하는 저수준 구현. Boot BOM이 관리하지 않아 버전을 명시 고정한다.
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.85.2'
+
     // lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
