@@ -3,6 +3,15 @@ spring:
     name: itda-backend
   profiles:
     default: local
+  autoconfigure:
+    # 인증 방식이 Access Token뿐이라 in-memory 사용자가 필요 없다. 두면 기동 로그에 생성된 비밀번호가 찍힌다.
+    exclude:
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  security:
+    filter:
+      # ERROR dispatch에서 Security chain이 다시 돌면 이미 끝난 오류 응답을 또 인증 판정하게 된다.
+      # async 인증 전파는 이번 범위가 아니므로 켜지 않는다.
+      dispatcher-types: request
   jpa:
     open-in-view: false
     properties:
@@ -33,6 +42,15 @@ itda:
         base-url: https://api.pwnedpasswords.com/range/
         connect-timeout: 2s
         read-timeout: 3s
+    # Access Token 서명 설정 (docs/product/api-spec.md 3.6.1). 유효기간 15분은 계약 값이라 코드 상수로 고정한다.
+    # 기본값을 두지 않는다 — 소스에 들어간 기본 key는 그대로 운영에 올라간다.
+    jwt:
+      access:
+        issuer: ${AUTH_JWT_ISSUER}
+        active-kid: ${AUTH_ACCESS_ACTIVE_KID}
+        active-key: ${AUTH_ACCESS_ACTIVE_KEY}
+        # kid1:base64url,kid2:base64url 형식. 회전 중 아직 수명이 남은 토큰을 검증하기 위한 목록이다.
+        retired-keys: ${AUTH_ACCESS_RETIRED_KEYS:}
 
 logging:
   pattern:

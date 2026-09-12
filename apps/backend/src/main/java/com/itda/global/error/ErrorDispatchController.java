@@ -37,7 +37,13 @@ public class ErrorDispatchController implements ErrorController {
       // 오류 dispatch가 아니라 /error를 직접 호출했다. 이 경로는 공개 API가 아니다.
       return ErrorHttpResponseFactory.create(request, ErrorCode.ENDPOINT_NOT_FOUND);
     }
-    ErrorCode code = CODES_BY_STATUS.get(status);
+    // 오류를 낸 쪽이 code를 명시했으면 그것이 가장 정확하다. 상태만으로는 구분할 수 없는 경우가 있다.
+    // 단, code가 뜻하는 상태와 실제 오류 상태가 같을 때만 쓴다. 어긋난 attribute를 따르면 code가 상태를
+    // 바꿔 버려 "오류 상태는 그대로 둔다"는 규칙이 깨진다.
+    ErrorCode code =
+        ErrorCodeAttribute.find(request)
+            .filter(intended -> intended.getStatus().value() == status)
+            .orElseGet(() -> CODES_BY_STATUS.get(status));
     if (code == null) {
       return ErrorHttpResponseFactory.withoutBody(HttpStatusCode.valueOf(status));
     }

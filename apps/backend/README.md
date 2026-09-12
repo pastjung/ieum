@@ -71,16 +71,20 @@ Lettuce는 지연 연결이라 host·port가 틀려도 애플리케이션이 오
 com.itda
 ├── global/                  # 공통
 │   ├── config/, error/, response/
-│   ├── security/            # [예정] Access Token 공통 인증·역할 인가
+│   ├── security/            # [현재] Access Token 공통 인증 기반 — SecurityFilterChain, Bearer 추출,
+│   │                        #        인증 필터, 401 진입점. [예정] 역할 기반 인가
 │   └── braille/             # BraillePattern — 6비트 셀 shared kernel
 ├── user/                    # users — 계정·인증. 아래 "계정·인증 목표 구조" 참고
 │   ├── domain/              # [현재] User(애그리거트), Email(VO), UserRole, UserStatus, UserRepository(인터페이스)
-│   ├── application/         # [일부 현재] 비밀번호 정책 유스케이스 + port/out (PasswordHasher·CompromisedPasswordChecker)
-│                            # [예정] JWT·Redis·메일 outbound port와 나머지 유스케이스
+│   ├── application/         # [일부 현재] 비밀번호 정책 유스케이스, Access Token 인증 상태 판정,
+│                            #        port/out (PasswordHasher·CompromisedPasswordChecker·
+│                            #        AccessTokenIssuer·AccessTokenVerifier)
+│                            # [예정] Refresh·action token·Redis·메일 outbound port와 나머지 유스케이스
 │   ├── presentation/        # [예정] HTTP DTO·상태 코드·쿠키/body 변환
 │   └── infrastructure/      # [현재] UserRepositoryImpl(JPA 어댑터), UserJpaRepository,
-│                            #        Argon2idPasswordHasher, HibpRangePasswordChecker, 설정 properties·구성
-│                            # [예정] JWT·Redis·메일 adapter
+│                            #        Argon2idPasswordHasher, HibpRangePasswordChecker,
+│                            #        NimbusAccessTokenCodec, AccessKeyRing, 설정 properties·구성
+│                            # [예정] Refresh·action token·Redis·메일 adapter
 ├── lecture/domain/          # Lecture(애그리거트), LectureProblem, Participant, ParticipantId, LectureStatus
 ├── curriculum/domain/       # CurriculumStage, CurriculumProblem, CurriculumProblemId
 ├── problem/domain/          # Problem(애그리거트 + ProblemCell), LearningSkill, ProblemSkill, enum 3개
@@ -112,7 +116,7 @@ com.itda
 | `user/application` [일부 현재] | 유스케이스, 트랜잭션 경계, outbound port 호출 조정 | HTTP 상태 코드, 쿠키, 플랫폼 분기 |
 | `user/presentation` [예정] | HTTP DTO, 상태 코드, 쿠키↔body 변환 | 비즈니스 규칙, 트랜잭션 |
 | `user/infrastructure` [일부 현재] | JPA, Argon2id, JWT, Redis, 메일 adapter | 유스케이스 순서, 정책 판단 |
-| `global/security` [예정] | Access Token 공통 인증, 역할 기반 인가 | 로그인·회원가입·Refresh 검증 |
+| `global/security` [일부 현재] | Access Token 공통 인증(Bearer 추출·SecurityContext·401 진입점) | 로그인·회원가입·Refresh 검증, 사용자 상태 업무 판정 |
 
 **Port 배치.** `UserRepository`는 위 규칙 2번대로 `user/domain`에 둔다 — 도메인 애그리거트를 되살리는 수단이라
 도메인 언어의 일부다. JWT·Redis·메일·비밀번호 해시처럼 바깥에 요청하는 기능의 outbound port는
@@ -121,6 +125,21 @@ com.itda
 
 **인증 경계.** `global/security`는 Access Token 기반 보호 API의 공통 인증과 역할 인가를 담당한다.
 로그인·토큰 갱신·이메일 인증·비밀번호 복구의 자격 증명 검증은 각 `application` 유스케이스가 담당한다.
+Access Token 검증 port와 사용자 인증 상태 판정(존재·`status`·이메일 인증·`auth_version`)은 `user/application`에 있고,
+`global/security`는 그 결과를 `SecurityContext`와 HTTP 응답으로 옮기기만 한다.
+
+**운영 보호 endpoint는 아직 없다.** 운영 `SecurityFilterChain`은 `anyRequest().permitAll()`이며 Access 인증 필터를
+운영 경로에 연결하지 않는다. 지금 전체를 `authenticated()`로 막으면 존재하지 않는 경로가 `404 ENDPOINT_NOT_FOUND` 대신
+401이 되어 [API 컨벤션](../../docs/conventions/code/api.md)의 공통 오류 계약이 깨지기 때문이다.
+**보호 matcher와 `AccessTokenAuthenticationFilter` 등록은 각 업무 API 구현 이슈가 자기 경로에 대해 명시적으로 추가한다.**
+
+**Access JWT 설정.** 서명 key와 issuer는 환경변수 `AUTH_JWT_ISSUER`·`AUTH_ACCESS_ACTIVE_KID`·
+`AUTH_ACCESS_ACTIVE_KEY`·`AUTH_ACCESS_RETIRED_KEYS`로 주입한다(마지막 하나는 선택). 앞의 세 값은 기본값이 없어
+빠지면 기동에 실패한다. **실제 key 값은 저장소에 기록하지 않는다** — `.env.example`에는 이름과 형식만 둔다.
+Refresh·action token과 Redis 인증 상태 저장은 아직 구현하지 않았다.
+
+**`users.auth_version` 배포 경계.** `prod`는 `ddl-auto: validate`라서 이 컬럼이 운영 스키마에 먼저 있어야 기동한다.
+`local`(`update`)·`test`(`create-drop`)는 자동 반영된다.
 
 **플랫폼 경계.** `application`은 플랫폼 중립적인 인증 결과를 반환하고, `presentation`이 WEB은 HttpOnly 쿠키로
 MOBILE은 응답 body로 변환한다. WEB/MOBILE별 Controller를 복제하지 않는다.

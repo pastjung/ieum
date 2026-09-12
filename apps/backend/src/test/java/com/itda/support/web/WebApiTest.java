@@ -1,5 +1,6 @@
 package com.itda.support.web;
 
+import com.itda.support.security.SecuredTestEndpoints;
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -17,5 +18,5 @@ import org.springframework.context.annotation.Import;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(WebTestEndpoints.class)
+@Import({WebTestEndpoints.class, SecuredTestEndpoints.class})
 public @interface WebApiTest {}
