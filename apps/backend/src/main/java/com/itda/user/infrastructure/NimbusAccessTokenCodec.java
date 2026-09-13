@@ -4,6 +4,7 @@ import com.itda.user.application.port.out.AccessTokenClaims;
 import com.itda.user.application.port.out.AccessTokenIssuer;
 import com.itda.user.application.port.out.AccessTokenVerification;
 import com.itda.user.application.port.out.AccessTokenVerifier;
+import com.itda.user.application.port.out.IssuedAccessToken;
 import com.itda.user.domain.UserRole;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JOSEObjectType;
@@ -77,7 +78,7 @@ public class NimbusAccessTokenCodec implements AccessTokenIssuer, AccessTokenVer
   }
 
   @Override
-  public String issue(AccessTokenClaims claims) {
+  public IssuedAccessToken issue(AccessTokenClaims claims) {
     long issuedAt = this.clock.instant().getEpochSecond();
     long expiresAt = issuedAt + TOKEN_TTL.toSeconds();
     JWSHeader header =
@@ -103,7 +104,8 @@ public class NimbusAccessTokenCodec implements AccessTokenIssuer, AccessTokenVer
       // 서명 실패는 key 설정이 무너진 상태다. 원인 객체를 그대로 올리면 key 정보가 따라 나갈 수 있다.
       throw new IllegalStateException("Access Token에 서명하지 못했습니다.");
     }
-    return signedJwt.serialize();
+    // 발급에 실제로 쓴 시각을 함께 돌려준다. 호출자가 TTL을 다시 더하거나 JWT를 재파싱하지 않게 한다.
+    return new IssuedAccessToken(signedJwt.serialize(), issuedAt, expiresAt);
   }
 
   @Override

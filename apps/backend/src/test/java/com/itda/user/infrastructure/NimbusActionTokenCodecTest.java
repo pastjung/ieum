@@ -251,7 +251,8 @@ class NimbusActionTokenCodecTest {
                 AccessKeyRing.from(AccessTokenTestKeys.properties("access-active")),
                 AccessTokenTestKeys.ISSUER,
                 Clock.fixed(NOW, ZoneOffset.UTC))
-            .issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0));
+            .issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0))
+            .compactToken();
     String refreshToken =
         new NimbusRefreshTokenCodec(
                 RefreshKeyRing.from(RefreshTokenTestKeys.properties("refresh-active")),

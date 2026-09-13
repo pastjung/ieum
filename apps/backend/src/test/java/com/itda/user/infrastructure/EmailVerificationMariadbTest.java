@@ -345,6 +345,18 @@ class EmailVerificationMariadbTest {
     }
 
     @Override
+    public int recordLoginFailure(
+        long userId, int maxAttempts, LocalDateTime lockedUntil, LocalDateTime now) {
+      return this.delegate.recordLoginFailure(userId, maxAttempts, lockedUntil, now);
+    }
+
+    @Override
+    public int recordLoginSuccess(
+        long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
+      return this.delegate.recordLoginSuccess(userId, expectedRowVersion, expectedAuthVersion, now);
+    }
+
+    @Override
     public Optional<User> findById(Long id) {
       return this.delegate.findById(id);
     }

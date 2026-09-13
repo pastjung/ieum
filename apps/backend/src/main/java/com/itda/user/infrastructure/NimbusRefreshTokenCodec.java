@@ -105,8 +105,15 @@ public class NimbusRefreshTokenCodec implements RefreshTokenIssuer, RefreshToken
       // 원인 객체를 그대로 올리면 key 정보가 따라 나갈 수 있다.
       throw new IllegalStateException("Refresh Token에 서명하지 못했습니다.");
     }
+    String compactToken = signedJwt.serialize();
     return new IssuedRefreshToken(
-        signedJwt.serialize(), jti, claims.familyId(), issuedAt, expiresAt);
+        compactToken,
+        // 해시는 원문을 가진 여기서 만든다. 상위 계층이 원문을 들고 다니지 않게 하는 경계다.
+        CompactTokenHasher.hash(compactToken),
+        jti,
+        claims.familyId(),
+        issuedAt,
+        expiresAt);
   }
 
   @Override

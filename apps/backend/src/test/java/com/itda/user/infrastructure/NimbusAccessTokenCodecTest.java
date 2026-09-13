@@ -48,7 +48,7 @@ class NimbusAccessTokenCodecTest {
   }
 
   private String issuedToken() {
-    return this.codec.issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0));
+    return this.codec.issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0)).compactToken();
   }
 
   private JWSHeader.Builder validHeader() {
@@ -191,7 +191,8 @@ class NimbusAccessTokenCodecTest {
         new NimbusAccessTokenCodec(
             otherRing, AccessTokenTestKeys.ISSUER, Clock.fixed(NOW, ZoneOffset.UTC));
 
-    assertRejected(otherCodec.issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0)));
+    assertRejected(
+        otherCodec.issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0)).compactToken());
   }
 
   @Test
@@ -201,7 +202,8 @@ class NimbusAccessTokenCodecTest {
     String oldToken =
         new NimbusAccessTokenCodec(
                 oldRing, AccessTokenTestKeys.ISSUER, Clock.fixed(NOW, ZoneOffset.UTC))
-            .issue(new AccessTokenClaims(USER_ID, UserRole.ADMIN, 3));
+            .issue(new AccessTokenClaims(USER_ID, UserRole.ADMIN, 3))
+            .compactToken();
 
     AccessKeyRing rotated =
         AccessKeyRing.from(

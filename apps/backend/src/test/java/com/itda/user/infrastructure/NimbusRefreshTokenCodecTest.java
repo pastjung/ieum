@@ -447,6 +447,7 @@ class NimbusRefreshTokenCodecTest {
         .isEqualTo(
             new IssuedRefreshToken(
                 "other.compact.value",
+                token.tokenHash(),
                 token.jti(),
                 token.familyId(),
                 token.issuedAtEpochSecond(),
@@ -470,9 +471,14 @@ class NimbusRefreshTokenCodecTest {
         .isInstanceOf(IllegalArgumentException.class);
 
     String uuid = UUID.randomUUID().toString();
-    assertThatThrownBy(() -> new IssuedRefreshToken(SAMPLE_COMPACT_VALUE, value, uuid, 1, 2))
+    String hash = issued().tokenHash();
+    assertThatThrownBy(() -> new IssuedRefreshToken(SAMPLE_COMPACT_VALUE, hash, value, uuid, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new IssuedRefreshToken(SAMPLE_COMPACT_VALUE, uuid, value, 1, 2))
+    assertThatThrownBy(() -> new IssuedRefreshToken(SAMPLE_COMPACT_VALUE, hash, uuid, value, 1, 2))
+        .isInstanceOf(IllegalArgumentException.class);
+    // 해시도 저장 계약과 같은 형식(Base64URL 43자)이어야 한다.
+    assertThatThrownBy(
+            () -> new IssuedRefreshToken(SAMPLE_COMPACT_VALUE, "short-hash", uuid, uuid, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
 
     assertThatThrownBy(() -> new RefreshTokenVerification.Verified(USER_ID, value, uuid, 0, 1, 2))
@@ -487,7 +493,10 @@ class NimbusRefreshTokenCodecTest {
 
     assertThatThrownBy(() -> new RefreshTokenClaims(USER_ID, rejected, 0))
         .hasMessageNotContaining(rejected);
-    assertThatThrownBy(() -> new IssuedRefreshToken(SAMPLE_COMPACT_VALUE, rejected, rejected, 1, 2))
+    assertThatThrownBy(
+            () ->
+                new IssuedRefreshToken(
+                    SAMPLE_COMPACT_VALUE, issued().tokenHash(), rejected, rejected, 1, 2))
         .hasMessageNotContaining(rejected);
     assertThatThrownBy(
             () -> new RefreshTokenVerification.Verified(USER_ID, rejected, rejected, 0, 1, 2))
@@ -549,7 +558,8 @@ class NimbusRefreshTokenCodecTest {
     String accessToken =
         new NimbusAccessTokenCodec(
                 accessRing, AccessTokenTestKeys.ISSUER, Clock.fixed(NOW, ZoneOffset.UTC))
-            .issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0));
+            .issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0))
+            .compactToken();
 
     assertRejected(accessToken);
   }

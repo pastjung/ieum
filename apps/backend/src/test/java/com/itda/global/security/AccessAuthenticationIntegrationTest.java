@@ -71,7 +71,9 @@ class AccessAuthenticationIntegrationTest {
     user.verifyEmail(now);
     this.userId = this.userRepository.save(user).getId();
     this.validToken =
-        this.accessTokenIssuer.issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 0));
+        this.accessTokenIssuer
+            .issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 0))
+            .compactToken();
   }
 
   private HttpResponse<String> get(String path, String... headers) {
@@ -153,7 +155,10 @@ class AccessAuthenticationIntegrationTest {
 
     assertUnauthorized(
         getWithToken(
-            SECURED, pastCodec.issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 0))));
+            SECURED,
+            pastCodec
+                .issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 0))
+                .compactToken()));
   }
 
   @Test
@@ -161,8 +166,9 @@ class AccessAuthenticationIntegrationTest {
     assertUnauthorized(
         getWithToken(
             SECURED,
-            this.accessTokenIssuer.issue(
-                new AccessTokenClaims(999_999_999L, UserRole.LEARNER, 0))));
+            this.accessTokenIssuer
+                .issue(new AccessTokenClaims(999_999_999L, UserRole.LEARNER, 0))
+                .compactToken()));
   }
 
   @Test
@@ -170,7 +176,9 @@ class AccessAuthenticationIntegrationTest {
     assertUnauthorized(
         getWithToken(
             SECURED,
-            this.accessTokenIssuer.issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 1))));
+            this.accessTokenIssuer
+                .issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 1))
+                .compactToken()));
   }
 
   @Test
@@ -184,11 +192,15 @@ class AccessAuthenticationIntegrationTest {
     HttpResponse<String> unknownUser =
         getWithToken(
             SECURED,
-            this.accessTokenIssuer.issue(new AccessTokenClaims(888_888L, UserRole.LEARNER, 0)));
+            this.accessTokenIssuer
+                .issue(new AccessTokenClaims(888_888L, UserRole.LEARNER, 0))
+                .compactToken());
     HttpResponse<String> wrongVersion =
         getWithToken(
             SECURED,
-            this.accessTokenIssuer.issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 5)));
+            this.accessTokenIssuer
+                .issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 5))
+                .compactToken());
 
     assertThat(noToken.statusCode()).isEqualTo(unknownUser.statusCode()).isEqualTo(401);
     assertThat(wrongVersion.statusCode()).isEqualTo(401);
@@ -279,7 +291,9 @@ class AccessAuthenticationIntegrationTest {
   void DB_role과_JWT_role이_달라도_검증된_토큰의_role로_authority를_만든다() {
     // 저장된 사용자는 LEARNER지만 토큰은 ADMIN으로 서명됐다. 계약상 role은 DB 재검증 항목이 아니다.
     String adminToken =
-        this.accessTokenIssuer.issue(new AccessTokenClaims(this.userId, UserRole.ADMIN, 0));
+        this.accessTokenIssuer
+            .issue(new AccessTokenClaims(this.userId, UserRole.ADMIN, 0))
+            .compactToken();
 
     Map<String, Object> body = HttpTestClient.json(getWithToken(SECURED, adminToken));
 
@@ -292,7 +306,9 @@ class AccessAuthenticationIntegrationTest {
     HttpResponse<String> unauthorized =
         getWithToken(
             SECURED,
-            this.accessTokenIssuer.issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 7)));
+            this.accessTokenIssuer
+                .issue(new AccessTokenClaims(this.userId, UserRole.LEARNER, 7))
+                .compactToken());
     HttpResponse<String> unavailable = getWithToken(UNAVAILABLE, this.validToken);
 
     assertThat(unauthorized.body()).doesNotContain(this.validToken).doesNotContain("authVersion");
