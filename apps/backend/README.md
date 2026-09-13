@@ -90,7 +90,8 @@ com.itda
 │                            #        AccessTokenIssuer·AccessTokenVerifier·RefreshTokenIssuer·
 │                            #        RefreshTokenVerifier·RefreshTokenStore)
 │                            # [예정] action token·메일 outbound port와 나머지 유스케이스
-│   ├── presentation/        # [예정] HTTP DTO·상태 코드·쿠키/body 변환
+│   ├── presentation/        # [일부 현재] UserController(회원가입·내 정보), 요청·응답 DTO
+│                            # [예정] 나머지 계정 API의 HTTP DTO·상태 코드·쿠키/body 변환
 │   └── infrastructure/      # [현재] UserRepositoryImpl(JPA 어댑터), UserJpaRepository,
 │                            #        Argon2idPasswordHasher, HibpRangePasswordChecker,
 │                            #        NimbusAccessTokenCodec, AccessKeyRing,
@@ -126,7 +127,7 @@ com.itda
 | --- | --- | --- |
 | `user/domain` [현재] | 계정 상태와 핵심 불변식(상태 전이·정규화), `UserRepository` 포트 | 트랜잭션 경계, 토큰 발급, HTTP, 외부 port 직접 호출 |
 | `user/application` [일부 현재] | 유스케이스, 트랜잭션 경계, outbound port 호출 조정 | HTTP 상태 코드, 쿠키, 플랫폼 분기 |
-| `user/presentation` [예정] | HTTP DTO, 상태 코드, 쿠키↔body 변환 | 비즈니스 규칙, 트랜잭션 |
+| `user/presentation` [일부 현재] | HTTP DTO, 상태 코드, 쿠키↔body 변환 | 비즈니스 규칙, 트랜잭션 |
 | `user/infrastructure` [일부 현재] | JPA, Argon2id, JWT, Redis, 메일 adapter | 유스케이스 순서, 정책 판단 |
 | `global/security` [일부 현재] | Access Token 공통 인증(Bearer 추출·SecurityContext·401 진입점) | 로그인·회원가입·Refresh 검증, 사용자 상태 업무 판정 |
 
@@ -140,10 +141,13 @@ com.itda
 Access Token 검증 port와 사용자 인증 상태 판정(존재·`status`·이메일 인증·`auth_version`)은 `user/application`에 있고,
 `global/security`는 그 결과를 `SecurityContext`와 HTTP 응답으로 옮기기만 한다.
 
-**운영 보호 endpoint는 아직 없다.** 운영 `SecurityFilterChain`은 `anyRequest().permitAll()`이며 Access 인증 필터를
-운영 경로에 연결하지 않는다. 지금 전체를 `authenticated()`로 막으면 존재하지 않는 경로가 `404 ENDPOINT_NOT_FOUND` 대신
+**보호 경로는 chain을 나눠 하나씩 연다.** `SecurityFilterChain`이 둘이다. `@Order(1)` chain은
+`securityMatcher`로 보호 경로만 집어(현재는 `GET /api/v1/users/me` 하나) Access 인증 필터와
+`authenticated()`를 걸고, `@Order(2)` chain이 나머지를 `anyRequest().permitAll()`로 받는다.
+전체를 `authenticated()`로 막지 않는 이유는 그러면 존재하지 않는 경로가 `404 ENDPOINT_NOT_FOUND` 대신
 401이 되어 [API 컨벤션](../../docs/conventions/code/api.md)의 공통 오류 계약이 깨지기 때문이다.
-**보호 matcher와 `AccessTokenAuthenticationFilter` 등록은 각 업무 API 구현 이슈가 자기 경로에 대해 명시적으로 추가한다.**
+`securityMatcher`에 method까지 넣는 것도 같은 이유다 — 넣지 않으면 `DELETE /api/v1/users/me`가 405 대신 401이 된다.
+**보호 matcher 추가는 각 업무 API 구현 이슈가 자기 경로에 대해 명시적으로 한다.**
 
 **Access JWT 설정.** 서명 key와 issuer는 환경변수 `AUTH_JWT_ISSUER`·`AUTH_ACCESS_ACTIVE_KID`·
 `AUTH_ACCESS_ACTIVE_KEY`·`AUTH_ACCESS_RETIRED_KEYS`로 주입한다(마지막 하나는 선택). 앞의 세 값은 기본값이 없어
@@ -205,6 +209,12 @@ worker가 제공자 호출 뒤 DB 갱신에 실패하면 같은 메일이 다시
 
 **`users.auth_version` 배포 경계.** `prod`는 `ddl-auto: validate`라서 이 컬럼이 운영 스키마에 먼저 있어야 기동한다.
 `local`(`update`)·`test`(`create-drop`)는 자동 반영된다.
+
+**`users.row_version` 배포 경계.** `User` 엔티티가 ERD에 확정된 `users.row_version`을 `@Version`으로 매핑한다.
+`local`(`update`)은 누락된 컬럼을 추가할 수 있지만 `prod`(`validate`)는 컬럼을 만들지 않는다.
+운영 스키마에 `users.row_version BIGINT NOT NULL`이 먼저 있지 않으면 backend는 `SchemaManagementException`으로
+**기동하지 않는다**. `mail_outbox`와 마찬가지로 release 배포 전에 통제된 스키마 적용 절차가 필요하며,
+구체적인 migration·배포 방식은 별도 DB/Infra 작업에서 정한다.
 
 **플랫폼 경계.** `application`은 플랫폼 중립적인 인증 결과를 반환하고, `presentation`이 WEB은 HttpOnly 쿠키로
 MOBILE은 응답 body로 변환한다. WEB/MOBILE별 Controller를 복제하지 않는다.
