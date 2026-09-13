@@ -29,7 +29,7 @@ docker compose up -d db redis              # 저장소 두 개를 먼저 띄우�
 | 프로필 | DB | `ddl-auto` | Redis | 용도 |
 | --- | --- | --- | --- | --- |
 | `local` (기본) | MariaDB 11.8.9 (compose `db` 서비스) | `update` | compose `redis` 서비스 | 개발 |
-| `test` | H2 인메모리 (MySQL 모드) | `create-drop` | 없음 | `./gradlew test`, `docker build --target test` |
+| `test` | H2 인메모리 (MySQL 모드) | `create-drop` | 실제 Redis (아래 참고) | `./gradlew test`, `docker build --target test` |
 | `prod` | MariaDB (RDS) | `validate` | 배포 작업에서 추가 예정 | 배포 |
 
 `test`가 인메모리인 이유: MR verify 파이프라인의 `docker build --target test`는 DB 컨테이너도 네트워크도 없이 실행된다.
@@ -55,13 +55,22 @@ Spring이 미해결 플레이스홀더에 예외를 던지지 않아 `Access den
 Redis에는 비밀번호가 없다 (`REDIS_HOST`·`REDIS_PORT`만 있고 기본값이 있다). 로컬 컨테이너가
 `127.0.0.1`에만 바인딩되기 때문이며, 운영 Redis의 인증은 배포 작업에서 `.env.config`로 다룬다.
 
-### Redis 연결 확인 (임시)
+### Redis 통합 테스트
 
-`local` 프로필에서만 도는 `RedisConnectionCheck`가 기동 직후 PING을 보내고 `Redis 연결 확인: PONG`을 로그에 남긴다.
-Lettuce는 지연 연결이라 host·port가 틀려도 애플리케이션이 오류 없이 기동하는데, Redis에 명령을 보내는 코드가 아직
-하나도 없어 잘못된 설정을 알아챌 방법이 없기 때문이다 (MariaDB는 `ddl-auto`가 기동 중 연결해 이 문제가 없다).
+인증 상태 저장소에는 인메모리 대체재가 없다. Lua 스크립트의 원자성, `EVALSHA` 실패 후 복구, TTL·ZSET 갱신은
+실제 Redis에서만 증명된다. 그래서 `@RequiresRealRedis`가 붙은 테스트는 진짜 서버에 붙는다.
 
-**인증 토큰 저장소(ERD 3.1.1)를 구현하면 이 클래스를 삭제한다** — 그 통합 테스트가 같은 역할을 하기 때문이다.
+```bash
+docker compose up -d redis    # 로컬에서 함께 돌리려면
+./gradlew test
+```
+
+- Redis가 없으면 그 테스트만 건너뛴다 (나머지는 그대로 실행된다).
+- `docker build --target test`는 `redis:8.2.9-alpine`에서 바이너리를 복사해 같은 컨테이너 안에 8.2.9를 띄우고
+  `ITDA_REQUIRE_REAL_REDIS=true`로 실행한다. **이 환경에서는 건너뛰기가 실패로 처리된다** — 버전 확인·PING·
+  연결 중 하나라도 어긋나면 빌드가 멈춘다. CI에 Docker 소켓이 없어 별도 컨테이너를 띄울 수 없기 때문에 택한 방식이다.
+- 테스트는 `FLUSHDB`·`FLUSHALL`을 쓰지 않는다. 실행마다 새 식별자를 만들고 자기가 만든 키만 지운다.
+- 운영 이미지(builder·runtime 스테이지)에는 Redis 바이너리가 들어가지 않는다.
 
 ## DDD 패키지 구조
 
@@ -78,13 +87,16 @@ com.itda
 │   ├── domain/              # [현재] User(애그리거트), Email(VO), UserRole, UserStatus, UserRepository(인터페이스)
 │   ├── application/         # [일부 현재] 비밀번호 정책 유스케이스, Access Token 인증 상태 판정,
 │                            #        port/out (PasswordHasher·CompromisedPasswordChecker·
-│                            #        AccessTokenIssuer·AccessTokenVerifier)
-│                            # [예정] Refresh·action token·Redis·메일 outbound port와 나머지 유스케이스
+│                            #        AccessTokenIssuer·AccessTokenVerifier·RefreshTokenIssuer·
+│                            #        RefreshTokenVerifier·RefreshTokenStore)
+│                            # [예정] action token·메일 outbound port와 나머지 유스케이스
 │   ├── presentation/        # [예정] HTTP DTO·상태 코드·쿠키/body 변환
 │   └── infrastructure/      # [현재] UserRepositoryImpl(JPA 어댑터), UserJpaRepository,
 │                            #        Argon2idPasswordHasher, HibpRangePasswordChecker,
-│                            #        NimbusAccessTokenCodec, AccessKeyRing, 설정 properties·구성
-│                            # [예정] Refresh·action token·Redis·메일 adapter
+│                            #        NimbusAccessTokenCodec, AccessKeyRing,
+│                            #        NimbusRefreshTokenCodec, RefreshKeyRing,
+│                            #        LuaRefreshTokenStore, AuthRedisKeys, 설정 properties·구성
+│                            # [예정] action token·메일 adapter
 ├── lecture/domain/          # Lecture(애그리거트), LectureProblem, Participant, ParticipantId, LectureStatus
 ├── curriculum/domain/       # CurriculumStage, CurriculumProblem, CurriculumProblemId
 ├── problem/domain/          # Problem(애그리거트 + ProblemCell), LearningSkill, ProblemSkill, enum 3개
@@ -136,7 +148,14 @@ Access Token 검증 port와 사용자 인증 상태 판정(존재·`status`·이
 **Access JWT 설정.** 서명 key와 issuer는 환경변수 `AUTH_JWT_ISSUER`·`AUTH_ACCESS_ACTIVE_KID`·
 `AUTH_ACCESS_ACTIVE_KEY`·`AUTH_ACCESS_RETIRED_KEYS`로 주입한다(마지막 하나는 선택). 앞의 세 값은 기본값이 없어
 빠지면 기동에 실패한다. **실제 key 값은 저장소에 기록하지 않는다** — `.env.example`에는 이름과 형식만 둔다.
-Refresh·action token과 Redis 인증 상태 저장은 아직 구현하지 않았다.
+
+**Refresh JWT와 Redis 상태 설정.** Refresh는 별도 ring을 쓴다 — `AUTH_REFRESH_ACTIVE_KID`·
+`AUTH_REFRESH_ACTIVE_KEY`(필수)·`AUTH_REFRESH_RETIRED_KEYS`(선택). `issuer`는 Access와 같은 `AUTH_JWT_ISSUER`를
+공유하므로 따로 두지 않는다. `kid`는 Access ring과 겹치면 기동에 실패한다 — 겹치면 어느 ring의 key로 검증할지
+결정할 수 없기 때문이다. 인증 상태 키의 환경 이름은 `AUTH_REDIS_KEY_PREFIX`(`local`·`test`·`prod`)로 주입하며, **실행 프로필과 다르면 기동에 실패한다**
+(issuer 검증과 같은 규칙). DB index로 환경을 나누지 않는 이유는 Cluster에서 쓸 수 없고, 잘못된 설정이 조용히 다른 환경의
+데이터를 읽게 만들기 때문이다.
+action token은 아직 구현하지 않았다.
 
 **`users.auth_version` 배포 경계.** `prod`는 `ddl-auto: validate`라서 이 컬럼이 운영 스키마에 먼저 있어야 기동한다.
 `local`(`update`)·`test`(`create-drop`)는 자동 반영된다.

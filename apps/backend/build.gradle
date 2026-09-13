@@ -70,15 +70,22 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 
-    // Access 서명 key를 테스트 실행마다 새로 만든다. 저장소에 key 문자열을 남기지 않기 위해서다.
+    // Access·Refresh 서명 key를 테스트 실행마다 새로 만든다. 저장소에 key 문자열을 남기지 않기 위해서다.
     // doFirst에 두어 task 입력에 포함시키지 않는다 (매번 값이 바뀌어 up-to-date 판정이 무의미해지는 것을 피한다).
     doFirst {
-        byte[] keyBytes = new byte[32]
-        new java.security.SecureRandom().nextBytes(keyBytes)
+        def randomKey = {
+            byte[] keyBytes = new byte[32]
+            new java.security.SecureRandom().nextBytes(keyBytes)
+            java.util.Base64.urlEncoder.withoutPadding().encodeToString(keyBytes)
+        }
         systemProperty 'AUTH_JWT_ISSUER', 'itda-backend-test'
         systemProperty 'AUTH_ACCESS_ACTIVE_KID', 'test-active'
-        systemProperty 'AUTH_ACCESS_ACTIVE_KEY',
-                java.util.Base64.urlEncoder.withoutPadding().encodeToString(keyBytes)
+        systemProperty 'AUTH_ACCESS_ACTIVE_KEY', randomKey()
+        // kid는 Access ring과 겹치면 안 된다 (RefreshTokenConfiguration의 교차 중복 검사)
+        systemProperty 'AUTH_REFRESH_ACTIVE_KID', 'test-refresh-active'
+        systemProperty 'AUTH_REFRESH_ACTIVE_KEY', randomKey()
+        // 인증 상태 Redis 키 prefix. 테스트가 다른 환경의 키를 건드리지 못하게 test로 고정한다.
+        systemProperty 'AUTH_REDIS_KEY_PREFIX', 'test'
     }
 }
 

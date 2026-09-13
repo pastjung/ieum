@@ -4,6 +4,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -94,6 +95,11 @@ public final class AccessKeyRing {
   /** Access ring 안에서만 조회한다. 없으면 빈 값이며 다른 ring으로 넓히지 않는다. */
   public Optional<SecretKey> findByKid(String kid) {
     return Optional.ofNullable(this.keysByKid.get(kid));
+  }
+
+  /** Refresh ring과의 교차 중복 검사를 위해 노출한다. key 값은 내보내지 않는다. */
+  public Set<String> kids() {
+    return this.keysByKid.keySet();
   }
 
   int size() {

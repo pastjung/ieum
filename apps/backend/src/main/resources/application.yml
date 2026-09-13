@@ -12,6 +12,13 @@ spring:
       # ERROR dispatch에서 Security chain이 다시 돌면 이미 끝난 오류 응답을 또 인증 판정하게 된다.
       # async 인증 전파는 이번 범위가 아니므로 켜지 않는다.
       dispatcher-types: request
+  data:
+    redis:
+      # 인증 상태 조회는 요청 경로 위에 있다. 응답을 오래 붙들고 있느니 빨리 포기하고
+      # AUTH_STATE_UNAVAILABLE(503)로 끊는 편이 낫다 — 계약은 불확실한 처리를 성공으로 단정하지 말라고 정한다.
+      # host·port는 프로필별로 지정한다.
+      connect-timeout: 1s
+      timeout: 1s
   jpa:
     open-in-view: false
     properties:
@@ -51,6 +58,17 @@ itda:
         active-key: ${AUTH_ACCESS_ACTIVE_KEY}
         # kid1:base64url,kid2:base64url 형식. 회전 중 아직 수명이 남은 토큰을 검증하기 위한 목록이다.
         retired-keys: ${AUTH_ACCESS_RETIRED_KEYS:}
+      # Refresh Token 서명 설정. issuer는 Access와 같은 값을 쓰므로 여기에 다시 두지 않는다
+      # (RefreshTokenConfiguration이 Access 설정에서 가져온다). 유효기간 14일도 계약 값이라 코드 상수다.
+      refresh:
+        active-kid: ${AUTH_REFRESH_ACTIVE_KID}
+        active-key: ${AUTH_REFRESH_ACTIVE_KEY}
+        # Refresh는 수명이 14일이라 회전 후에도 retired key를 그만큼 들고 있어야 한다.
+        retired-keys: ${AUTH_REFRESH_RETIRED_KEYS:}
+    # 인증 상태 Redis 키 앞에 붙는 환경 이름 (local·test·prod). DB index로 환경을 나누지 않는 이유는
+    # AuthRedisProperties 주석 참고. 값이 틀리면 다른 환경의 토큰 상태를 조용히 읽게 되므로 기본값을 두지 않는다.
+    auth-redis:
+      key-prefix: ${AUTH_REDIS_KEY_PREFIX}
 
 logging:
   pattern:
@@ -110,6 +128,12 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+  data:
+    # Redis는 인메모리 대체재가 없다. 실제 Redis에 붙는 통합 테스트는 서버가 떠 있을 때만 실행하고
+    # (RealRedisCondition), Dockerfile test 스테이지는 8.2.9를 띄운 뒤 Gradle을 돌려 항상 실행되게 한다.
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
 ---
 # ---------- prod: MariaDB (RDS) ----------
