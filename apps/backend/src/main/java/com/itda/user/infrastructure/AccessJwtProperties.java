@@ -47,8 +47,7 @@ public record AccessJwtProperties(
 
   static void requireValidKid(String kid) {
     if (kid == null || !KID_PATTERN.matcher(kid).matches()) {
-      throw new IllegalArgumentException(
-          "Access key의 kid는 1~64자의 영문·숫자·'.', '_', '~', '-' 조합이어야 합니다.");
+      throw new IllegalArgumentException("서명 key의 kid는 1~64자의 영문·숫자·'.', '_', '~', '-' 조합이어야 합니다.");
     }
   }
 
