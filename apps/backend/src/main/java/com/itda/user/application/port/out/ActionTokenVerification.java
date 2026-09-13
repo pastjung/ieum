@@ -10,11 +10,18 @@ import com.itda.user.domain.AccountActionPurpose;
  */
 public sealed interface ActionTokenVerification {
 
-  /** 서명과 모든 claim 검증을 통과했다. Redis 상태 확인은 아직 남아 있다. */
+  /**
+   * 서명과 모든 claim 검증을 통과했다. Redis 상태 확인은 아직 남아 있다.
+   *
+   * <p>{@code tokenHash}를 여기에 담는 이유가 있다. Redis 소비는 {@link ActionTokenRecord}를 요구하는데 그 해시는 <b>토큰
+   * 원문</b>에서만 만들 수 있다. application이 직접 계산하려면 원문을 들고 다니며 infrastructure의 해시 구현을 import해야 하므로, 원문을 이미
+   * 가진 검증기가 계약된 형식으로 만들어 넘긴다 (API 명세 3.6.1절).
+   */
   record Verified(
       long userId,
       AccountActionPurpose purpose,
       String jti,
+      String tokenHash,
       long issuedAtEpochSecond,
       long expiresAtEpochSecond)
       implements ActionTokenVerification {
@@ -24,6 +31,7 @@ public sealed interface ActionTokenVerification {
       ActionTokenRecord.requireUserId(userId);
       ActionTokenRecord.requirePurpose(purpose);
       ActionTokenRecord.requireJti(jti);
+      ActionTokenRecord.requireTokenHash(tokenHash);
       if (issuedAtEpochSecond <= 0 || expiresAtEpochSecond <= issuedAtEpochSecond) {
         throw new IllegalArgumentException("검증된 발급·만료 시각이 올바르지 않습니다.");
       }

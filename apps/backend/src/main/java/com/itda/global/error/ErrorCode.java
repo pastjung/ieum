@@ -33,6 +33,13 @@ public enum ErrorCode {
   ACCOUNT_IDENTIFIER_UNAVAILABLE(HttpStatus.CONFLICT, "사용할 수 없는 계정 정보입니다."),
   INVALID_ACCOUNT_INPUT(HttpStatus.UNPROCESSABLE_CONTENT, "계정 정보를 확인해 주세요."),
   INVALID_PASSWORD(HttpStatus.UNPROCESSABLE_CONTENT, "비밀번호 정책을 확인해 주세요."),
+  /**
+   * 계정 작업 토큰을 쓸 수 없다. 위조·만료·소비 완료·재발급으로 인한 무효화·용도 불일치·사용자 상태를 구분하지 않는다 (API 명세 3.4.1·3.6.2절).
+   *
+   * <p>{@code 400}인 이유는 요청이 들고 온 토큰 자체가 이 API의 입력으로 성립하지 않기 때문이다. 인증 실패({@code 401})도, 형식 위반({@code
+   * 422})도 아니다.
+   */
+  ACTION_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "요청을 처리할 수 없습니다. 링크를 다시 요청해 주세요."),
   PASSWORD_POLICY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."),
 
   // braille

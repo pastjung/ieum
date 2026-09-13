@@ -3,6 +3,7 @@ package com.itda.support.security;
 import com.itda.user.domain.Email;
 import com.itda.user.domain.User;
 import com.itda.user.domain.UserRepository;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -102,6 +103,11 @@ public class StubUserRepository implements UserRepository {
 
   @Override
   public boolean existsByEmail(Email email) {
+    throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
+  }
+
+  @Override
+  public int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now) {
     throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
   }
 }

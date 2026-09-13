@@ -540,6 +540,11 @@ class UserRegistrationServiceTest {
       }
       return this.emailTaken;
     }
+
+    @Override
+    public int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now) {
+      throw new UnsupportedOperationException("회원가입 경로에서는 쓰지 않는다.");
+    }
   }
 
   private final class RecordingMailOutboxRepository implements MailOutboxRepository {
