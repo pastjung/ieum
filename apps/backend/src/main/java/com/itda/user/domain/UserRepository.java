@@ -23,6 +23,31 @@ public interface UserRepository {
    */
   int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now);
 
+  /**
+   * 로그인 실패를 원자적으로 누적한다 (ERD 3.1절).
+   *
+   * <p>읽고-더하고-저장하면 동시 실패가 서로의 증가를 덮어써 잠금을 우회할 수 있다. 그래서 한 문장에서 {@code failed_login_count}를 올리고, 그
+   * 증가 결과가 한계에 닿았을 때만 {@code locked_until}을 기록한다.
+   *
+   * <p>이미 잠긴 행은 조건에서 제외한다. 잠금 중 재시도로 제한 종료 시각이 계속 밀리면 사실상 영구 잠금이 된다.
+   *
+   * @param lockedUntil 한계에 도달했을 때 기록할 제한 종료 시각
+   * @return 갱신된 행 수. 0이면 계정이 ACTIVE가 아니거나 이미 잠긴 상태다
+   */
+  int recordLoginFailure(
+      long userId, int maxAttempts, LocalDateTime lockedUntil, LocalDateTime now);
+
+  /**
+   * 로그인 성공 상태로 초기화하면서 Snapshot이 아직 유효한지 함께 확인한다 (ERD 3.1절, API 명세 3.6.2절).
+   *
+   * <p>{@code row_version}과 {@code auth_version}을 WHERE에 실어, Argon2id 검증에 쓴 Snapshot 이후 계정이 바뀌었다면
+   * 0행이 되게 한다. 토큰 발급 직전의 마지막 관문이며 갱신된 행 수가 곧 경쟁 결과다.
+   *
+   * @return 갱신된 행 수. 0 또는 1이다
+   */
+  int recordLoginSuccess(
+      long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now);
+
   User save(User user);
 
   Optional<User> findById(Long id);

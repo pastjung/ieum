@@ -9,9 +9,10 @@ package com.itda.user.application.port.out;
 public interface AccessTokenIssuer {
 
   /**
-   * compact JWS 문자열을 만든다. {@code iat}·{@code exp}·{@code jti}는 서버가 생성한다.
+   * compact JWS 문자열과 발급기가 실제로 쓴 시각을 함께 만든다. {@code iat}·{@code exp}·{@code jti}는 서버가 생성한다.
    *
-   * @return 반환값은 토큰 원문이다. 로그·예외 message·응답 헤더에 그대로 싣지 않는다
+   * @return 토큰 원문을 담는다. 로그·예외 message·응답 헤더에 그대로 싣지 않는다. 만료 시각을 호출자가 다시 계산하거나 JWT를 재파싱해 복구하지 않도록 발급
+   *     결과에 함께 싣는다
    */
-  String issue(AccessTokenClaims claims);
+  IssuedAccessToken issue(AccessTokenClaims claims);
 }

@@ -110,4 +110,16 @@ public class StubUserRepository implements UserRepository {
   public int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now) {
     throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
   }
+
+  @Override
+  public int recordLoginFailure(
+      long userId, int maxAttempts, LocalDateTime lockedUntil, LocalDateTime now) {
+    throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
+  }
+
+  @Override
+  public int recordLoginSuccess(
+      long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
+    throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
+  }
 }

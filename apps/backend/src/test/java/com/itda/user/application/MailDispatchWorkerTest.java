@@ -863,6 +863,18 @@ class MailDispatchWorkerTest {
     public int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now) {
       throw new UnsupportedOperationException("worker는 이메일 인증을 완료하지 않는다.");
     }
+
+    @Override
+    public int recordLoginFailure(
+        long userId, int maxAttempts, LocalDateTime lockedUntil, LocalDateTime now) {
+      throw new UnsupportedOperationException("worker는 로그인 상태를 바꾸지 않는다.");
+    }
+
+    @Override
+    public int recordLoginSuccess(
+        long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
+      throw new UnsupportedOperationException("worker는 로그인 상태를 바꾸지 않는다.");
+    }
   }
 
   private static final class RecordingActionTokenStore implements ActionTokenStore {

@@ -290,7 +290,9 @@ class UserApiIntegrationTest {
         User.create(this.username, "argon2id$hash", UserRole.LEARNER, Email.of(this.email), now);
     user.verifyEmail(now);
     long userId = this.userRepository.save(user).getId();
-    return this.accessTokenIssuer.issue(new AccessTokenClaims(userId, UserRole.LEARNER, 0));
+    return this.accessTokenIssuer
+        .issue(new AccessTokenClaims(userId, UserRole.LEARNER, 0))
+        .compactToken();
   }
 
   private long otherVerifiedUserId() {
@@ -354,7 +356,10 @@ class UserApiIntegrationTest {
     User user =
         User.create(this.username, "argon2id$hash", UserRole.LEARNER, Email.of(this.email), now);
     long userId = this.userRepository.save(user).getId();
-    String token = this.accessTokenIssuer.issue(new AccessTokenClaims(userId, UserRole.LEARNER, 0));
+    String token =
+        this.accessTokenIssuer
+            .issue(new AccessTokenClaims(userId, UserRole.LEARNER, 0))
+            .compactToken();
 
     assertErrorCode(
         this.client.get(ME, HttpHeaders.AUTHORIZATION, "Bearer " + token), 401, "UNAUTHORIZED");
@@ -365,7 +370,9 @@ class UserApiIntegrationTest {
     verifiedUserToken();
     long userId = this.userRepository.findByUsername(this.username).orElseThrow().getId();
     String staleToken =
-        this.accessTokenIssuer.issue(new AccessTokenClaims(userId, UserRole.LEARNER, 99));
+        this.accessTokenIssuer
+            .issue(new AccessTokenClaims(userId, UserRole.LEARNER, 99))
+            .compactToken();
 
     assertErrorCode(
         this.client.get(ME, HttpHeaders.AUTHORIZATION, "Bearer " + staleToken),

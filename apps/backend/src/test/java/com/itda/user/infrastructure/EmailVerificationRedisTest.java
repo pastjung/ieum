@@ -317,6 +317,18 @@ class EmailVerificationRedisTest extends ActionTokenRedisTestBase {
     }
 
     @Override
+    public int recordLoginFailure(
+        long userId, int maxAttempts, LocalDateTime lockedUntil, LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int recordLoginSuccess(
+        long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public User save(User user) {
       throw new UnsupportedOperationException();
     }

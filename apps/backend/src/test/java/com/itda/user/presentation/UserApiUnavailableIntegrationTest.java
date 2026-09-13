@@ -77,7 +77,9 @@ class UserApiUnavailableIntegrationTest {
   }
 
   private String token() {
-    return this.accessTokenIssuer.issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0));
+    return this.accessTokenIssuer
+        .issue(new AccessTokenClaims(USER_ID, UserRole.LEARNER, 0))
+        .compactToken();
   }
 
   private HttpResponse<String> register() {

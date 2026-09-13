@@ -16,20 +16,27 @@ public final class IssuedRefreshToken {
   private static final String REDACTED = "IssuedRefreshToken[REDACTED]";
 
   private final String compactToken;
+  private final String tokenHash;
   private final String jti;
   private final String familyId;
   private final long issuedAtEpochSecond;
   private final long expiresAtEpochSecond;
 
+  /**
+   * @param tokenHash Redis에 저장할 값. <b>발급기가 compact 원문으로 직접 계산해 넘긴다</b> — 호출자가 계산하려면 원문을 들고 다니며
+   *     infrastructure의 해시 구현을 import해야 하고, 그러면 원문이 상위 계층으로 퍼진다
+   */
   public IssuedRefreshToken(
       String compactToken,
+      String tokenHash,
       String jti,
       String familyId,
       long issuedAtEpochSecond,
       long expiresAtEpochSecond) {
     this.compactToken = requireText(compactToken, "compact 토큰");
-    // 식별자 규칙은 RefreshTokenRecord 한 곳에만 둔다 — 발급 결과가 저장 계약보다 느슨하면
+    // 식별자·해시 규칙은 RefreshTokenRecord 한 곳에만 둔다 — 발급 결과가 저장 계약보다 느슨하면
     // 발급은 됐는데 저장할 수 없는 값이 만들어진다.
+    this.tokenHash = RefreshTokenRecord.requireTokenHash(tokenHash);
     this.jti = RefreshTokenRecord.requireJti(jti);
     this.familyId = RefreshTokenRecord.requireFamilyId(familyId);
     if (issuedAtEpochSecond <= 0 || expiresAtEpochSecond <= issuedAtEpochSecond) {
@@ -42,6 +49,11 @@ public final class IssuedRefreshToken {
   /** 클라이언트에게 전달할 때만 호출한다. 저장·로그 대상이 아니다. */
   public String compactToken() {
     return this.compactToken;
+  }
+
+  /** Redis에 저장하는 값. 원문이 아니라 이 값만 저장소로 간다. */
+  public String tokenHash() {
+    return this.tokenHash;
   }
 
   public String jti() {

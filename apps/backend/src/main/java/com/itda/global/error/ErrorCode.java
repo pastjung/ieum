@@ -25,6 +25,20 @@ public enum ErrorCode {
 
   // auth (docs/product/api-spec.md 3.5절)
   UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
+  /**
+   * 알 수 없는 계정·비밀번호 오류·로그인 제한·탈퇴를 <b>구분하지 않는다</b> (API 명세 3.5절).
+   *
+   * <p>원인을 나누면 응답만으로 "그 아이디가 존재하는가", "잠겨 있는가"를 알 수 있게 되어 계정 열거와 표적 공격의 단서가 된다.
+   */
+  INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호를 확인해 주세요."),
+  /** 자격 증명은 올바르지만 이메일 인증이 끝나지 않았다. 이때만 401과 구분되는 403이다 (API 명세 3.3.1절). */
+  EMAIL_VERIFICATION_REQUIRED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다."),
+  /**
+   * {@code X-Client-Platform}이 없거나 지원하지 않는 값이거나, {@code Origin}이 있는 요청이 MOBILE을 주장한다 (API 명세 3.3절).
+   *
+   * <p>{@code 400}인 이유는 요청이 어느 전달 방식을 쓸지 확정되지 않아 처리 자체를 시작할 수 없기 때문이다. 인증 실패가 아니다.
+   */
+  INVALID_CLIENT_PLATFORM(HttpStatus.BAD_REQUEST, "요청 형식을 확인해 주세요."),
   AUTH_STATE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."),
 
   // 계정 (docs/product/api-spec.md 3.5절)
