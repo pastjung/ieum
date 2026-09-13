@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.text.Normalizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -105,6 +106,18 @@ public class User {
    */
   @Column(name = "auth_version", nullable = false)
   private long authVersion;
+
+  /**
+   * 낙관적 잠금 값 (ERD 3.1절 {@code row_version}).
+   *
+   * <p>{@code auth_version}과 역할이 다르다. {@code auth_version}은 의도적으로 올려 기존 세션을 끊고 JWT claim으로 실리지만, 이
+   * 값은 외부에 노출되지 않고 행이 바뀔 때마다 증가해 stale write만 막는다. 인증 판정에 쓰지 않는다.
+   *
+   * <p>JPA가 관리하므로 도메인 메서드로 바꾸지 않는다. 생성 시각의 최초 값도 Hibernate가 넣는다.
+   */
+  @Version
+  @Column(name = "row_version", nullable = false)
+  private long rowVersion;
 
   private User(
       String username, String passwordHash, UserRole role, Email email, LocalDateTime now) {

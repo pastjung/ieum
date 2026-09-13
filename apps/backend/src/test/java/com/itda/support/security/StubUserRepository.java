@@ -26,8 +26,26 @@ public class StubUserRepository implements UserRepository {
    */
   private final AtomicInteger findByIdCallCount = new AtomicInteger();
 
+  /**
+   * 사용자를 등록한다. 엔티티의 id도 함께 채운다.
+   *
+   * <p>id는 DB가 발급하므로 {@code User.create}만으로는 비어 있다. key와 엔티티의 id가 어긋나면 id를 읽는 호출자가 이 stub에서만
+   * NullPointerException을 만난다.
+   */
   public void register(long id, User user) {
+    assignId(user, id);
     this.usersById.put(id, user);
+  }
+
+  private static void assignId(User user, long id) {
+    try {
+      java.lang.reflect.Field field = User.class.getDeclaredField("id");
+      field.setAccessible(true);
+      field.set(user, id);
+    } catch (ReflectiveOperationException e) {
+      // 엔티티에 setter를 만들지 않는다는 규칙을 테스트 편의로 깨지 않으려고 리플렉션을 쓴다.
+      throw new IllegalStateException("테스트 fixture에 id를 넣지 못했습니다.", e);
+    }
   }
 
   /** 트랜잭션을 시작하지 못하는 장애. DataAccessException이 아니라 TransactionException 계열이다. */

@@ -27,6 +27,14 @@ public enum ErrorCode {
   UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
   AUTH_STATE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."),
 
+  // 계정 (docs/product/api-spec.md 3.5절)
+  // message에 어떤 값이 문제였는지 쓰지 않는다. 입력값·중복 대상·검증기 원문이 응답으로 새는 경로를 만들지 않기 위해서다.
+  /** username 또는 email을 쓸 수 없다. 둘 중 어느 쪽인지 구분하지 않는다 (API 명세 3.2.1절). */
+  ACCOUNT_IDENTIFIER_UNAVAILABLE(HttpStatus.CONFLICT, "사용할 수 없는 계정 정보입니다."),
+  INVALID_ACCOUNT_INPUT(HttpStatus.UNPROCESSABLE_CONTENT, "계정 정보를 확인해 주세요."),
+  INVALID_PASSWORD(HttpStatus.UNPROCESSABLE_CONTENT, "비밀번호 정책을 확인해 주세요."),
+  PASSWORD_POLICY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."),
+
   // braille
   PATTERN_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "패턴 값이 허용 범위(0~63)를 벗어났습니다.");
 
