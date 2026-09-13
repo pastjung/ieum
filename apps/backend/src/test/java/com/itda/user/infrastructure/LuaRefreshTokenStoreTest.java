@@ -46,7 +46,7 @@ class LuaRefreshTokenStoreTest {
   private static final long PAST_EPOCH_SECOND = 1_000_000_000L;
 
   private static String someHash() {
-    return RefreshTokenHasher.hash("header.payload." + UUID.randomUUID());
+    return CompactTokenHasher.hash("header.payload." + UUID.randomUUID());
   }
 
   private static RefreshTokenRecord record(String familyId, String jti) {

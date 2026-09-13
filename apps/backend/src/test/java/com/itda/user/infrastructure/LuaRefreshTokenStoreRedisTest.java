@@ -44,7 +44,7 @@ class LuaRefreshTokenStoreRedisTest extends RefreshTokenRedisTestBase {
   private static final long REFRESH_TTL_SECONDS = 14L * 24 * 60 * 60;
 
   private static String someHash() {
-    return RefreshTokenHasher.hash("header.payload." + UUID.randomUUID());
+    return CompactTokenHasher.hash("header.payload." + UUID.randomUUID());
   }
 
   @Test
@@ -585,7 +585,7 @@ class LuaRefreshTokenStoreRedisTest extends RefreshTokenRedisTestBase {
   void 저장된_값에는_토큰_원문이_없다() {
     String sampleCompactValue = "header.payload." + UUID.randomUUID();
     String jti = newJti();
-    this.store.issueFamily(record(jti, RefreshTokenHasher.hash(sampleCompactValue)));
+    this.store.issueFamily(record(jti, CompactTokenHasher.hash(sampleCompactValue)));
 
     assertThat(tokenState(jti).values()).noneMatch(value -> value.contains(sampleCompactValue));
     assertThat(familyState().values()).noneMatch(value -> value.contains(sampleCompactValue));

@@ -8,14 +8,17 @@ import java.util.Base64;
 /**
  * Redis에 저장할 {@code tokenHash}를 만든다 (API 명세 3.6.1절).
  *
+ * <p>Refresh와 계정 작업 토큰이 같은 규칙을 쓴다. 계약이 종류를 나누지 않고 "compact JWT 원문의 SHA-256"이라고 한 줄로 정의했으므로 구현도 하나만
+ * 둔다.
+ *
  * <p>계약이 "compact JWT 원문의 ASCII 바이트에 대한 SHA-256을 Base64URL(padding 없음)로 인코딩"이라고 정했으므로 그대로 따른다.
  * compact JWS는 정의상 ASCII라 UTF-8과 결과가 같지만, 계약 문구를 코드에 그대로 옮겨 두면 나중에 인코딩을 두고 다툴 일이 없다.
  *
  * <p>토큰 원문은 이 계산 외에 어디에도 남기지 않는다. Redis에는 해시만 저장한다.
  */
-public final class RefreshTokenHasher {
+public final class CompactTokenHasher {
 
-  private RefreshTokenHasher() {}
+  private CompactTokenHasher() {}
 
   public static String hash(String compactToken) {
     if (compactToken == null || compactToken.isEmpty()) {

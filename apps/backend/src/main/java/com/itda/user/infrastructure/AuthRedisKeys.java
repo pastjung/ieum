@@ -1,5 +1,7 @@
 package com.itda.user.infrastructure;
 
+import com.itda.user.domain.AccountActionPurpose;
+
 /**
  * 인증 상태 Redis 키를 만드는 유일한 지점 (API 명세 3.6.1절 「Redis 키 표기」).
  *
@@ -31,6 +33,16 @@ public class AuthRedisKeys {
   /** {@code <prefix>:auth:{<userId>}:families} */
   public String families(long userId) {
     return userNamespace(userId) + ":families";
+  }
+
+  /** {@code <prefix>:auth:{<userId>}:action:<purpose>:<jti>} */
+  public String actionToken(long userId, AccountActionPurpose purpose, String jti) {
+    return userNamespace(userId) + ":action:" + purpose.name() + ":" + jti;
+  }
+
+  /** {@code <prefix>:auth:{<userId>}:action-current:<purpose>} */
+  public String actionCurrent(long userId, AccountActionPurpose purpose) {
+    return userNamespace(userId) + ":action-current:" + purpose.name();
   }
 
   private String userNamespace(long userId) {
