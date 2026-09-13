@@ -3,6 +3,7 @@ package com.itda.user.infrastructure;
 import com.itda.user.domain.Email;
 import com.itda.user.domain.User;
 import com.itda.user.domain.UserRepository;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -42,5 +43,10 @@ public class UserRepositoryImpl implements UserRepository {
   @Override
   public boolean existsByEmail(Email email) {
     return jpaRepository.existsByEmail(email);
+  }
+
+  @Override
+  public int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now) {
+    return jpaRepository.markEmailVerified(userId, expectedRowVersion, now);
   }
 }

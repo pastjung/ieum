@@ -136,7 +136,7 @@ final class NimbusActionTokenCodec {
     if (key.isEmpty() || !hasValidSignature(signedJwt, key.get())) {
       return invalid();
     }
-    return verifyClaims(signedJwt);
+    return verifyClaims(signedJwt, compactToken);
   }
 
   /** 3단계와 4단계. 헤더 값은 거부 판단에만 쓰고 검증기나 ring 선택에는 쓰지 않는다. */
@@ -167,8 +167,13 @@ final class NimbusActionTokenCodec {
     }
   }
 
-  /** 6단계. 필수 claim이 하나라도 없거나 형식이 어긋나면 거부한다. */
-  private ActionTokenVerification verifyClaims(SignedJWT signedJwt) {
+  /**
+   * 6단계. 필수 claim이 하나라도 없거나 형식이 어긋나면 거부한다.
+   *
+   * <p>통과한 결과에 {@code tokenHash}를 실어 보낸다. Redis 소비에 필요한 값인데 토큰 원문에서만 만들 수 있고, 원문을 가진 곳은 여기뿐이다 —
+   * application이 원문을 들고 다니지 않게 한다.
+   */
+  private ActionTokenVerification verifyClaims(SignedJWT signedJwt, String compactToken) {
     Map<String, Object> payload = signedJwt.getPayload().toJSONObject();
     if (payload == null) {
       return invalid();
@@ -190,7 +195,12 @@ final class NimbusActionTokenCodec {
       return invalid();
     }
     return new ActionTokenVerification.Verified(
-        userId.get(), this.purpose, jti.get(), issuedAt.get(), expiresAt.get());
+        userId.get(),
+        this.purpose,
+        jti.get(),
+        CompactTokenHasher.hash(compactToken),
+        issuedAt.get(),
+        expiresAt.get());
   }
 
   /**

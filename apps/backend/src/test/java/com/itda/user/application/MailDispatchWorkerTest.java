@@ -858,6 +858,11 @@ class MailDispatchWorkerTest {
     public boolean existsByEmail(Email email) {
       return this.user != null;
     }
+
+    @Override
+    public int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now) {
+      throw new UnsupportedOperationException("worker는 이메일 인증을 완료하지 않는다.");
+    }
   }
 
   private static final class RecordingActionTokenStore implements ActionTokenStore {

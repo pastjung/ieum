@@ -145,6 +145,8 @@ class NimbusActionTokenCodecTest {
                 USER_ID,
                 AccountActionPurpose.EMAIL_VERIFICATION,
                 token.jti(),
+                // 검증기가 만든 해시가 발급기가 Redis에 넣은 값과 같아야 소비 조건이 성립한다.
+                token.tokenHash(),
                 token.issuedAtEpochSecond(),
                 token.expiresAtEpochSecond()));
   }
@@ -159,6 +161,7 @@ class NimbusActionTokenCodecTest {
                 USER_ID,
                 AccountActionPurpose.PASSWORD_RESET,
                 token.jti(),
+                token.tokenHash(),
                 token.issuedAtEpochSecond(),
                 token.expiresAtEpochSecond()));
   }
@@ -521,18 +524,25 @@ class NimbusActionTokenCodecTest {
   @Test
   void 검증_결과도_불변식을_만족해야_만들어진다() {
     String uuid = UUID.randomUUID().toString();
+    String hash = issuedEmailToken().tokenHash();
 
     assertThatThrownBy(
             () ->
                 new ActionTokenVerification.Verified(
-                    0, AccountActionPurpose.EMAIL_VERIFICATION, uuid, 1, 2))
+                    0, AccountActionPurpose.EMAIL_VERIFICATION, uuid, hash, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new ActionTokenVerification.Verified(1, null, uuid, 1, 2))
+    assertThatThrownBy(() -> new ActionTokenVerification.Verified(1, null, uuid, hash, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () ->
                 new ActionTokenVerification.Verified(
-                    1, AccountActionPurpose.EMAIL_VERIFICATION, "not-a-uuid", 1, 2))
+                    1, AccountActionPurpose.EMAIL_VERIFICATION, "not-a-uuid", hash, 1, 2))
+        .isInstanceOf(IllegalArgumentException.class);
+    // 해시도 계약 형식(Base64URL 43자)을 만족해야 한다. Redis 키·조건에 그대로 실리는 값이다.
+    assertThatThrownBy(
+            () ->
+                new ActionTokenVerification.Verified(
+                    1, AccountActionPurpose.EMAIL_VERIFICATION, uuid, "short-hash", 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
   }
 }
