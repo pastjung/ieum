@@ -21,22 +21,28 @@ public class RefreshTokenConfiguration {
    * Refresh ring을 만들면서 Access ring과의 {@code kid} 중복을 함께 확인한다.
    *
    * <p>계약(API 명세 3.6.1절)은 {@code kid}가 세 ring을 통틀어 유일해야 한다고 정한다. 겹치면 어느 ring의 key로 검증할지 결정할 수 없고, 한
-   * ring의 유출 회전이 다른 ring의 토큰까지 끌고 들어간다. 두 ring을 모두 아는 지점이 여기뿐이라 여기서 검사한다.
+   * ring의 유출 회전이 다른 ring의 토큰까지 끌고 들어간다.
    *
-   * <p><b>아직 action ring은 없다.</b> 이번에 보장하는 것은 Access와 Refresh 사이의 유일성뿐이며, 세 ring 전체 유일성은 action
-   * ring이 생기는 이슈에서 같은 방식으로 확장해야 한다.
+   * <p>세 ring 전체 유일성은 {@link ActionTokenConfiguration}이 완성한다 — 세 ring을 모두 아는 지점이 거기뿐이다. 여기서는 그중
+   * Access↔Refresh 쌍을 맡는다.
    */
   @Bean
   public RefreshKeyRing refreshKeyRing(
       RefreshJwtProperties properties, AccessKeyRing accessKeyRing) {
     RefreshKeyRing refreshKeyRing = RefreshKeyRing.from(properties);
-    Set<String> shared = new TreeSet<>(accessKeyRing.kids());
-    shared.retainAll(refreshKeyRing.kids());
-    if (!shared.isEmpty()) {
-      // kid는 비밀값이 아니지만 어느 kid가 겹쳤는지까지 message에 넣을 이유는 없다.
-      throw new IllegalStateException("Access ring과 Refresh ring의 kid가 겹칩니다. 서로 다른 kid를 사용해 주세요.");
-    }
+    requireDistinctKids(accessKeyRing.kids(), refreshKeyRing.kids(), "Access", "Refresh");
     return refreshKeyRing;
+  }
+
+  /** kid는 비밀값이 아니지만 어느 kid가 겹쳤는지까지 message에 넣을 이유는 없다. */
+  static void requireDistinctKids(
+      Set<String> left, Set<String> right, String leftName, String rightName) {
+    Set<String> shared = new TreeSet<>(left);
+    shared.retainAll(right);
+    if (!shared.isEmpty()) {
+      throw new IllegalStateException(
+          leftName + " ring과 " + rightName + " ring의 kid가 겹칩니다. 서로 다른 kid를 사용해 주세요.");
+    }
   }
 
   @Bean

@@ -155,7 +155,53 @@ Access Token 검증 port와 사용자 인증 상태 판정(존재·`status`·이
 결정할 수 없기 때문이다. 인증 상태 키의 환경 이름은 `AUTH_REDIS_KEY_PREFIX`(`local`·`test`·`prod`)로 주입하며, **실행 프로필과 다르면 기동에 실패한다**
 (issuer 검증과 같은 규칙). DB index로 환경을 나누지 않는 이유는 Cluster에서 쓸 수 없고, 잘못된 설정이 조용히 다른 환경의
 데이터를 읽게 만들기 때문이다.
-action token은 아직 구현하지 않았다.
+
+**계정 작업 토큰(action token) 설정.** 이메일 인증과 비밀번호 재설정에 쓰는 단발성 토큰이다. Access·Refresh와 구분되는
+세 번째 ring을 쓴다 — `AUTH_ACTION_ACTIVE_KID`·`AUTH_ACTION_ACTIVE_KEY`(필수)·`AUTH_ACTION_RETIRED_KEYS`(선택).
+`issuer`는 Access·Refresh와 같은 `AUTH_JWT_ISSUER`를 공유한다. `kid`는 **세 ring 사이에서 모두 유일해야 하며** 겹치면
+기동에 실패한다.
+
+발급은 `action-current`를 읽어 그 값을 Lua에 기대값으로 함께 넘기는 **compare-and-set**이다. 스크립트는 쓰기 전에 `action-current`가
+그대로인지 확인하고, 달라졌으면 아무것도 바꾸지 않고 adapter에만 보이는 경쟁 결과를 돌려준다. adapter는 최신 값을 다시 읽어 최대 3회까지 재시도하고,
+그래도 밀리면 성공으로 단정하지 않고 `UNAVAILABLE`로 끝낸다. 이렇게 하지 않으면 동시 발급에서 `action-current`가 가리키지 않는데 상태만
+`ACTIVE`인 토큰이 남는다. 새 `jti`가 이미 있다는 `ALREADY_EXISTS`는 성격이 다르다 — application이 **새 토큰을 다시 발급해** 최대 3회
+시도한다(API 명세 3.6.1절).
+
+두 용도는 key ring을 공유하되 **발급기와 검증기는 용도별로 분리한다**(`EmailVerificationTokenIssuer`·
+`EmailVerificationTokenVerifier`·`PasswordResetTokenIssuer`·`PasswordResetTokenVerifier`). 검증 시점에 토큰 자신의
+`typ`·`purpose`를 읽어 검증기나 ring을 고르는 경로는 만들지 않는다 — 그런 구조는 공격자가 고른 값이 검증 규칙을 고르게
+한다. 각 검증기는 자기 기대값을 생성 시점에 고정하고 그와 다른 토큰은 전부 거부한다. 이메일 인증 24시간,
+비밀번호 재설정 30분이며 상태(1회 사용·무효화)는 Redis에 둔다. **action token용 DB 테이블은 만들지 않는다.**
+
+**메일 발송 작업(`mail_outbox`)과 worker.** 가입·재설정 요청은 같은 트랜잭션에서 `mail_outbox`에 PENDING 행 하나를
+남기고(`MailOutboxEnqueueService`), 별도의 `MailDispatchWorker`가 이를 선점해 action token을 발급하고 `MailProvider`
+port로 넘긴다. 여러 worker가 같은 행을 가져가지 않도록 선점·재시도·종결을 모두 **조건부 UPDATE 한 번**으로 쓰고 갱신된
+행 수로 경쟁 결과를 판정한다. 시도 상한 6회, backoff 30초·1분·2분·4분·8분(내부 상한 10분, 지터 ±20%), 가시성 만료 5분,
+종결 행 보존 7일은 ERD 3.5절 값 그대로다. 제공자 호출 결과는 API 명세 3.8절의 5종(`ACCEPTED`·`REJECTED`·
+`AUTH_CONFIG_ERROR`·`RETRYABLE`·`UNCERTAIN`)으로 닫아 두고, `mail_outbox.last_error_kind`는 그와 별개의 열린
+문자열이다 — 제공자 원문을 넣지 않고 내부 분류(`MAX_ATTEMPTS_EXCEEDED` 등)만 기록한다. 결과 다섯 종과 함께 **제공자가 지시한 절대 재시도 시각**을
+선택적으로 받는다(`MailSendOutcome`). 그 시각이 있으면 내부 backoff 상한으로 앞당기지 않고 그대로 쓰며, 기한 이상이면 `DELIVERY_DEADLINE_EXCEEDED`로
+종결한다. 요청 식별자는 batch가 아니라 **처리 시도마다** 새로 만들고 끝나면 이전 값으로 되돌린다. 한 작업에서 예상하지 못한 예외가 나도 batch의 뒤 작업은
+계속 처리하며, 그 작업은 가시성 만료 뒤 다시 선점된다. 예외 message는 로그에 남기지 않는다 — 제공자 client나 JDBC 예외에는 수신 주소·토큰·SQL이
+들어갈 수 있다.
+
+ERD 3.5절의 CHECK 네 개(`attempt_count >= 0`, `delivery_deadline_at > created_at`, PENDING·종결 상태의 컬럼 조합)는
+`@CheckConstraint`로 스키마에 만든다. 상태 전이가 엔티티를 거치지 않는 조건부 UPDATE라 Java 불변식만으로는 부족하기 때문이다. 다만 `ddl-auto: validate`는
+테이블·컬럼·타입까지만 보므로 **운영 스키마에 이 제약이 있다는 근거가 되지 않는다** — 배포 시 `information_schema.CHECK_CONSTRAINTS`로 따로
+확인한다.
+
+**실제 메일 제공자 adapter는 아직 없다.** 운영 코드에는 발송 성공을 가장하는 no-op adapter를 두지 않는다.
+`MailDispatchConfiguration`은 `MailOutboxEnqueueService`와 설정만 등록하고 **`MailDispatchWorker` 빈은 만들지 않는다** —
+`@ConditionalOnBean`으로 "있으면 만든다"를 쓰면 판정이 빈 등록 순서에 좌우돼, 후속 이슈에서 provider를 추가했는데 worker가
+조용히 빠진 채 기동이 성공할 수 있기 때문이다(요청 API는 계속 202를 반환하고 메일만 나가지 않는 상태). 그래서 provider adapter가
+생기는 후속 이슈에서 **provider와 worker를 같은 `@Configuration`에 함께** 조립한다. 지금 worker를 쓰는 곳은 stub provider와
+함께 직접 조립하는 테스트뿐이며 `@EnableScheduling`도 켜지 않는다. 제공자 선택·자격 증명·실제 링크와 본문 template·scheduler
+활성화는 후속 이슈에서 다룬다. `PROVIDER_ACCEPTED`는 **제공자가 접수했다**는 뜻이며 수신함 도달을 뜻하지 않는다.
+worker가 제공자 호출 뒤 DB 갱신에 실패하면 같은 메일이 다시 나갈 수 있다 — 이 구조는 at-least-once이고 exactly-once가
+아니다.
+
+**`mail_outbox` 배포 경계.** `prod`는 `ddl-auto: validate`라서 이 테이블이 운영 스키마에 먼저 있어야 기동한다.
+`local`(`update`)·`test`(`create-drop`)는 자동 반영된다.
 
 **`users.auth_version` 배포 경계.** `prod`는 `ddl-auto: validate`라서 이 컬럼이 운영 스키마에 먼저 있어야 기동한다.
 `local`(`update`)·`test`(`create-drop`)는 자동 반영된다.

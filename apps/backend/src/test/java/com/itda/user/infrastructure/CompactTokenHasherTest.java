@@ -6,13 +6,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.Base64;
 import org.junit.jupiter.api.Test;
 
-class RefreshTokenHasherTest {
+class CompactTokenHasherTest {
 
   private static final String SAMPLE = "test-compact-value";
 
   @Test
   void 계약이_정한_인코딩으로_해시한다() {
-    String hash = RefreshTokenHasher.hash(SAMPLE);
+    String hash = CompactTokenHasher.hash(SAMPLE);
 
     // SHA-256을 Base64URL(padding 없음)로 — 32바이트가 43자가 된다.
     assertThat(hash).hasSize(43).doesNotContain("=").doesNotContain("+").doesNotContain("/");
@@ -21,24 +21,24 @@ class RefreshTokenHasherTest {
 
   @Test
   void 같은_값은_같은_해시가_된다() {
-    assertThat(RefreshTokenHasher.hash(SAMPLE)).isEqualTo(RefreshTokenHasher.hash(SAMPLE));
+    assertThat(CompactTokenHasher.hash(SAMPLE)).isEqualTo(CompactTokenHasher.hash(SAMPLE));
   }
 
   @Test
   void 다른_값은_다른_해시가_된다() {
-    assertThat(RefreshTokenHasher.hash(SAMPLE)).isNotEqualTo(RefreshTokenHasher.hash(SAMPLE + "x"));
+    assertThat(CompactTokenHasher.hash(SAMPLE)).isNotEqualTo(CompactTokenHasher.hash(SAMPLE + "x"));
   }
 
   @Test
   void 해시에_원문이_남지_않는다() {
-    assertThat(RefreshTokenHasher.hash(SAMPLE)).doesNotContain(SAMPLE);
+    assertThat(CompactTokenHasher.hash(SAMPLE)).doesNotContain(SAMPLE);
   }
 
   @Test
   void 빈_값은_거부하고_입력을_message에_넣지_않는다() {
-    assertThatThrownBy(() -> RefreshTokenHasher.hash(null))
+    assertThatThrownBy(() -> CompactTokenHasher.hash(null))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> RefreshTokenHasher.hash(""))
+    assertThatThrownBy(() -> CompactTokenHasher.hash(""))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("해시할 토큰 값이 없습니다.");
   }

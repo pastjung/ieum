@@ -20,7 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 class LuaRefreshTokenLookupRedisTest extends RefreshTokenRedisTestBase {
 
   private static String someHash() {
-    return RefreshTokenHasher.hash("header.payload." + UUID.randomUUID());
+    return CompactTokenHasher.hash("header.payload." + UUID.randomUUID());
   }
 
   private RefreshTokenLookupResult lookup(String jti, String tokenHash) {
