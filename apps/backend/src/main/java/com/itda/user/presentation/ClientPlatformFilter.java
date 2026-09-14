@@ -43,6 +43,21 @@ public class ClientPlatformFilter extends OncePerRequestFilter {
   /** context-path 안의 경로. 등록 시 url pattern으로도 쓴다. */
   public static final String LOGIN_PATH = "/auth-sessions";
 
+  /** Access Token 갱신 (API 명세 3.3.1절). */
+  public static final String ACCESS_TOKEN_PATH = "/access-tokens";
+
+  /** 로그아웃 — 현재 Refresh 계열 폐기 (API 명세 3.3.1절). */
+  public static final String REVOCATION_PATH = "/auth-session-revocations";
+
+  /**
+   * 플랫폼 헤더를 필수로 받는 세 경로 (API 명세 3.3절).
+   *
+   * <p>목록을 여기에 두는 이유는 filter가 "어디에 걸리는지"를 스스로 말하게 하기 위해서다. 등록 설정에만 있으면 경로가 늘어날 때 filter를 읽는 사람이 적용
+   * 범위를 알 수 없다.
+   */
+  public static final java.util.List<String> PATHS =
+      java.util.List.of(LOGIN_PATH, ACCESS_TOKEN_PATH, REVOCATION_PATH);
+
   @Override
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)

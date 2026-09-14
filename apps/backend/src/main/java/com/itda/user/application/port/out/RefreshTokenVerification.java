@@ -8,11 +8,17 @@ package com.itda.user.application.port.out;
  */
 public sealed interface RefreshTokenVerification {
 
-  /** 서명과 모든 claim 검증을 통과했다. Redis 상태 확인은 아직 남아 있다. */
+  /**
+   * 서명과 모든 claim 검증을 통과했다. Redis 상태 확인은 아직 남아 있다.
+   *
+   * @param tokenHash Redis 상태를 조회·회전할 때 쓸 값. <b>원문을 이미 들고 있는 발급·검증기가 계산해 실어 준다</b> — 상위 계층이 계산하려면
+   *     compact 원문을 들고 다니며 infrastructure의 해시 구현을 import해야 하고, 그러면 원문이 application까지 퍼진다
+   */
   record Verified(
       long userId,
       String familyId,
       String jti,
+      String tokenHash,
       long authVersion,
       long issuedAtEpochSecond,
       long expiresAtEpochSecond)
@@ -23,10 +29,11 @@ public sealed interface RefreshTokenVerification {
       if (userId <= 0) {
         throw new IllegalArgumentException("검증된 사용자 식별자가 올바르지 않습니다.");
       }
-      // 검증을 통과했다고 말하는 식별자는 저장 계약과 같은 형식이어야 한다.
+      // 검증을 통과했다고 말하는 식별자·해시는 저장 계약과 같은 형식이어야 한다.
       // 규칙은 RefreshTokenRecord 한 곳에만 두고 여기서 재사용한다.
       RefreshTokenRecord.requireFamilyId(familyId);
       RefreshTokenRecord.requireJti(jti);
+      RefreshTokenRecord.requireTokenHash(tokenHash);
       if (authVersion < 0) {
         throw new IllegalArgumentException("검증된 인증 세대 값이 올바르지 않습니다.");
       }

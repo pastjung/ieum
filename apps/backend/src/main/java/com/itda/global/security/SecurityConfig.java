@@ -26,9 +26,25 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
  *
  * <p>세션을 만들지 않는다. 인증 근거는 매 요청의 Access Token이며, 서버가 상태를 들고 있으면 {@code auth_version} 기반 무효화가 우회된다.
  *
- * <p>CSRF는 끈다. 현재 자격 증명 전달 경로가 Authorization 헤더뿐이라 브라우저가 자동으로 실어 보내는 값이 없기 때문이다. <b>WEB Refresh
- * Token을 {@code __Host-refreshToken} 쿠키로 받는 endpoint가 추가되면 그 경로의 CSRF·Origin 정책을 다시 판단해야 한다</b> —
- * 쿠키는 브라우저가 자동으로 붙이므로 지금의 판단 근거가 그대로 성립하지 않는다.
+ * <p><b>CSRF는 끈 채로 두며 이는 재판단을 마친 결정이다.</b> WEB Refresh Token을 {@code __Host-refreshToken} 쿠키로 받는
+ * endpoint가 실제로 추가됐다 — {@code POST /access-tokens}(갱신)와 {@code POST
+ * /auth-session-revocations}(로그아웃)다. 쿠키는 브라우저가 자동으로 붙이므로 "자격 증명이 Authorization 헤더뿐"이라던 이전 근거는 더 이상
+ * 성립하지 않는다. 별도 Spring CSRF token을 도입하는 대신 다음 조합을 방어로 채택했다.
+ *
+ * <ul>
+ *   <li>{@code SameSite=Strict} — 쿠키가 유일한 자격 증명인데 브라우저가 cross-site 요청에는 이 쿠키를 <b>싣지 않는다</b>. 위조 요청은
+ *       토큰 없는 요청이 되어 {@code 401}로 끝난다
+ *   <li>{@code __Host-} 접두사 — {@code Secure}·{@code Path=/}·{@code Domain} 생략을 브라우저가 강제해 하위 도메인에서
+ *       쿠키를 덮어쓸 수 없다
+ *   <li>필수 커스텀 헤더 {@code X-Client-Platform} — 두 endpoint가 이 헤더를 요구하므로 요청이 simple request가 될 수 없고
+ *       반드시 preflight를 거친다
+ *   <li>기존 {@code WebConfig}의 정확한 Origin 허용 목록 — 목록에 없는 Origin은 그 preflight에서 막힌다
+ * </ul>
+ *
+ * <p>Origin 허용 목록을 업무 필터에서 다시 관리하지 않는다. 목록이 두 곳으로 갈라지면 한쪽만 바뀌는 사고가 난다.
+ *
+ * <p><b>다음 중 하나라도 바뀌면 이 판단을 다시 받아야 한다</b> — cross-site 배포, {@code SameSite}를 {@code None}으로 변경, 필수
+ * 커스텀 헤더 제거, CORS 허용 Origin·헤더 정책 완화.
  *
  * <p>CORS는 기존 {@code WebConfig}의 MVC 설정을 그대로 재사용한다. Security chain이 DispatcherServlet보다 앞에 있어 여기서
  * CORS를 켜 두지 않으면 preflight가 먼저 막힌다. 허용 Origin 목록은 이 이슈에서 바꾸지 않는다.
