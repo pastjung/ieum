@@ -2,7 +2,7 @@ package com.itda.support.security;
 
 import com.itda.user.domain.Email;
 import com.itda.user.domain.User;
-import com.itda.user.domain.UserRepository;
+import com.itda.user.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;

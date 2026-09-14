@@ -1,6 +1,6 @@
 package com.itda.support.security;
 
-import com.itda.user.infrastructure.AccessJwtProperties;
+import com.itda.global.security.AccessJwtProperties;
 import java.security.SecureRandom;
 import java.util.Base64;
 

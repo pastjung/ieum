@@ -2,8 +2,7 @@ package com.itda.global.security;
 
 import com.itda.global.error.ErrorCode;
 import com.itda.global.error.ErrorCodeAttribute;
-import com.itda.user.application.AccessAuthenticationResult;
-import com.itda.user.application.AccessAuthenticationService;
+import com.itda.user.service.AccessAuthenticationService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -54,18 +53,19 @@ public class AccessTokenAuthenticationFilter extends OncePerRequestFilter {
       chain.doFilter(request, response);
       return;
     }
-    AccessAuthenticationResult result = this.accessAuthenticationService.authenticate(token.get());
+    AccessAuthenticationService.Result result =
+        this.accessAuthenticationService.authenticate(token.get());
     switch (result) {
-      case AccessAuthenticationResult.Authenticated authenticated ->
+      case AccessAuthenticationService.Result.Authenticated authenticated ->
           authenticateAndContinue(authenticated, request, response, chain);
-      case AccessAuthenticationResult.Rejected ignored -> chain.doFilter(request, response);
-      case AccessAuthenticationResult.Unavailable ignored ->
+      case AccessAuthenticationService.Result.Rejected ignored -> chain.doFilter(request, response);
+      case AccessAuthenticationService.Result.Unavailable ignored ->
           sendAuthStateUnavailable(request, response);
     }
   }
 
   private void authenticateAndContinue(
-      AccessAuthenticationResult.Authenticated authenticated,
+      AccessAuthenticationService.Result.Authenticated authenticated,
       HttpServletRequest request,
       HttpServletResponse response,
       FilterChain chain)

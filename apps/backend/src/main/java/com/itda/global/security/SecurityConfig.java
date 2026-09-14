@@ -2,7 +2,7 @@ package com.itda.global.security;
 
 import static org.springframework.security.config.Customizer.withDefaults;
 
-import com.itda.user.application.AccessAuthenticationService;
+import com.itda.user.service.AccessAuthenticationService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;

@@ -163,7 +163,7 @@ Origin에 따른 MOBILE 주장 거부와 로그아웃 토큰 상태 판정은 3.
 
 Redis 회전에 성공한 뒤 응답 전에 `users.auth_version`과 `status`를 다시 확인한다. 이 재확인은 선택이 아니라 필수다. `auth_version`이 Snapshot과 달라졌거나 `status`가 ACTIVE가 아니면 해당 family를 폐기하고 신규 Access·Refresh를 반환하지 않으며 `401 INVALID_REFRESH_TOKEN`으로 응답한다. DB 재확인 자체가 실패하면 family 폐기를 가능한 범위에서 시도하되 신규 토큰을 반환하지 않으며, 그때는 `503 AUTH_STATE_UNAVAILABLE`이다. 회전 전 사용자 조회가 실패한 경우를 포함한 저장소 장애 처리는 3.6.2절을 따른다. 어떤 경우에도 기존 Snapshot의 `authVersion`을 최신 값으로 바꿔 발급하지 않는다. 재확인 이후에 발생하는 경쟁의 최종 차단은 보호 API의 DB `authVersion` 비교가 담당한다.
 
-인증 응답의 공통 필드는 `accessToken`·`tokenType`·`accessTokenExpiresAt`·`user`이며 모두 required·non-null이다. `tokenType`은 고정 문자열 `Bearer`, `accessTokenExpiresAt`은 ISO 8601 UTC, `user`는 3.2.1절의 사용자 요약이다. MOBILE 응답은 `refreshToken`과 `refreshTokenExpiresAt`을 추가하며, 두 필드 모두 required·non-null이다. `refreshTokenExpiresAt`은 ISO 8601 UTC다. **WEB body에는 이 두 필드를 어떤 경우에도 포함하지 않는다.** 구현은 WEB과 MOBILE의 응답 타입을 분리하고, application은 플랫폼 중립 결과를 반환하며 presentation이 플랫폼별 HTTP 응답으로 변환한다.
+인증 응답의 공통 필드는 `accessToken`·`tokenType`·`accessTokenExpiresAt`·`user`이며 모두 required·non-null이다. `tokenType`은 고정 문자열 `Bearer`, `accessTokenExpiresAt`은 ISO 8601 UTC, `user`는 3.2.1절의 사용자 요약이다. MOBILE 응답은 `refreshToken`과 `refreshTokenExpiresAt`을 추가하며, 두 필드 모두 required·non-null이다. `refreshTokenExpiresAt`은 ISO 8601 UTC다. **WEB body에는 이 두 필드를 어떤 경우에도 포함하지 않는다.** 구현은 WEB과 MOBILE의 응답 타입을 분리하고, Service는 플랫폼 중립 결과를 반환하며 Controller가 플랫폼별 HTTP 응답으로 변환한다.
 
 WEB 쿠키는 로그인과 정상 갱신에서 같은 규칙으로 발급한다.
 
@@ -240,7 +240,7 @@ Redis action token의 적격 조건은 `action-current`가 요청 `jti`를 가�
 
 ### 3.4.2 비밀번호 재설정 API 계약 (요청·완료)
 
-두 API는 `X-Client-Platform`을 읽지 않는다. WEB과 MOBILE이 같은 요청 body·상태 코드·오류를 쓰며 쿠키를 설정하지도 읽지도 않는다. presentation에 플랫폼 분기를 두지 않는다.
+두 API는 `X-Client-Platform`을 읽지 않는다. WEB과 MOBILE이 같은 요청 body·상태 코드·오류를 쓰며 쿠키를 설정하지도 읽지도 않는다. Controller에 플랫폼 분기를 두지 않는다.
 
 **`POST /api/v1/password-reset-requests`**
 
@@ -413,7 +413,7 @@ action의 `CONSUMED`·`INVALIDATED`와 Refresh의 `ROTATED` 상태는 원래 `ex
 | `issueActionToken` | 같은 사용자·용도의 이전 활성 토큰을 `INVALIDATED`로 바꾸고 새 토큰을 `ACTIVE`로 등록하며 `action-current`를 새 `jti`로 갱신. 같은 `jti`가 이미 있으면 덮어쓰지 않는다 | `OK` / `ALREADY_EXISTS` |
 | `consumeActionToken` | `action-current`가 가리키는 `jti`와 요청 `jti`의 일치, 토큰 `ACTIVE`, `tokenHash` 일치를 한 연산에서 확인한 뒤 토큰을 `CONSUMED`로 바꾸고 `action-current`가 더 이상 활성 토큰을 가리키지 않도록 함께 정리한다 | `OK` / `NOT_FOUND` / `NOT_CURRENT` / `HASH_MISMATCH` / `ALREADY_CONSUMED` / `INVALIDATED` |
 
-`ALREADY_EXISTS`는 새 `jti` 또는 `familyId`가 이미 존재해 덮어쓰기를 거부한 경우다. application은 새 UUID를 만들어 유한 횟수로 다시 시도하며, 이 내부 사유를 HTTP 응답에 노출하지 않는다.
+`ALREADY_EXISTS`는 새 `jti` 또는 `familyId`가 이미 존재해 덮어쓰기를 거부한 경우다. Service는 새 UUID를 만들어 유한 횟수로 다시 시도하며, 이 내부 사유를 HTTP 응답에 노출하지 않는다.
 
 접근하는 모든 키를 `KEYS` 인자로 명시해 전달하고 스크립트 안에서 키 이름을 조립하지 않는다. 한 스크립트가 접근하는 키는 같은 `userId` hash tag에 둔다. `rotateRefresh`가 기존 토큰의 `ROTATED`·`REVOKED`를 감지하면 같은 스크립트 안에서 해당 family를 `REVOKED`로 바꿔 탐지와 폐기 사이에 다른 요청이 끼어들지 못하게 한다. 어떤 스크립트도 `families` ZSET 전체를 무제한 순회하지 않으며, 순회가 필요하면 배치 단위로 끊는다. Redis는 단일 스레드이므로 긴 순회가 전체 서비스를 멈추기 때문이다. `EVALSHA`는 `NOSCRIPT` 오류가 났을 때만 `EVAL`로 재시도한다.
 
@@ -423,9 +423,9 @@ Redis token·family 값에는 `authVersion`을 복제하지 않는다. 권위가
 
 갱신은 DB에서 확인한 Snapshot의 `auth_version`을 신규 토큰 claim에 그대로 쓴다. 회전 도중 `auth_version`이 증가해도 신규 토큰이 새 세대로 승격되지 않게 하기 위해서다. 회전 후 DB 재확인은 필수이며 상세는 3.3.1절을 따른다. 재확인 직후에도 다시 경쟁이 생길 수 있으므로 저장소 간 완전한 원자성은 주장하지 않는다. 어떤 경쟁에서도 새로 발급된 Access의 보호 API 사용이 DB `auth_version` 비교로 거부된다는 것이 불변식이며, 최종 차단 권위는 보호 API의 DB 비교다.
 
-**내부 사유의 비노출.** 위 반환 사유는 application 내부 판정용이다. `HASH_MISMATCH`·`REUSED`·`NOT_CURRENT`·`ALREADY_EXISTS` 같은 내부 원인을 HTTP 응답 body나 헤더에 노출하지 않으며, 외부 응답은 3.5절의 일반화된 code만 사용한다.
+**내부 사유의 비노출.** 위 반환 사유는 Service 내부 판정용이다. `HASH_MISMATCH`·`REUSED`·`NOT_CURRENT`·`ALREADY_EXISTS` 같은 내부 원인을 HTTP 응답 body나 헤더에 노출하지 않으며, 외부 응답은 3.5절의 일반화된 code만 사용한다.
 
-**계층 경계.** application은 공통 JWT·Redis port를 사용하고 WEB과 MOBILE은 동일한 infrastructure adapter를 사용한다. 플랫폼 분기는 presentation의 쿠키·body 변환에만 둔다.
+**계층 경계.** Service는 공통 JWT 발급·검증 계약과 Redis 저장소 계약을 사용하고 WEB과 MOBILE은 동일한 JWT·Redis 구현을 사용한다. 플랫폼 분기는 Controller의 쿠키·body 변환에만 둔다.
 
 **동시성 검증.** 후속 구현은 실제 Redis를 사용해 동일 Refresh Token 동시 갱신에서 하나만 성공하는 것, 재사용 감지 후 family가 폐기되는 것, 동일 action token 동시 소비에서 하나만 성공하는 것을 검증한다. Redis mock만으로 원자성 검증이 완료되었다고 판단하지 않는다.
 

@@ -2,7 +2,7 @@ package com.itda.user.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.itda.user.infrastructure.UserJpaRepository;
+import com.itda.user.repository.UserJpaRepository;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

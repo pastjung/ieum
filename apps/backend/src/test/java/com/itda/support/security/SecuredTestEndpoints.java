@@ -2,9 +2,9 @@ package com.itda.support.security;
 
 import com.itda.global.security.AccessAuthenticationEntryPoint;
 import com.itda.global.security.AccessTokenAuthenticationFilter;
+import com.itda.global.security.AccessTokenVerifier;
 import com.itda.global.security.AuthenticatedUser;
-import com.itda.user.application.AccessAuthenticationService;
-import com.itda.user.application.port.out.AccessTokenVerifier;
+import com.itda.user.service.AccessAuthenticationService;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.boot.test.context.TestConfiguration;
