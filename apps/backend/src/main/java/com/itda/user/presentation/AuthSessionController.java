@@ -3,8 +3,6 @@ package com.itda.user.presentation;
 import com.itda.user.application.AuthSession;
 import com.itda.user.application.LoginService;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -41,20 +39,9 @@ public class AuthSessionController {
 
     AuthSession session = this.loginService.login(request.toCommand());
 
-    return platform == ClientPlatform.WEB ? web(session) : mobile(session);
-  }
-
-  /** Refresh Token은 body가 아니라 {@code __Host-refreshToken} 쿠키로만 나간다. */
-  private static ResponseEntity<WebAuthSessionResponse> web(AuthSession session) {
-    return ResponseEntity.status(HttpStatus.CREATED)
-        .header(
-            HttpHeaders.SET_COOKIE,
-            RefreshTokenCookie.issue(session.refreshToken(), session.refreshTokenExpiresAt()))
-        .body(WebAuthSessionResponse.from(session));
-  }
-
-  /** 쿠키를 설정하지 않는다. 네이티브 앱에는 쿠키 저장소가 없고, 있어도 OS 보안 저장소가 아니다. */
-  private static ResponseEntity<MobileAuthSessionResponse> mobile(AuthSession session) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(MobileAuthSessionResponse.from(session));
+    // 응답 조립은 갱신 API와 공유한다. 계약이 두 API에 같은 인증 응답을 쓰기 때문이다.
+    return platform == ClientPlatform.WEB
+        ? AuthSessionResponses.web(session)
+        : AuthSessionResponses.mobile(session);
   }
 }

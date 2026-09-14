@@ -133,7 +133,7 @@ public class NimbusRefreshTokenCodec implements RefreshTokenIssuer, RefreshToken
     if (key.isEmpty() || !hasValidSignature(signedJwt, key.get())) {
       return invalid();
     }
-    return verifyClaims(signedJwt);
+    return verifyClaims(signedJwt, compactToken);
   }
 
   /** 3단계와 4단계. 헤더 값은 거부 판단에만 쓰고 검증기 선택에는 쓰지 않는다. */
@@ -164,8 +164,13 @@ public class NimbusRefreshTokenCodec implements RefreshTokenIssuer, RefreshToken
     }
   }
 
-  /** 6단계. 필수 claim이 하나라도 없거나 형식이 어긋나면 거부한다. */
-  private RefreshTokenVerification verifyClaims(SignedJWT signedJwt) {
+  /**
+   * 6단계. 필수 claim이 하나라도 없거나 형식이 어긋나면 거부한다.
+   *
+   * <p>모든 검증을 통과한 뒤에만 {@code tokenHash}를 만든다. 상위 계층은 Redis 상태를 조회·회전할 때 이 값이 필요한데, 원문을 들고 올라가면
+   * application이 해시 구현을 알아야 하고 원문이 그만큼 멀리 퍼진다. 원문을 이미 갖고 있는 이 자리에서 계산해 결과에만 싣는다.
+   */
+  private RefreshTokenVerification verifyClaims(SignedJWT signedJwt, String compactToken) {
     Map<String, Object> payload = signedJwt.getPayload().toJSONObject();
     if (payload == null) {
       return invalid();
@@ -195,6 +200,7 @@ public class NimbusRefreshTokenCodec implements RefreshTokenIssuer, RefreshToken
         userId.get(),
         familyId.get(),
         jti.get(),
+        CompactTokenHasher.hash(compactToken),
         authVersion.get(),
         issuedAt.get(),
         expiresAt.get());

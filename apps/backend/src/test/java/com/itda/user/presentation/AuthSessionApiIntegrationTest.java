@@ -564,6 +564,9 @@ class AuthSessionApiIntegrationTest {
         .isLessThan(
             org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties
                 .DEFAULT_FILTER_ORDER);
-    assertThat(registration.getUrlPatterns()).containsExactly(ClientPlatformFilter.LOGIN_PATH);
+    // 플랫폼 헤더가 필수인 세 경로에만 걸린다. 다른 공개 API가 이 헤더를 요구하게 되면 안 된다.
+    assertThat(registration.getUrlPatterns())
+        .containsExactlyInAnyOrderElementsOf(ClientPlatformFilter.PATHS)
+        .contains(ClientPlatformFilter.LOGIN_PATH);
   }
 }

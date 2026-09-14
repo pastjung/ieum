@@ -29,6 +29,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /** Refresh 검증은 Access와 같은 순서를 따르지만 다른 코드 경로다. 두 종류를 바꿔 넣는 조합이 구조적으로 실패하는지까지 확인한다. */
@@ -106,9 +107,23 @@ class NimbusRefreshTokenCodecTest {
                 USER_ID,
                 this.familyId,
                 token.jti(),
+                token.tokenHash(),
                 0,
                 token.issuedAtEpochSecond(),
                 token.expiresAtEpochSecond()));
+  }
+
+  @Test
+  void 검증_결과의_해시는_제출한_원문에서_계산한_값이다() {
+    IssuedRefreshToken token = issued();
+
+    RefreshTokenVerification.Verified verified =
+        (RefreshTokenVerification.Verified) this.codec.verify(token.compactToken());
+
+    // 상위 계층이 원문을 들고 다니며 다시 해시하지 않도록 검증기가 실어 준다.
+    assertThat(verified.tokenHash()).isEqualTo(CompactTokenHasher.hash(token.compactToken()));
+    // 계약이 정한 SHA-256 Base64URL(padding 없음) 43자.
+    assertThat(verified.tokenHash()).hasSize(43).matches("^[A-Za-z0-9_-]{43}$");
   }
 
   @Test
@@ -432,7 +447,9 @@ class NimbusRefreshTokenCodecTest {
         .isEqualTo("RefreshTokenVerification.Verified[REDACTED]")
         .doesNotContain("42")
         .doesNotContain(this.familyId)
-        .doesNotContain(token.jti());
+        .doesNotContain(token.jti())
+        .doesNotContain(token.tokenHash())
+        .doesNotContain(token.compactToken());
   }
 
   @Test
@@ -481,9 +498,11 @@ class NimbusRefreshTokenCodecTest {
             () -> new IssuedRefreshToken(SAMPLE_COMPACT_VALUE, "short-hash", uuid, uuid, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
 
-    assertThatThrownBy(() -> new RefreshTokenVerification.Verified(USER_ID, value, uuid, 0, 1, 2))
+    assertThatThrownBy(
+            () -> new RefreshTokenVerification.Verified(USER_ID, value, uuid, hash, 0, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new RefreshTokenVerification.Verified(USER_ID, uuid, value, 0, 1, 2))
+    assertThatThrownBy(
+            () -> new RefreshTokenVerification.Verified(USER_ID, uuid, value, hash, 0, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
@@ -499,7 +518,9 @@ class NimbusRefreshTokenCodecTest {
                     SAMPLE_COMPACT_VALUE, issued().tokenHash(), rejected, rejected, 1, 2))
         .hasMessageNotContaining(rejected);
     assertThatThrownBy(
-            () -> new RefreshTokenVerification.Verified(USER_ID, rejected, rejected, 0, 1, 2))
+            () ->
+                new RefreshTokenVerification.Verified(
+                    USER_ID, rejected, rejected, issued().tokenHash(), 0, 1, 2))
         .hasMessageNotContaining(rejected);
   }
 
@@ -513,27 +534,41 @@ class NimbusRefreshTokenCodecTest {
 
   @Test
   void 검증_결과도_불변식을_만족해야_만들어진다() {
+    String hash = issued().tokenHash();
     assertThatThrownBy(
             () ->
                 new RefreshTokenVerification.Verified(
-                    0, this.familyId, UUID.randomUUID().toString(), 0, 1, 2))
+                    0, this.familyId, UUID.randomUUID().toString(), hash, 0, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () ->
                 new RefreshTokenVerification.Verified(
-                    1, " ", UUID.randomUUID().toString(), 0, 1, 2))
+                    1, " ", UUID.randomUUID().toString(), hash, 0, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new RefreshTokenVerification.Verified(1, this.familyId, " ", 0, 1, 2))
+    assertThatThrownBy(
+            () -> new RefreshTokenVerification.Verified(1, this.familyId, " ", hash, 0, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () ->
                 new RefreshTokenVerification.Verified(
-                    1, this.familyId, UUID.randomUUID().toString(), -1, 1, 2))
+                    1, this.familyId, UUID.randomUUID().toString(), hash, -1, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () ->
                 new RefreshTokenVerification.Verified(
-                    1, this.familyId, UUID.randomUUID().toString(), 0, 2, 2))
+                    1, this.familyId, UUID.randomUUID().toString(), hash, 0, 2, 2))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = {"", "short-hash", "not+base64url/value+padding==", "   "})
+  void 저장_계약과_다른_해시로는_검증_결과를_만들_수_없다(String invalidHash) {
+    // 검증을 통과했다고 말하는 값은 그대로 Redis 조회 인자가 된다. 형식 규칙은 RefreshTokenRecord 한 곳에서만 정의한다.
+    assertThatThrownBy(
+            () ->
+                new RefreshTokenVerification.Verified(
+                    1, this.familyId, UUID.randomUUID().toString(), invalidHash, 0, 1, 2))
         .isInstanceOf(IllegalArgumentException.class);
   }
 

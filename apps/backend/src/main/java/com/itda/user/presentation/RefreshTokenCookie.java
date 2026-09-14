@@ -30,6 +30,17 @@ final class RefreshTokenCookie {
   private static final DateTimeFormatter EXPIRES_FORMATTER =
       DateTimeFormatter.RFC_1123_DATE_TIME.withLocale(Locale.ROOT).withZone(ZoneOffset.UTC);
 
+  /**
+   * 발급과 삭제가 공유하는 속성이다.
+   *
+   * <p>계약은 삭제 쿠키의 속성을 "발급과 동일"로 정했다. 브라우저는 이름·{@code Path}·{@code Domain}·{@code Secure}가 모두 같아야 같은
+   * 쿠키로 보고 덮어쓰므로, 한쪽만 바뀌면 삭제가 조용히 실패하고 브라우저에 토큰이 남는다. 그래서 문자열을 한 곳에 둔다.
+   */
+  private static final String SHARED_ATTRIBUTES = "; Path=/; Secure; HttpOnly; SameSite=Strict";
+
+  /** 삭제 쿠키의 {@code Expires}. 값 자체에 의미는 없고 이미 지난 시각이기만 하면 된다. */
+  private static final Instant DELETED_EXPIRES_AT = Instant.EPOCH;
+
   private RefreshTokenCookie() {}
 
   /**
@@ -45,6 +56,21 @@ final class RefreshTokenCookie {
         + MAX_AGE_SECONDS
         + "; Expires="
         + EXPIRES_FORMATTER.format(Instant.ofEpochSecond(expiresAt.toEpochSecond(ZoneOffset.UTC)))
-        + "; Path=/; Secure; HttpOnly; SameSite=Strict";
+        + SHARED_ATTRIBUTES;
+  }
+
+  /**
+   * 삭제용 {@code Set-Cookie} 값 (API 명세 3.3.1절 「WEB 쿠키」 표의 삭제 열).
+   *
+   * <p>빈 값에 {@code Max-Age=0}과 과거 {@code Expires}를 함께 싣는다. {@code Max-Age}만 이해하는 클라이언트와 {@code
+   * Expires}만 이해하는 클라이언트가 모두 같은 결과를 내게 하기 위해서다.
+   *
+   * <p>이 값은 로그아웃 <b>판정 결과와 무관하게</b> 나간다 (3.3.1·3.6.2절). 서버 상태를 정리하지 못했더라도 브라우저에 토큰을 남길 이유가 없다.
+   */
+  static String delete() {
+    return NAME
+        + "=; Max-Age=0; Expires="
+        + EXPIRES_FORMATTER.format(DELETED_EXPIRES_AT)
+        + SHARED_ATTRIBUTES;
   }
 }

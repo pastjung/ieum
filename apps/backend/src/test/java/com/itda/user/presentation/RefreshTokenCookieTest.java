@@ -42,7 +42,7 @@ class RefreshTokenCookieTest {
   @BeforeEach
   void setUp() {
     String header = RefreshTokenCookie.issue(SAMPLE_COMPACT_VALUE, FIXED_EXPIRES_AT);
-    List<String> parts = Arrays.stream(header.split(";")).map(String::trim).toList();
+    List<String> parts = split(header);
 
     String nameAndValue = parts.get(0);
     this.cookieName = nameAndValue.substring(0, nameAndValue.indexOf('='));
@@ -52,12 +52,7 @@ class RefreshTokenCookieTest {
   }
 
   private String attributeValue(String name) {
-    String prefix = name + "=";
-    return this.attributes.stream()
-        .filter(attribute -> attribute.startsWith(prefix))
-        .map(attribute -> attribute.substring(prefix.length()))
-        .findFirst()
-        .orElseThrow(() -> new IllegalStateException(name + " 속성이 없습니다."));
+    return attributeValue(this.attributes, name);
   }
 
   // ---------- 만료 시각 ----------
@@ -114,5 +109,66 @@ class RefreshTokenCookieTest {
     // __Host- 접두사는 Domain을 금지한다. 붙이면 브라우저가 쿠키를 통째로 버린다.
     assertThat(this.attributes)
         .noneMatch(attribute -> attribute.toLowerCase(Locale.ROOT).startsWith("domain="));
+  }
+
+  // ---------- 삭제 쿠키 ----------
+
+  @Test
+  void 삭제_쿠키는_같은_이름에_빈_값이다() {
+    List<String> parts = split(RefreshTokenCookie.delete());
+
+    // 이름이 다르면 브라우저가 다른 쿠키로 보고 기존 값을 그대로 둔다.
+    assertThat(parts.get(0)).isEqualTo(RefreshTokenCookie.NAME + "=");
+  }
+
+  @Test
+  void 삭제_쿠키는_Max_Age가_0이다() {
+    assertThat(attributeValue(attributesOf(RefreshTokenCookie.delete()), "Max-Age")).isEqualTo("0");
+  }
+
+  @Test
+  void 삭제_쿠키의_Expires는_과거_시각이다() {
+    String expires = attributeValue(attributesOf(RefreshTokenCookie.delete()), "Expires");
+
+    // Max-Age만 이해하는 클라이언트와 Expires만 이해하는 클라이언트가 같은 결과를 내야 한다.
+    assertThat(Instant.from(RFC_1123.parse(expires)))
+        .isBefore(Instant.parse("2000-01-01T00:00:00Z"));
+  }
+
+  @Test
+  void 삭제_쿠키의_보안_속성이_발급과_같다() {
+    List<String> deleted = attributesOf(RefreshTokenCookie.delete());
+
+    // 이름·Path·Domain·Secure가 하나라도 다르면 브라우저가 덮어쓰지 않아 삭제가 조용히 실패한다.
+    assertThat(deleted).contains("Secure", "HttpOnly");
+    assertThat(attributeValue(deleted, "Path")).isEqualTo("/");
+    assertThat(attributeValue(deleted, "SameSite")).isEqualTo("Strict");
+    assertThat(deleted)
+        .noneMatch(attribute -> attribute.toLowerCase(Locale.ROOT).startsWith("domain="));
+  }
+
+  @Test
+  void 삭제_쿠키에는_토큰_값이_없다() {
+    assertThat(RefreshTokenCookie.delete()).doesNotContain(SAMPLE_COMPACT_VALUE);
+  }
+
+  // ---------- 파싱 ----------
+
+  private static List<String> split(String header) {
+    return Arrays.stream(header.split(";")).map(String::trim).toList();
+  }
+
+  private static List<String> attributesOf(String header) {
+    List<String> parts = split(header);
+    return parts.subList(1, parts.size());
+  }
+
+  private static String attributeValue(List<String> attributes, String name) {
+    String prefix = name + "=";
+    return attributes.stream()
+        .filter(attribute -> attribute.startsWith(prefix))
+        .map(attribute -> attribute.substring(prefix.length()))
+        .findFirst()
+        .orElseThrow(() -> new IllegalStateException(name + " 속성이 없습니다."));
   }
 }

@@ -31,6 +31,13 @@ public enum ErrorCode {
    * <p>원인을 나누면 응답만으로 "그 아이디가 존재하는가", "잠겨 있는가"를 알 수 있게 되어 계정 열거와 표적 공격의 단서가 된다.
    */
   INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호를 확인해 주세요."),
+  /**
+   * Refresh Token 없음·무효·만료·폐기·재사용 또는 {@code authVersion} 불일치를 <b>구분하지 않는다</b> (API 명세 3.5절).
+   *
+   * <p>원인을 나누면 "그 토큰이 저장소에 있었는가", "계열이 폐기됐는가" 같은 내부 상태가 응답만으로 드러난다. 재사용 탐지 결과도 마찬가지다 — 공격자가 어떤 토큰이
+   * 아직 살아 있는지 탐색하는 신호가 된다.
+   */
+  INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "다시 로그인해 주세요."),
   /** 자격 증명은 올바르지만 이메일 인증이 끝나지 않았다. 이때만 401과 구분되는 403이다 (API 명세 3.3.1절). */
   EMAIL_VERIFICATION_REQUIRED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다."),
   /**

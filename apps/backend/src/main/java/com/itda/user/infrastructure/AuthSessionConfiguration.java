@@ -1,5 +1,7 @@
 package com.itda.user.infrastructure;
 
+import com.itda.user.application.AccessTokenRefreshService;
+import com.itda.user.application.AuthSessionRevocationService;
 import com.itda.user.application.DecoyPasswordHash;
 import com.itda.user.application.LoginService;
 import com.itda.user.application.PasswordVerificationService;
@@ -7,6 +9,7 @@ import com.itda.user.application.port.out.AccessTokenIssuer;
 import com.itda.user.application.port.out.PasswordHasher;
 import com.itda.user.application.port.out.RefreshTokenIssuer;
 import com.itda.user.application.port.out.RefreshTokenStore;
+import com.itda.user.application.port.out.RefreshTokenVerifier;
 import com.itda.user.domain.UserRepository;
 import com.itda.user.presentation.ClientPlatformFilter;
 import java.time.Clock;
@@ -29,7 +32,7 @@ import org.springframework.transaction.support.TransactionOperations;
 public class AuthSessionConfiguration {
 
   /**
-   * 플랫폼 판정 filter를 로그인 경로에만, Security chain보다 앞 순서로 등록한다.
+   * 플랫폼 판정 filter를 플랫폼 헤더가 필수인 세 경로에만, Security chain보다 앞 순서로 등록한다.
    *
    * <p>url pattern으로 경로를 좁히므로 filter 안에서 경로를 다시 비교하지 않는다. dispatcher type 기본값(REQUEST)이라 이 filter가
    * 만든 ERROR dispatch에 다시 들어가지도 않는다.
@@ -38,7 +41,7 @@ public class AuthSessionConfiguration {
   public FilterRegistrationBean<ClientPlatformFilter> clientPlatformFilterRegistration() {
     FilterRegistrationBean<ClientPlatformFilter> registration =
         new FilterRegistrationBean<>(new ClientPlatformFilter());
-    registration.addUrlPatterns(ClientPlatformFilter.LOGIN_PATH);
+    registration.setUrlPatterns(ClientPlatformFilter.PATHS);
     registration.setOrder(ClientPlatformFilter.ORDER);
     return registration;
   }
@@ -66,5 +69,32 @@ public class AuthSessionConfiguration {
         refreshTokenStore,
         userRegistrationTransactionOperations,
         Clock.systemUTC());
+  }
+
+  /**
+   * 갱신은 DB를 <b>읽기만</b> 하므로 트랜잭션 경계를 받지 않는다.
+   *
+   * <p>초기 조회와 회전 후 재확인은 각각 독립된 조회이며, 둘을 한 트랜잭션으로 묶으면 그 사이 다른 트랜잭션이 커밋한 변경을 못 볼 수 있어 재확인이 무의미해진다.
+   */
+  @Bean
+  public AccessTokenRefreshService accessTokenRefreshService(
+      RefreshTokenVerifier refreshTokenVerifier,
+      RefreshTokenStore refreshTokenStore,
+      RefreshTokenIssuer refreshTokenIssuer,
+      AccessTokenIssuer accessTokenIssuer,
+      UserRepository userRepository) {
+    return new AccessTokenRefreshService(
+        refreshTokenVerifier,
+        refreshTokenStore,
+        refreshTokenIssuer,
+        accessTokenIssuer,
+        userRepository);
+  }
+
+  /** 로그아웃은 Redis만 본다. MariaDB는 완료 조건이 아니다 (API 명세 3.6.2절). */
+  @Bean
+  public AuthSessionRevocationService authSessionRevocationService(
+      RefreshTokenVerifier refreshTokenVerifier, RefreshTokenStore refreshTokenStore) {
+    return new AuthSessionRevocationService(refreshTokenVerifier, refreshTokenStore);
   }
 }
