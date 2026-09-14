@@ -72,6 +72,25 @@ docker compose up -d redis    # 로컬에서 함께 돌리려면
 - 테스트는 `FLUSHDB`·`FLUSHALL`을 쓰지 않는다. 실행마다 새 식별자를 만들고 자기가 만든 키만 지운다.
 - 운영 이미지(builder·runtime 스테이지)에는 Redis 바이너리가 들어가지 않는다.
 
+### 로그 민감정보 마스킹
+
+콘솔 로그는 `src/main/resources/logback-spring.xml`이 Boot 기본 콘솔 설정을 그대로 쓰되 encoder만 `SensitiveDataMaskingEncoder`로
+바꿔 내보낸다. pattern이 조합한 최종 문자열(message·예외 message·stack trace·원인 체인)을 `SensitiveLogMasker`가 훑어 다음 값을
+`[REDACTED]`로 바꾼다. Hibernate 기동 연결 정보 로그에는 driver가 자격 증명을 붙인 JDBC URL이, MariaDB UNIQUE 위반 로그에는 가입 요청의
+username·email이 원문으로 실리기 때문이다.
+
+- Hibernate 연결 정보의 `Database JDBC URL [...]` 줄 — 레이블 뒤를 통째로 바꿔 `Database JDBC URL [REDACTED]`로 남긴다 — 와 `Default catalog/schema` 값
+- 그 밖의 JDBC URL — `jdbc:<driver>:`부터 같은 줄 끝까지
+- URL 밖에 찍힌 `user`·`username`·`password`·`passwd`·`pwd` 파라미터 — 이름 뒤부터 같은 줄 끝까지
+- `Duplicate entry '<값>'`의 값 — 오류 번호와 key 이름은 남긴다
+
+JDBC URL과 접속 계정 파라미터는 값의 끝을 믿지 않는다. driver는 사용자·비밀번호를 인코딩하지 않고 URL에 붙이고, 비밀번호에는 공백·괄호·따옴표·`&`·`;`·`,`가
+들어갈 수 있다. 경계를 추측해 값 일부를 남기느니 같은 줄에 뒤따르는 비민감 진단 문구까지 지우는 쪽을 택한다. 다음 줄은 그대로 남는다.
+
+logger를 끄거나 level을 올리지 않는다 — 저장소 오류가 났다는 사실과 logger·level·requestId까지 사라진다. 가리는 대상은 위에 적은 형식뿐이며,
+등록되지 않은 새 민감정보 형식을 자동으로 찾아내지는 않는다. 마스킹 처리 중 예외가 발생하거나 결과가 null이면 원문 대신 level·logger·requestId와
+고정 문구만 남긴다. 파일 appender와 구조화 로그(`logging.structured.*`)는 지금 쓰지 않으며, 추가할 때는 같은 encoder를 거치게 한다.
+
 ## DDD 패키지 구조
 
 현재 backend에는 15개 엔티티 테이블이 구현되어 있고 5개 바운디드 컨텍스트로 나눴다 ([docs/product/erd.md](../../docs/product/erd.md)). 제품 ERD에는 후속 구현 대상인 `mail_outbox`가 더해져 총 16개이며, 구현 클래스명과 패키지는 이 문서에서 확정하지 않는다.
