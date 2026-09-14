@@ -6,8 +6,6 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
-import com.itda.support.password.RecordingCompromisedPasswordChecker;
-import com.itda.support.password.RecordingPasswordHasher;
 import com.itda.user.domain.AccountActionPurpose;
 import com.itda.user.domain.Email;
 import com.itda.user.domain.MailDispatchStatus;

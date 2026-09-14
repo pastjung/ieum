@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.itda.support.mail.RecordingMailProvider;
 import com.itda.user.domain.AccountActionPurpose;
 import com.itda.user.domain.Email;
 import com.itda.user.domain.MailDispatchFailureKinds;

@@ -1,7 +1,5 @@
-package com.itda.support.mail;
+package com.itda.user.service;
 
-import com.itda.user.service.CompactTokenHasher;
-import com.itda.user.service.MailProvider;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;

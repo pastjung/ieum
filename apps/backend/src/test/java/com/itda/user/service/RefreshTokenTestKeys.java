@@ -1,6 +1,6 @@
-package com.itda.support.security;
+package com.itda.user.service;
 
-import com.itda.user.service.RefreshJwtProperties;
+import com.itda.support.security.AccessTokenTestKeys;
 
 /**
  * 테스트용 Refresh 서명 key를 만든다.
