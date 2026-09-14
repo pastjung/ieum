@@ -1,7 +1,6 @@
 package com.itda.support.password;
 
-import com.itda.user.application.port.out.EncodedPassword;
-import com.itda.user.application.port.out.PasswordHasher;
+import com.itda.user.service.PasswordHasher;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,9 +16,9 @@ public class RecordingPasswordHasher implements PasswordHasher {
   private boolean matchesResult = true;
 
   @Override
-  public EncodedPassword hash(String normalizedPassword) {
+  public PasswordHasher.EncodedPassword hash(String normalizedPassword) {
     this.hashedPasswords.add(normalizedPassword);
-    return EncodedPassword.of("$argon2id$v=19$m=19456,t=2,p=1$fake-salt$fake-hash");
+    return PasswordHasher.EncodedPassword.of("$argon2id$v=19$m=19456,t=2,p=1$fake-salt$fake-hash");
   }
 
   @Override

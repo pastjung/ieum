@@ -7,11 +7,10 @@ import com.itda.global.error.ErrorCode;
 import com.itda.global.error.ErrorCodeAttribute;
 import com.itda.support.security.StubAccessTokenVerifier;
 import com.itda.support.security.StubUserRepository;
-import com.itda.user.application.AccessAuthenticationService;
-import com.itda.user.application.port.out.AccessTokenVerification;
 import com.itda.user.domain.Email;
 import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
+import com.itda.user.service.AccessAuthenticationService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -69,7 +68,8 @@ class AccessTokenAuthenticationFilterTest {
         User.create("learner01", "argon2id$hash", UserRole.LEARNER, Email.of("a@b.com"), NOW);
     user.verifyEmail(NOW);
     this.userRepository.register(USER_ID, user);
-    this.verifier.willReturn(new AccessTokenVerification.Verified(USER_ID, UserRole.LEARNER, 0));
+    this.verifier.willReturn(
+        new AccessTokenVerifier.Verification.Verified(USER_ID, UserRole.LEARNER, 0));
   }
 
   private static MockHttpServletRequest requestWithBearer() {
@@ -137,7 +137,7 @@ class AccessTokenAuthenticationFilterTest {
 
   @Test
   void 검증에_실패한_토큰도_인증하지_않고_통과시킨다() throws ServletException, IOException {
-    this.verifier.willReturn(new AccessTokenVerification.Invalid());
+    this.verifier.willReturn(new AccessTokenVerifier.Verification.Invalid());
     MockHttpServletResponse response = new MockHttpServletResponse();
 
     this.filter.doFilter(requestWithBearer(), response, new MockFilterChain());
@@ -148,7 +148,8 @@ class AccessTokenAuthenticationFilterTest {
 
   @Test
   void 저장소_장애는_downstream으로_보내지_않고_503으로_끊는다() throws ServletException, IOException {
-    this.verifier.willReturn(new AccessTokenVerification.Verified(USER_ID, UserRole.LEARNER, 0));
+    this.verifier.willReturn(
+        new AccessTokenVerifier.Verification.Verified(USER_ID, UserRole.LEARNER, 0));
     this.userRepository.willFail();
     MockHttpServletRequest request = requestWithBearer();
     MockHttpServletResponse response = new MockHttpServletResponse();
@@ -165,7 +166,8 @@ class AccessTokenAuthenticationFilterTest {
 
   @Test
   void 저장소_장애에는_의도한_오류_code를_요청_속성으로_남긴다() throws ServletException, IOException {
-    this.verifier.willReturn(new AccessTokenVerification.Verified(USER_ID, UserRole.LEARNER, 0));
+    this.verifier.willReturn(
+        new AccessTokenVerifier.Verification.Verified(USER_ID, UserRole.LEARNER, 0));
     this.userRepository.willFail();
     HttpServletRequest request = requestWithBearer();
 

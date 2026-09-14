@@ -1,10 +1,7 @@
 package com.itda.support.mail;
 
-import com.itda.user.application.port.out.MailMessage;
-import com.itda.user.application.port.out.MailProvider;
-import com.itda.user.application.port.out.MailSendOutcome;
-import com.itda.user.application.port.out.MailSendResult;
-import com.itda.user.infrastructure.CompactTokenHasher;
+import com.itda.user.service.CompactTokenHasher;
+import com.itda.user.service.MailProvider;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -29,36 +26,36 @@ public final class RecordingMailProvider implements MailProvider {
   private final List<Sent> sent = new ArrayList<>();
 
   /** 호출마다 하나씩 꺼내 쓴다. 비면 마지막 결과를 계속 돌려준다. */
-  private final Deque<MailSendOutcome> queued = new ArrayDeque<>();
+  private final Deque<MailProvider.SendOutcome> queued = new ArrayDeque<>();
 
-  private MailSendOutcome nextOutcome;
+  private MailProvider.SendOutcome nextOutcome;
 
   /** 호출할 때마다 예외를 던지게 만드는 장치. {@code null}이면 정상 동작한다. */
-  private Function<MailMessage, RuntimeException> failure;
+  private Function<MailProvider.Message, RuntimeException> failure;
 
-  public RecordingMailProvider(MailSendResult firstResult) {
-    this.nextOutcome = MailSendOutcome.of(firstResult);
+  public RecordingMailProvider(MailProvider.SendResult firstResult) {
+    this.nextOutcome = MailProvider.SendOutcome.of(firstResult);
   }
 
-  public void willReturn(MailSendResult result) {
-    this.nextOutcome = MailSendOutcome.of(result);
+  public void willReturn(MailProvider.SendResult result) {
+    this.nextOutcome = MailProvider.SendOutcome.of(result);
   }
 
-  public void willReturn(MailSendResult result, Instant providerRetryAt) {
-    this.nextOutcome = MailSendOutcome.retryAt(result, providerRetryAt);
+  public void willReturn(MailProvider.SendResult result, Instant providerRetryAt) {
+    this.nextOutcome = MailProvider.SendOutcome.retryAt(result, providerRetryAt);
   }
 
   /** 다음 한 번의 호출에만 적용할 결과를 예약한다. */
-  public void willReturnOnce(MailSendResult result) {
-    this.queued.addLast(MailSendOutcome.of(result));
+  public void willReturnOnce(MailProvider.SendResult result) {
+    this.queued.addLast(MailProvider.SendOutcome.of(result));
   }
 
-  public void willThrow(Function<MailMessage, RuntimeException> failure) {
+  public void willThrow(Function<MailProvider.Message, RuntimeException> failure) {
     this.failure = failure;
   }
 
   @Override
-  public MailSendOutcome send(MailMessage message) {
+  public MailProvider.SendOutcome send(MailProvider.Message message) {
     this.sent.add(
         new Sent(
             message.purpose().name(),
@@ -76,7 +73,7 @@ public final class RecordingMailProvider implements MailProvider {
     return this.queued.isEmpty() ? this.nextOutcome : this.queued.pollFirst();
   }
 
-  private static boolean hasToken(MailMessage message) {
+  private static boolean hasToken(MailProvider.Message message) {
     return message.actionToken() != null && !message.actionToken().isBlank();
   }
 

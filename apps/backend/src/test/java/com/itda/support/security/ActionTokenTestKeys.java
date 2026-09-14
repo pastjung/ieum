@@ -1,6 +1,6 @@
 package com.itda.support.security;
 
-import com.itda.user.infrastructure.ActionJwtProperties;
+import com.itda.user.service.ActionJwtProperties;
 
 /**
  * 테스트용 계정 작업 토큰 서명 key를 만든다.
