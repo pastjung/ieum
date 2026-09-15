@@ -2,7 +2,6 @@ package com.itda.user.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.itda.support.password.RecordingPasswordHasher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

@@ -3,7 +3,6 @@ package com.itda.user.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.itda.support.security.RefreshTokenTestKeys;
 import org.junit.jupiter.api.Test;
 
 class RefreshKeyRingTest {

@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.itda.support.log.CapturingAppender;
-import com.itda.support.password.RecordingCompromisedPasswordChecker;
-import com.itda.support.password.RecordingPasswordHasher;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

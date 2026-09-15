@@ -7,8 +7,6 @@ import com.itda.global.security.AccessKeyRing;
 import com.itda.global.security.AccessTokenVerifier;
 import com.itda.global.security.NimbusAccessTokenVerifier;
 import com.itda.support.security.AccessTokenTestKeys;
-import com.itda.support.security.ActionTokenTestKeys;
-import com.itda.support.security.RefreshTokenTestKeys;
 import com.itda.user.domain.AccountActionPurpose;
 import com.itda.user.domain.UserRole;
 import com.nimbusds.jose.JOSEException;

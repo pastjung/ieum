@@ -7,8 +7,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.itda.global.security.AccessJwtProperties;
 import com.itda.global.security.AccessKeyRing;
 import com.itda.support.security.AccessTokenTestKeys;
-import com.itda.support.security.ActionTokenTestKeys;
-import com.itda.support.security.RefreshTokenTestKeys;
 import org.junit.jupiter.api.Test;
 
 /**
