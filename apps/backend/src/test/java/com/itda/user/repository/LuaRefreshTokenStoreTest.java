@@ -258,6 +258,125 @@ class LuaRefreshTokenStoreTest {
     }
   }
 
+  @Test
+  void 사용자_계열_전체_폐기도_연결_실패면_UNAVAILABLE이다() {
+    RefreshTokenStore store = failingStore(new RedisConnectionFailureException("연결 실패"));
+
+    // 인덱스를 읽지 못했으면 정리를 확인하지 못한 것이다. 성공으로 단정하지 않는다.
+    assertThat(store.revokeAllFamilies(USER_ID))
+        .isEqualTo(RefreshTokenStore.AllFamiliesRevocationResult.UNAVAILABLE);
+  }
+
+  @Test
+  void 사용자_계열_전체_폐기는_양수가_아닌_사용자로_key를_만들지_않는다() {
+    FixedReplyRedisTemplate template = new FixedReplyRedisTemplate("OK");
+    RefreshTokenStore store = storeOf(template);
+
+    assertThatThrownBy(() -> store.revokeAllFamilies(0))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> store.revokeAllFamilies(-1))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(template.executionCount()).isZero();
+  }
+
+  @Test
+  void 사용자_계열_전체_폐기_장애_로그에_키도_예외도_남기지_않는다() {
+    RefreshTokenStore store = failingStore(new RedisConnectionFailureException("연결 실패"));
+
+    CapturingAppender appender = CapturingAppender.attachTo(LuaRefreshTokenStore.class);
+    try {
+      store.revokeAllFamilies(USER_ID);
+
+      List<ILoggingEvent> events = appender.events();
+      assertThat(events).isNotEmpty();
+      for (ILoggingEvent event : events) {
+        assertThat(event.getFormattedMessage())
+            .doesNotContain(KEYS.families(USER_ID))
+            .doesNotContain(Long.toString(USER_ID))
+            .doesNotContain("연결 실패");
+        assertThat(event.getThrowableProxy()).isNull();
+      }
+    } finally {
+      appender.detach();
+    }
+  }
+
+  @Test
+  void 계열_폐기_중_Redis가_실패하면_남은_계열을_기다리지_않고_UNAVAILABLE이다() {
+    IndexedTemplate template =
+        new IndexedTemplate(
+            new java.util.LinkedHashSet<>(
+                List.of(
+                    UUID.randomUUID().toString(),
+                    UUID.randomUUID().toString(),
+                    UUID.randomUUID().toString())),
+            true);
+
+    assertThat(storeOf(template).revokeAllFamilies(USER_ID))
+        .isEqualTo(RefreshTokenStore.AllFamiliesRevocationResult.UNAVAILABLE);
+    // 명령마다 제한 시간을 기다린다. 첫 장애 뒤 남은 계열로 넘어가면 성공 응답이 계열 수만큼 늦어진다.
+    assertThat(template.executionCount()).isEqualTo(1);
+  }
+
+  @Test
+  void 계약_형식이_아닌_member는_건너뛰고_나머지_계열은_계속_폐기한다() {
+    IndexedTemplate template =
+        new IndexedTemplate(
+            new java.util.LinkedHashSet<>(List.of("../other-key", UUID.randomUUID().toString())),
+            false);
+
+    assertThat(storeOf(template).revokeAllFamilies(USER_ID))
+        .isEqualTo(RefreshTokenStore.AllFamiliesRevocationResult.UNAVAILABLE);
+    // 손상된 member로는 key를 만들지 않고, 정상 member 하나만 폐기 명령을 보낸다.
+    assertThat(template.executionCount()).isEqualTo(1);
+  }
+
+  /**
+   * {@code families} 인덱스 조회는 정해진 member를 돌려주고, 스크립트 실행은 실패하거나 {@code OK}를 돌려준다. 폐기 명령을 몇 번 보냈는지 센다.
+   */
+  private static final class IndexedTemplate extends StringRedisTemplate {
+
+    private final java.util.Set<String> members;
+    private final boolean failScripts;
+    private final AtomicInteger executions = new AtomicInteger();
+
+    private IndexedTemplate(java.util.Set<String> members, boolean failScripts) {
+      super(new FailingConnectionFactory(new RedisConnectionFailureException("쓰이지 않는다")));
+      this.members = members;
+      this.failScripts = failScripts;
+      afterPropertiesSet();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public org.springframework.data.redis.core.ZSetOperations<String, String> opsForZSet() {
+      return (org.springframework.data.redis.core.ZSetOperations<String, String>)
+          java.lang.reflect.Proxy.newProxyInstance(
+              org.springframework.data.redis.core.ZSetOperations.class.getClassLoader(),
+              new Class<?>[] {org.springframework.data.redis.core.ZSetOperations.class},
+              (proxy, method, args) -> {
+                if ("range".equals(method.getName())) {
+                  return this.members;
+                }
+                throw new UnsupportedOperationException(method.getName());
+              });
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T execute(RedisScript<T> script, List<String> keys, Object... args) {
+      this.executions.incrementAndGet();
+      if (this.failScripts) {
+        throw new RedisConnectionFailureException("연결 실패");
+      }
+      return (T) "OK";
+    }
+
+    int executionCount() {
+      return this.executions.get();
+    }
+  }
+
   /** 연결을 얻는 순간 실패한다. Lettuce의 연결 실패·타임아웃이 호출부에 도달하는 모습과 같다. */
   private record FailingConnectionFactory(RuntimeException failure)
       implements RedisConnectionFactory {

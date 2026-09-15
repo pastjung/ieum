@@ -58,6 +58,22 @@ public interface RefreshTokenStore {
   FamilyRevocationResult revokeFamily(long userId, String familyId);
 
   /**
+   * 사용자의 모든 계열을 폐기한다. 비밀번호 재설정처럼 {@code users.auth_version}을 올린 MariaDB commit 뒤의 사후 정리다 (API 명세
+   * 3.6.1·3.6.2절).
+   *
+   * <p>대상은 사용자별 {@code families} 인덱스에 등록된 계열뿐이다. key pattern 탐색이나 SCAN을 하지 않는다. 인덱스에서 빠진 계열이 있어도
+   * 무효화 권위는 {@code users.auth_version}이라 그 계열의 Refresh는 DB 재검증에서 거부된다.
+   *
+   * <p>인덱스는 고정 크기 구간으로 나눠 읽고, 계열마다 {@link #revokeFamily}와 같은 원자 연산을 쓴다. 한 명령이 건드리는 key는 같은 {@code
+   * userId} hash tag 안의 key 하나다. 계열 hash의 상태만 바꾸며 토큰 상태·만료와 인덱스 member는 건드리지 않는다.
+   *
+   * <p>일관된 한 시점의 전체 폐기를 보장하지 않는다. 읽는 도중 추가·회전된 계열은 빠질 수 있으며, 그 경우에도 auth_version 비교가 최종 차단이다.
+   *
+   * @throws IllegalArgumentException {@code userId}가 양수가 아닐 때
+   */
+  AllFamiliesRevocationResult revokeAllFamilies(long userId);
+
+  /**
    * Redis에 등록·회전하거나 조회할 Refresh Token 한 건의 상태 (API 명세 3.6.1절 「Redis 키 표기」).
    *
    * <p>토큰 원문을 담지 않는다. Redis에는 {@code tokenHash}만 저장하며, 원문은 클라이언트에게 전달하는 경로에만 존재한다.
@@ -195,6 +211,25 @@ public interface RefreshTokenStore {
   enum FamilyRevocationResult {
     REVOKED,
     NOT_FOUND,
+    UNAVAILABLE
+  }
+
+  /**
+   * 사용자 계열 전체 폐기 결과 ({@code revokeAllFamilies}).
+   *
+   * <p>사후 정리의 결과라 호출자의 응답을 바꾸는 근거가 아니다. 호출자는 이 값으로 운영 경고 여부만 정한다.
+   */
+  enum AllFamiliesRevocationResult {
+    /**
+     * 인덱스를 끝까지 읽었고, 읽은 member는 모두 폐기됐거나 이미 사라졌음을 Redis 정상 응답으로 확인했다. 인덱스가 비어 있는 경우도 여기다.
+     *
+     * <p>읽는 도중 다른 기기의 회전으로 순위가 바뀐 계열은 한 번도 읽히지 않을 수 있다. 그 계열도 auth_version 비교로 거부된다.
+     */
+    REVOKED,
+    /**
+     * 인덱스 조회나 계열 폐기 명령이 실패했거나 결과가 불확실하다. 계약 형식이 아닌 member를 건너뛴 경우도 여기다. 남은 계열은 TTL로 사라지고
+     * auth_version 비교로 거부된다.
+     */
     UNAVAILABLE
   }
 }

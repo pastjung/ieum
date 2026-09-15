@@ -886,6 +886,17 @@ class MailDispatchWorkerTest {
         long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
       throw new UnsupportedOperationException("worker는 로그인 상태를 바꾸지 않는다.");
     }
+
+    @Override
+    public int resetPassword(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String newPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private static final class RecordingActionTokenStore implements ActionTokenStore {

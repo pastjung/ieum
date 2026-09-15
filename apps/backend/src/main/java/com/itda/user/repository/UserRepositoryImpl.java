@@ -60,4 +60,21 @@ public class UserRepositoryImpl implements UserRepository {
       long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
     return jpaRepository.recordLoginSuccess(userId, expectedRowVersion, expectedAuthVersion, now);
   }
+
+  @Override
+  public int resetPassword(
+      long userId,
+      long expectedRowVersion,
+      String expectedPasswordHash,
+      long expectedAuthVersion,
+      String newPasswordHash,
+      LocalDateTime now) {
+    return jpaRepository.resetPassword(
+        userId,
+        expectedRowVersion,
+        expectedPasswordHash,
+        expectedAuthVersion,
+        newPasswordHash,
+        now);
+  }
 }

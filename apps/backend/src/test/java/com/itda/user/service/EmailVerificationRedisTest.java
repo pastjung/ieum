@@ -348,6 +348,17 @@ class EmailVerificationRedisTest extends ActionTokenRedisTestBase {
     public boolean existsByEmail(Email email) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int resetPassword(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String newPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private static final class FailableTransactionOperations implements TransactionOperations {

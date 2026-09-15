@@ -291,6 +291,11 @@ class AuthSessionRefreshMariadbTest {
       this.revokedFamilies.add(familyId);
       return RefreshTokenStore.FamilyRevocationResult.REVOKED;
     }
+
+    @Override
+    public RefreshTokenStore.AllFamiliesRevocationResult revokeAllFamilies(long userId) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private static final class StubRefreshIssuer implements RefreshTokenIssuer {

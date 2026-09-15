@@ -50,6 +50,32 @@ public interface UserRepository {
   int recordLoginSuccess(
       long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now);
 
+  /**
+   * 비밀번호 재설정을 조건부로 확정한다 (API 명세 3.4.2·3.6.2절, ERD 3.1절).
+   *
+   * <p>한 문장에서 {@code password_hash} 교체, {@code auth_version} +1, {@code failed_login_count}·{@code
+   * locked_until} 초기화, {@code updated_at} 기록을 함께 확정하고 {@code row_version}도 올린다. 비밀번호와 무효화 세대가 엇갈려
+   * 커밋되는 상태를 만들지 않기 위해서다.
+   *
+   * <p>판단 근거인 Snapshot의 {@code row_version}·{@code password_hash}·{@code auth_version}과 {@code
+   * status=ACTIVE}를 전부 WHERE에 싣는다. 갱신된 행 수가 곧 경쟁 결과이며, 호출자는 0행일 때 사용자를 다시 읽어 원인을 가른다.
+   *
+   * <p>{@code email_verified_at}·{@code status}·{@code role}·{@code username}·{@code email}은 바꾸지
+   * 않는다.
+   *
+   * @param expectedPasswordHash Snapshot의 {@code password_hash}. 그 사이 다른 비밀번호 변경이 확정됐으면 0행이 된다
+   * @param newPasswordHash 트랜잭션 밖에서 미리 계산한 Argon2id 인코딩 결과
+   * @param now UTC 기준 현재 시각
+   * @return 갱신된 행 수. 0 또는 1이다
+   */
+  int resetPassword(
+      long userId,
+      long expectedRowVersion,
+      String expectedPasswordHash,
+      long expectedAuthVersion,
+      String newPasswordHash,
+      LocalDateTime now);
+
   User save(User user);
 
   Optional<User> findById(Long id);

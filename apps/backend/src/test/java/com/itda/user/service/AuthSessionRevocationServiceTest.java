@@ -258,5 +258,10 @@ class AuthSessionRevocationServiceTest {
       this.revokedFamilies.add(familyId);
       return this.revocationResult;
     }
+
+    @Override
+    public RefreshTokenStore.AllFamiliesRevocationResult revokeAllFamilies(long userId) {
+      throw new UnsupportedOperationException();
+    }
   }
 }

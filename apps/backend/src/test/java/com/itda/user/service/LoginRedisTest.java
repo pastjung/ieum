@@ -279,10 +279,27 @@ class LoginRedisTest {
     public int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int resetPassword(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String newPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private static final class UnavailableRefreshTokenStore
       implements com.itda.user.repository.RefreshTokenStore {
+
+    @Override
+    public com.itda.user.repository.RefreshTokenStore.AllFamiliesRevocationResult revokeAllFamilies(
+        long userId) {
+      throw new UnsupportedOperationException();
+    }
 
     @Override
     public com.itda.user.repository.RefreshTokenStore.FamilyIssueResult issueFamily(
