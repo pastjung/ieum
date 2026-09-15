@@ -76,6 +76,35 @@ public interface UserRepository {
       String newPasswordHash,
       LocalDateTime now);
 
+  /**
+   * 회원 탈퇴를 조건부로 확정한다 (API 명세 3.1·3.4절, ERD 3.1절).
+   *
+   * <p>한 문장에서 {@code status=WITHDRAWN}·{@code withdrawn_at}·{@code email_verified_at=NULL},
+   * username·email 가명화, 폐기 비밀번호 해시, {@code auth_version} +1, {@code updated_at}을 함께 확정하고 {@code
+   * row_version}도 올린다. 행을 지우지 않는다 — 과거 학습·수업 기록이 {@code users.id}를 계속 참조한다.
+   *
+   * <p>현재 비밀번호 확인에 쓴 Snapshot의 {@code row_version}·{@code password_hash}·{@code auth_version}과
+   * {@code status=ACTIVE}를 전부 WHERE에 싣는다. 확인과 갱신 사이에 인증 상태가 바뀌었다면 0행이 되어 이전 확인 결과로 탈퇴시키지 않는다.
+   *
+   * <p>{@code role}·{@code created_at}·{@code failed_login_count}·{@code locked_until}과 다른 도메인의 행은
+   * 바꾸지 않는다.
+   *
+   * @param pseudonymUsername 원래 값과 연결되지 않는 내부 가명
+   * @param pseudonymEmail 전달되지 않는 예약 도메인의 내부 가명
+   * @param discardedPasswordHash 트랜잭션 밖에서 계산한, 아무도 모르는 비밀의 Argon2id 인코딩 결과
+   * @return 갱신된 행 수. 0 또는 1이다
+   * @throws org.springframework.dao.DataIntegrityViolationException 가명이 다른 행의 UNIQUE 값과 겹칠 때
+   */
+  int withdraw(
+      long userId,
+      long expectedRowVersion,
+      String expectedPasswordHash,
+      long expectedAuthVersion,
+      String pseudonymUsername,
+      Email pseudonymEmail,
+      String discardedPasswordHash,
+      LocalDateTime now);
+
   User save(User user);
 
   Optional<User> findById(Long id);

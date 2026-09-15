@@ -397,6 +397,27 @@ class EmailVerificationMariadbTest {
           newPasswordHash,
           now);
     }
+
+    @Override
+    public int withdraw(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String pseudonymUsername,
+        Email pseudonymEmail,
+        String discardedPasswordHash,
+        LocalDateTime now) {
+      return this.delegate.withdraw(
+          userId,
+          expectedRowVersion,
+          expectedPasswordHash,
+          expectedAuthVersion,
+          pseudonymUsername,
+          pseudonymEmail,
+          discardedPasswordHash,
+          now);
+    }
   }
 
   private final class StubTokenVerifier implements EmailVerificationTokenVerifier {

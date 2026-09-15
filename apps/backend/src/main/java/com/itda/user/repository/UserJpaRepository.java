@@ -127,6 +127,47 @@ public interface UserJpaRepository extends JpaRepository<User, Long> {
       @Param("newPasswordHash") String newPasswordHash,
       @Param("now") LocalDateTime now);
 
+  /**
+   * 회원 탈퇴의 조건부 UPDATE (API 명세 3.1·3.4절, ERD 3.1절).
+   *
+   * <p>{@code update versioned}라 Hibernate가 같은 문장에서 {@code row_version}을 올린다. {@code auth_version}은
+   * 저장된 값에서 1을 더한다.
+   *
+   * <p>WHERE의 조건이 각자 다른 경쟁을 막는다. {@code status}는 이미 끝난 탈퇴를 되돌려 쓰는 것을, {@code row_version}은 Snapshot
+   * 이후의 변경을, {@code password_hash}·{@code auth_version}은 현재 비밀번호 확인 뒤 확정된 다른 인증 변경을 이전 확인 결과로 덮어쓰는
+   * 것을 막는다.
+   *
+   * <p>{@code role}·{@code created_at}·{@code failed_login_count}·{@code locked_until}은 SET에 넣지
+   * 않는다.
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      """
+      update versioned User u
+         set u.status = com.itda.user.domain.UserStatus.WITHDRAWN,
+             u.withdrawnAt = :now,
+             u.emailVerifiedAt = null,
+             u.username = :pseudonymUsername,
+             u.email.value = :pseudonymEmail,
+             u.passwordHash = :discardedPasswordHash,
+             u.authVersion = u.authVersion + 1,
+             u.updatedAt = :now
+       where u.id = :userId
+         and u.status = com.itda.user.domain.UserStatus.ACTIVE
+         and u.rowVersion = :expectedRowVersion
+         and u.passwordHash = :expectedPasswordHash
+         and u.authVersion = :expectedAuthVersion
+      """)
+  int withdraw(
+      @Param("userId") long userId,
+      @Param("expectedRowVersion") long expectedRowVersion,
+      @Param("expectedPasswordHash") String expectedPasswordHash,
+      @Param("expectedAuthVersion") long expectedAuthVersion,
+      @Param("pseudonymUsername") String pseudonymUsername,
+      @Param("pseudonymEmail") String pseudonymEmail,
+      @Param("discardedPasswordHash") String discardedPasswordHash,
+      @Param("now") LocalDateTime now);
+
   Optional<User> findByUsername(String username);
 
   Optional<User> findByEmail(Email email);

@@ -759,6 +759,19 @@ class PasswordResetServiceTest {
     public boolean existsByEmail(Email email) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int withdraw(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String pseudonymUsername,
+        Email pseudonymEmail,
+        String discardedPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private final class RecordingRefreshTokenStore implements RefreshTokenStore {

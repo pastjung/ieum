@@ -52,6 +52,8 @@ public enum ErrorCode {
   // message에 어떤 값이 문제였는지 쓰지 않는다. 입력값·중복 대상·검증기 원문이 응답으로 새는 경로를 만들지 않기 위해서다.
   /** username 또는 email을 쓸 수 없다. 둘 중 어느 쪽인지 구분하지 않는다 (API 명세 3.2.1절). */
   ACCOUNT_IDENTIFIER_UNAVAILABLE(HttpStatus.CONFLICT, "사용할 수 없는 계정 정보입니다."),
+  /** 탈퇴를 요청한 사용자의 현재 비밀번호가 저장된 비밀번호와 다르다 (API 명세 3.2.1·3.5절). */
+  CURRENT_PASSWORD_MISMATCH(HttpStatus.FORBIDDEN, "현재 비밀번호를 확인해 주세요."),
   INVALID_ACCOUNT_INPUT(HttpStatus.UNPROCESSABLE_CONTENT, "계정 정보를 확인해 주세요."),
   INVALID_PASSWORD(HttpStatus.UNPROCESSABLE_CONTENT, "비밀번호 정책을 확인해 주세요."),
   /**

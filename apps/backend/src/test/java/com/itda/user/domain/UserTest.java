@@ -120,7 +120,31 @@ class UserTest {
     assertThat(user.getEmailVerifiedAt()).isNull();
     assertThat(user.getUsername()).isEqualTo("withdrawn-1");
     assertThat(user.getEmail().getValue()).isEqualTo("withdrawn-1@example.invalid");
+    assertThat(user.getPasswordHash()).isEqualTo("discarded$hash");
+    assertThat(user.getUpdatedAt()).isEqualTo(withdrawnAt);
     assertThat(user.isLoginAllowed(withdrawnAt)).isFalse();
+  }
+
+  @Test
+  void 탈퇴는_auth_version을_올리고_역할_생성시각_실패횟수_잠금은_유지한다() {
+    User user = activeLearner();
+    user.verifyEmail(NOW);
+    for (int i = 0; i < User.MAX_FAILED_LOGIN_ATTEMPTS; i++) {
+      user.recordLoginFailure(NOW);
+    }
+    long authVersionBefore = user.getAuthVersion();
+    int failuresBefore = user.getFailedLoginCount();
+    LocalDateTime lockedUntilBefore = user.getLockedUntil();
+
+    user.withdraw(
+        "withdrawn-1", Email.of("withdrawn-1@example.invalid"), "discarded$hash", NOW.plusDays(1));
+
+    // 탈퇴 API의 조건부 UPDATE와 같은 결과 상태다. 기존 Access·Refresh는 이 값으로 거부된다.
+    assertThat(user.getAuthVersion()).isEqualTo(authVersionBefore + 1);
+    assertThat(user.getRole()).isEqualTo(UserRole.LEARNER);
+    assertThat(user.getCreatedAt()).isEqualTo(NOW);
+    assertThat(user.getFailedLoginCount()).isEqualTo(failuresBefore);
+    assertThat(user.getLockedUntil()).isEqualTo(lockedUntilBefore);
   }
 
   @Test

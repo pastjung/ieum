@@ -535,6 +535,19 @@ class EmailVerificationServiceTest {
         LocalDateTime now) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int withdraw(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String pseudonymUsername,
+        Email pseudonymEmail,
+        String discardedPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /** 트랜잭션 경계를 흉내 낸다. {@code execute}가 반환되기 직전이 commit 자리다. */

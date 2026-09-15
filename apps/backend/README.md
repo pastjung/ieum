@@ -157,6 +157,7 @@ com.itda
 | 로그아웃 | `AuthSessionRevocationController` | `RefreshTokenRequest` | `AuthSessionRevocationService` | `RefreshTokenStore` |
 | 플랫폼 판정·Refresh 전달 | `ClientPlatform`, `ClientPlatformFilter`, `RefreshTokenDelivery`, `RefreshTokenCookie`, `AuthSessionResponses` | — | — | — |
 | 이메일 인증 요청·완료 | `EmailVerificationController` | `EmailVerificationMailRequest`, `EmailVerificationCompletionRequest` | `EmailVerificationRequestService`, `EmailVerificationService`, `MailOutboxEnqueueService` | `ActionTokenStore`, `MailOutboxRepository`, `UserRepository` |
+| 회원 탈퇴 | `UserController` | `UserWithdrawalRequest` | `UserWithdrawalService`, `PasswordVerificationService` | `UserRepository`, `RefreshTokenStore` |
 | 비밀번호 재설정 요청·완료 | `PasswordResetController` | `PasswordResetMailRequest`, `PasswordResetCompletionRequest` | `PasswordResetRequestService`, `PasswordResetService`, `MailOutboxEnqueueService`, `NewPasswordService` | `MailOutboxRepository`, `ActionTokenStore`, `UserRepository`, `RefreshTokenStore` |
 | 메일 발송 worker | — | — | `MailDispatchWorker`, `MailDispatchPolicy`, `MailProvider` | `MailOutboxRepository`, `ActionTokenStore` |
 | 비밀번호 해시·유출 조회 | — | — | `PasswordHasher`, `CompromisedPasswordChecker`와 Argon2id·HIBP 구현 | — |
@@ -199,7 +200,7 @@ HTTP 응답으로 옮긴다. 로그인·토큰 갱신·이메일 인증·비밀�
 ```
 
 **보호 경로는 chain을 나눠 하나씩 연다.** `SecurityFilterChain`이 둘이다. `@Order(1)` chain은
-`securityMatcher`로 보호 경로만 집어(현재는 `GET /api/v1/users/me` 하나) Access 인증 필터와
+`securityMatcher`로 보호 경로만 집어(현재는 `GET /api/v1/users/me`와 `POST /api/v1/users/me/withdrawals`) Access 인증 필터와
 `authenticated()`를 걸고, `@Order(2)` chain이 나머지를 `anyRequest().permitAll()`로 받는다.
 전체를 `authenticated()`로 막지 않는 이유는 그러면 존재하지 않는 경로가 `404 ENDPOINT_NOT_FOUND` 대신
 401이 되어 [API 컨벤션](../../docs/conventions/code/api.md)의 공통 오류 계약이 깨지기 때문이다.
