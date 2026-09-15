@@ -4,6 +4,8 @@ import com.itda.global.braille.BraillePattern;
 import com.itda.global.error.ErrorCode;
 import com.itda.global.error.ErrorCodeAttribute;
 import jakarta.servlet.Filter;
+import jakarta.servlet.ServletRequestEvent;
+import jakarta.servlet.ServletRequestListener;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -13,9 +15,13 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.MDC;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.Ordered;
@@ -56,9 +62,75 @@ public class WebTestEndpoints {
     return registration;
   }
 
+  /** CORS 거부가 Controller까지 가지 않는지 호출 횟수로 확인하는 endpoint (context path 제외). */
+  public static final String CORS_PROBE_PATH = "/test/cors-probe";
+
+  /** 이 query 이름이 붙은 요청만 요청 종료 시점의 MDC를 기록한다. 다른 테스트의 요청은 건드리지 않는다. */
+  public static final String MDC_PROBE_PARAMETER = "mdcProbe";
+
+  /** 요청 시작 때 listener가 MDC에 넣는 표식. 종료 시점에 보이면 같은 요청 thread의 MDC를 읽은 것이다. */
+  public static final String MDC_PROBE_MARKER = "mdcProbeMarker";
+
+  private static final AtomicInteger CORS_PROBE_CALLS = new AtomicInteger();
+  private static final Map<String, Map<String, String>> MDC_AT_REQUEST_END =
+      new ConcurrentHashMap<>();
+
+  public static int corsProbeCalls() {
+    return CORS_PROBE_CALLS.get();
+  }
+
+  public static Optional<Map<String, String>> mdcAtRequestEnd(String probe) {
+    return Optional.ofNullable(MDC_AT_REQUEST_END.get(probe));
+  }
+
+  /**
+   * Tomcat은 요청 listener를 filter chain·ERROR dispatch 전후에 같은 thread에서 부른다. 그래서 종료 시점의 MDC가 곧 요청 처리 뒤
+   * thread에 남은 값이다.
+   */
+  @Bean
+  ServletListenerRegistrationBean<ServletRequestListener> mdcAtRequestEndListener() {
+    ServletRequestListener listener =
+        new ServletRequestListener() {
+          @Override
+          public void requestInitialized(ServletRequestEvent event) {
+            probeOf(event).ifPresent(probe -> MDC.put(MDC_PROBE_MARKER, probe));
+          }
+
+          @Override
+          public void requestDestroyed(ServletRequestEvent event) {
+            probeOf(event)
+                .ifPresent(
+                    probe -> {
+                      Map<String, String> mdc = MDC.getCopyOfContextMap();
+                      MDC_AT_REQUEST_END.put(probe, mdc == null ? Map.of() : Map.copyOf(mdc));
+                      MDC.remove(MDC_PROBE_MARKER);
+                    });
+          }
+        };
+    return new ServletListenerRegistrationBean<>(listener);
+  }
+
+  /** 요청 parameter를 파싱하지 않는다. 종료 시점의 파싱이 다른 테스트의 잘못된 query에 부작용을 내지 않게 query string만 본다. */
+  private static Optional<String> probeOf(ServletRequestEvent event) {
+    if (!(event.getServletRequest() instanceof HttpServletRequest request)) {
+      return Optional.empty();
+    }
+    String prefix = MDC_PROBE_PARAMETER + "=";
+    String query = request.getQueryString();
+    return query != null && query.startsWith(prefix)
+        ? Optional.of(query.substring(prefix.length()))
+        : Optional.empty();
+  }
+
   @RestController
   @RequestMapping("/test")
   static class TestController {
+
+    @GetMapping("/cors-probe")
+    Map<String, Object> corsProbe() {
+      CORS_PROBE_CALLS.incrementAndGet();
+      return Map.of("ok", true);
+    }
 
     record TestBody(@NotBlank String name, int count) {}
 

@@ -1,8 +1,7 @@
 package com.itda.global.security;
 
-import static org.springframework.security.config.Customizer.withDefaults;
-
 import com.itda.user.service.AccessAuthenticationService;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -14,6 +13,9 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.CorsProcessor;
+import org.springframework.web.filter.CorsFilter;
 
 /**
  * Access Token 기반 보호의 공통 설정.
@@ -60,6 +62,15 @@ public class SecurityConfig {
   private static final String WITHDRAWALS_PATH = "/users/me/withdrawals";
 
   /**
+   * CORS 설정 원본인 MVC 설정을 읽는 bean. Spring Security의 {@code http.cors()}도 MVC가 있으면 이 이름의 bean을 {@link
+   * CorsConfigurationSource}로 찾는다.
+   *
+   * <p>구현 타입({@code HandlerMappingIntrospector})으로 받지 않는다. Spring 7에서 제거 예정으로 표시돼 있고 여기서 필요한 것은 설정
+   * 조회 역할뿐이다.
+   */
+  private static final String MVC_CORS_CONFIGURATION_SOURCE = "mvcHandlerMappingIntrospector";
+
+  /**
    * Access Token으로 보호하는 경로.
    *
    * <p>{@code securityMatcher}에 <b>method까지</b> 넣는다. 경로만 지정하면 같은 경로의 다른 method가 이 chain에 들어와, 계약상
@@ -72,10 +83,12 @@ public class SecurityConfig {
   @Order(1)
   public SecurityFilterChain protectedApiSecurityFilterChain(
       HttpSecurity http,
+      @Qualifier(MVC_CORS_CONFIGURATION_SOURCE) CorsConfigurationSource corsConfigurationSource,
+      CorsProcessor corsProcessor,
       AccessAuthenticationService accessAuthenticationService,
       AccessAuthenticationEntryPoint accessAuthenticationEntryPoint)
       throws Exception {
-    return baseline(http)
+    return baseline(http, corsConfigurationSource, corsProcessor)
         .securityMatcher(
             new OrRequestMatcher(
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, ME_PATH),
@@ -93,20 +106,42 @@ public class SecurityConfig {
   /** 나머지 전부. 공개 API·{@code /health}·존재하지 않는 경로가 여기로 온다. */
   @Bean
   @Order(2)
-  public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
-    return baseline(http)
+  public SecurityFilterChain apiSecurityFilterChain(
+      HttpSecurity http,
+      @Qualifier(MVC_CORS_CONFIGURATION_SOURCE) CorsConfigurationSource corsConfigurationSource,
+      CorsProcessor corsProcessor)
+      throws Exception {
+    return baseline(http, corsConfigurationSource, corsProcessor)
         .authorizeHttpRequests(requests -> requests.anyRequest().permitAll())
         .build();
   }
 
-  private static HttpSecurity baseline(HttpSecurity http) throws Exception {
-    return http.cors(withDefaults())
+  private static HttpSecurity baseline(
+      HttpSecurity http,
+      CorsConfigurationSource corsConfigurationSource,
+      CorsProcessor corsProcessor)
+      throws Exception {
+    return http.addFilter(corsFilter(corsConfigurationSource, corsProcessor))
         .csrf(csrf -> csrf.disable())
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .formLogin(formLogin -> formLogin.disable())
         .httpBasic(httpBasic -> httpBasic.disable())
         .logout(logout -> logout.disable());
+  }
+
+  /**
+   * {@code http.cors()}가 만드는 것과 같은 설정 원본·같은 위치의 {@link CorsFilter}에 거부 응답 processor만 바꿔 끼운다.
+   *
+   * <p>{@code http.cors()}는 filter를 직접 만들어 등록해 processor를 지정할 방법이 없다. {@link CorsFilter}를 bean으로 두는
+   * 방법은 쓰지 않는다 — Filter 타입 bean은 Spring Boot가 servlet chain 전체에도 자동 등록한다. 허용 Origin·method·header
+   * 정책은 여전히 {@code WebConfig}의 MVC 설정 한 곳에만 있다.
+   */
+  private static CorsFilter corsFilter(
+      CorsConfigurationSource corsConfigurationSource, CorsProcessor corsProcessor) {
+    CorsFilter corsFilter = new CorsFilter(corsConfigurationSource);
+    corsFilter.setCorsProcessor(corsProcessor);
+    return corsFilter;
   }
 
   /** 보호 chain을 구성하는 후속 이슈가 공유한다. 실패 응답 형식을 한 곳에 묶어 두기 위해 여기서 만든다. */
