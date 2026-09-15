@@ -93,6 +93,40 @@ public interface UserJpaRepository extends JpaRepository<User, Long> {
       @Param("expectedAuthVersion") long expectedAuthVersion,
       @Param("now") LocalDateTime now);
 
+  /**
+   * 비밀번호 재설정의 조건부 UPDATE (API 명세 3.4.2·3.6.2절, ERD 3.1절).
+   *
+   * <p>{@code update versioned}라 Hibernate가 같은 문장에서 {@code row_version}을 올린다. {@code auth_version}은
+   * 저장된 값에서 1을 더한다 — 애플리케이션이 계산한 값을 넣으면 Snapshot 이후 증가분을 덮어쓸 수 있다.
+   *
+   * <p>WHERE의 네 조건이 각자 다른 경쟁을 막는다. {@code status}는 탈퇴를, {@code row_version}은 Snapshot 이후의 변경을,
+   * {@code password_hash}·{@code auth_version}은 그 사이 확정된 다른 인증 변경을 계산해 둔 해시로 덮어쓰는 것을 막는다.
+   *
+   * <p>{@code email_verified_at}은 SET에 넣지 않는다. 재설정이 이메일 인증을 우회하는 경로가 되면 안 된다 (3.4.2절).
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      """
+      update versioned User u
+         set u.passwordHash = :newPasswordHash,
+             u.authVersion = u.authVersion + 1,
+             u.failedLoginCount = 0,
+             u.lockedUntil = null,
+             u.updatedAt = :now
+       where u.id = :userId
+         and u.status = com.itda.user.domain.UserStatus.ACTIVE
+         and u.rowVersion = :expectedRowVersion
+         and u.passwordHash = :expectedPasswordHash
+         and u.authVersion = :expectedAuthVersion
+      """)
+  int resetPassword(
+      @Param("userId") long userId,
+      @Param("expectedRowVersion") long expectedRowVersion,
+      @Param("expectedPasswordHash") String expectedPasswordHash,
+      @Param("expectedAuthVersion") long expectedAuthVersion,
+      @Param("newPasswordHash") String newPasswordHash,
+      @Param("now") LocalDateTime now);
+
   Optional<User> findByUsername(String username);
 
   Optional<User> findByEmail(Email email);

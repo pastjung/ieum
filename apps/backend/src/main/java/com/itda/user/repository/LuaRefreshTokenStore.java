@@ -3,6 +3,7 @@ package com.itda.user.repository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +51,13 @@ public class LuaRefreshTokenStore implements RefreshTokenStore {
   private static final String RESULT_HASH_MISMATCH = "HASH_MISMATCH";
   private static final String RESULT_REUSED = "REUSED";
   private static final String RESULT_FAMILY_REVOKED = "FAMILY_REVOKED";
+
+  /**
+   * {@code families} 인덱스를 한 번에 읽는 member 수.
+   *
+   * <p>사용자 한 명의 로그인 계열은 보통 소수지만 크기를 가정하지 않는다. 구간으로 끊어 한 명령의 응답 크기를 제한한다.
+   */
+  static final int FAMILY_INDEX_PAGE_SIZE = 100;
 
   private static final Logger log = LoggerFactory.getLogger(LuaRefreshTokenStore.class);
 
@@ -249,6 +257,86 @@ public class LuaRefreshTokenStore implements RefreshTokenStore {
       default ->
           unknownResult("revokeFamily", RefreshTokenStore.FamilyRevocationResult.UNAVAILABLE);
     };
+  }
+
+  /**
+   * {@code families} 인덱스를 고정 크기 구간으로 읽으며 계열마다 {@code revokeFamily}를 실행한다.
+   *
+   * <p>인덱스 전체를 한 번에 읽지 않는다. 사용자 한 명의 인덱스라도 크기를 가정하지 않고, 한 명령의 응답 크기를 {@link
+   * #FAMILY_INDEX_PAGE_SIZE}로 제한한다. 스크립트 안에서 인덱스를 순회하지 않는 이유는 계약(3.6.1절)이 긴 순회로 단일 스레드 Redis를 멈추지
+   * 말라고 정했기 때문이다.
+   *
+   * <p><b>저장소가 응답하지 않으면 남은 계열로 넘어가지 않고 즉시 {@code UNAVAILABLE}로 끝낸다.</b> 명령마다 연결 제한 시간을 기다리므로 계속
+   * 진행하면, 이미 commit된 호출자의 응답이 인덱스에 남은 계열 수만큼 늦어진다. 사후 정리 때문에 성공 응답을 붙잡아 두지 않는다.
+   *
+   * <p>계약 형식이 아닌 member 하나는 손상된 기록이라 건너뛰고 나머지 계열은 계속 폐기한다. 결과는 끝까지 확인하지 못했다는 뜻의 {@code
+   * UNAVAILABLE}이다.
+   *
+   * <p>순서는 score(계열 만료) 기준 rank다. 읽는 도중 회전으로 score가 바뀐 계열은 구간 경계에서 빠지거나 두 번 처리될 수 있으며, 빠진 경우에도 결과가
+   * {@code REVOKED}일 수 있다. 두 번 처리는 멱등하고, 빠진 계열은 auth_version 비교로 거부된다.
+   */
+  @Override
+  public RefreshTokenStore.AllFamiliesRevocationResult revokeAllFamilies(long userId) {
+    RefreshTokenStore.TokenRecord.requireUserId(userId);
+    String familiesKey = this.keys.families(userId);
+    boolean complete = true;
+    for (long start = 0; ; start += FAMILY_INDEX_PAGE_SIZE) {
+      Set<String> familyIds;
+      try {
+        familyIds =
+            this.redis.opsForZSet().range(familiesKey, start, start + FAMILY_INDEX_PAGE_SIZE - 1);
+      } catch (DataAccessException e) {
+        logFailure("revokeAllFamilies-index");
+        return RefreshTokenStore.AllFamiliesRevocationResult.UNAVAILABLE;
+      }
+      if (familyIds == null) {
+        return unknownResult(
+            "revokeAllFamilies-index", RefreshTokenStore.AllFamiliesRevocationResult.UNAVAILABLE);
+      }
+      for (String familyId : familyIds) {
+        switch (revokeIndexedFamily(userId, familyId)) {
+          case REVOKED -> {
+            // 폐기됐거나 계열 key가 이미 사라졌다.
+          }
+          case SKIPPED -> complete = false;
+          case UNAVAILABLE -> {
+            return RefreshTokenStore.AllFamiliesRevocationResult.UNAVAILABLE;
+          }
+        }
+      }
+      if (familyIds.size() < FAMILY_INDEX_PAGE_SIZE) {
+        break;
+      }
+    }
+    return complete
+        ? RefreshTokenStore.AllFamiliesRevocationResult.REVOKED
+        : RefreshTokenStore.AllFamiliesRevocationResult.UNAVAILABLE;
+  }
+
+  /** 인덱스 member 하나의 처리 결과. adapter 안에서만 쓴다. */
+  private enum IndexedFamilyOutcome {
+    REVOKED,
+    /** 계약 형식이 아닌 member라 key를 만들지 않고 건너뛰었다. */
+    SKIPPED,
+    /** 폐기 명령이 실패했거나 결과가 불확실하다. */
+    UNAVAILABLE
+  }
+
+  /**
+   * 인덱스 member 하나를 폐기한다.
+   *
+   * <p>계약 형식이 아닌 member로는 key를 만들지 않는다. 그런 값은 이 저장소의 스크립트가 넣을 수 없으므로 손상된 상태다.
+   */
+  private IndexedFamilyOutcome revokeIndexedFamily(long userId, String familyId) {
+    try {
+      RefreshTokenStore.TokenRecord.requireFamilyId(familyId);
+    } catch (IllegalArgumentException e) {
+      logFailure("revokeAllFamilies-member");
+      return IndexedFamilyOutcome.SKIPPED;
+    }
+    return revokeFamily(userId, familyId) == RefreshTokenStore.FamilyRevocationResult.UNAVAILABLE
+        ? IndexedFamilyOutcome.UNAVAILABLE
+        : IndexedFamilyOutcome.REVOKED;
   }
 
   /**

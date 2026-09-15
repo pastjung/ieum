@@ -122,4 +122,15 @@ public class StubUserRepository implements UserRepository {
       long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
     throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
   }
+
+  @Override
+  public int resetPassword(
+      long userId,
+      long expectedRowVersion,
+      String expectedPasswordHash,
+      long expectedAuthVersion,
+      String newPasswordHash,
+      LocalDateTime now) {
+    throw new UnsupportedOperationException();
+  }
 }

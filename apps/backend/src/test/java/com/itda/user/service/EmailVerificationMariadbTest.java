@@ -380,6 +380,23 @@ class EmailVerificationMariadbTest {
     public boolean existsByEmail(Email email) {
       return this.delegate.existsByEmail(email);
     }
+
+    @Override
+    public int resetPassword(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String newPasswordHash,
+        LocalDateTime now) {
+      return this.delegate.resetPassword(
+          userId,
+          expectedRowVersion,
+          expectedPasswordHash,
+          expectedAuthVersion,
+          newPasswordHash,
+          now);
+    }
   }
 
   private final class StubTokenVerifier implements EmailVerificationTokenVerifier {

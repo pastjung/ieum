@@ -157,6 +157,7 @@ com.itda
 | 로그아웃 | `AuthSessionRevocationController` | `RefreshTokenRequest` | `AuthSessionRevocationService` | `RefreshTokenStore` |
 | 플랫폼 판정·Refresh 전달 | `ClientPlatform`, `ClientPlatformFilter`, `RefreshTokenDelivery`, `RefreshTokenCookie`, `AuthSessionResponses` | — | — | — |
 | 이메일 인증 요청·완료 | `EmailVerificationController` | `EmailVerificationMailRequest`, `EmailVerificationCompletionRequest` | `EmailVerificationRequestService`, `EmailVerificationService`, `MailOutboxEnqueueService` | `ActionTokenStore`, `MailOutboxRepository`, `UserRepository` |
+| 비밀번호 재설정 요청·완료 | `PasswordResetController` | `PasswordResetMailRequest`, `PasswordResetCompletionRequest` | `PasswordResetRequestService`, `PasswordResetService`, `MailOutboxEnqueueService`, `NewPasswordService` | `MailOutboxRepository`, `ActionTokenStore`, `UserRepository`, `RefreshTokenStore` |
 | 메일 발송 worker | — | — | `MailDispatchWorker`, `MailDispatchPolicy`, `MailProvider` | `MailOutboxRepository`, `ActionTokenStore` |
 | 비밀번호 해시·유출 조회 | — | — | `PasswordHasher`, `CompromisedPasswordChecker`와 Argon2id·HIBP 구현 | — |
 | Access JWT 발급 | — | — | `AccessTokenIssuer`, `NimbusAccessTokenIssuer` | — |

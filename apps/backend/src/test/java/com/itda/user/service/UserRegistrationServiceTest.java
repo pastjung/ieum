@@ -555,6 +555,17 @@ class UserRegistrationServiceTest {
         long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
       throw new UnsupportedOperationException("회원가입 경로에서는 쓰지 않는다.");
     }
+
+    @Override
+    public int resetPassword(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String newPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private final class RecordingMailOutboxRepository implements MailOutboxRepository {

@@ -521,6 +521,11 @@ class AccessTokenRefreshServiceTest {
       this.revokedFamilies.add(familyId);
       return this.revocationResult;
     }
+
+    @Override
+    public RefreshTokenStore.AllFamiliesRevocationResult revokeAllFamilies(long userId) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private final class RecordingRefreshIssuer implements RefreshTokenIssuer {
@@ -659,6 +664,17 @@ class AccessTokenRefreshServiceTest {
     @Override
     public int recordLoginSuccess(
         long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int resetPassword(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String newPasswordHash,
+        LocalDateTime now) {
       throw new UnsupportedOperationException();
     }
   }

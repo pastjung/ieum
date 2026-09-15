@@ -667,6 +667,17 @@ class LoginServiceTest {
     public int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int resetPassword(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String newPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private final class RecordingAccessTokenIssuer implements AccessTokenIssuer {
@@ -749,6 +760,11 @@ class LoginServiceTest {
     @Override
     public RefreshTokenStore.FamilyRevocationResult revokeFamily(long userId, String familyId) {
       throw new UnsupportedOperationException("로그인은 폐기하지 않는다.");
+    }
+
+    @Override
+    public RefreshTokenStore.AllFamiliesRevocationResult revokeAllFamilies(long userId) {
+      throw new UnsupportedOperationException();
     }
   }
 

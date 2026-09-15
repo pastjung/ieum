@@ -524,6 +524,17 @@ class EmailVerificationServiceTest {
     public boolean existsByEmail(Email email) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int resetPassword(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String newPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /** 트랜잭션 경계를 흉내 낸다. {@code execute}가 반환되기 직전이 commit 자리다. */
