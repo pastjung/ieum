@@ -10,8 +10,6 @@ import com.itda.user.domain.Username;
 import com.itda.user.repository.UserRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import org.hibernate.exception.ConstraintViolationException;
-import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.TransactionException;
@@ -143,35 +141,13 @@ public class UserRegistrationService {
           });
     } catch (DataIntegrityViolationException e) {
       throw new BusinessException(
-          isUniqueViolation(e) && isIdentifierTaken(username, email)
+          DataIntegrityViolations.isUniqueViolation(e) && isIdentifierTaken(username, email)
               ? ErrorCode.ACCOUNT_IDENTIFIER_UNAVAILABLE
               : ErrorCode.AUTH_STATE_UNAVAILABLE);
     } catch (DataAccessException | TransactionException e) {
       // 명령 실패·commit 실패·결과 불확실을 하나로 묶는다. 어느 쪽인지 추측해 성공으로 만들지 않는다 (3.6.2절).
       throw new BusinessException(ErrorCode.AUTH_STATE_UNAVAILABLE);
     }
-  }
-
-  /**
-   * UNIQUE 제약 위반임이 <b>DB가 말해 줘서</b> 확정된 경우만 참이다.
-   *
-   * <p>제약 <b>이름</b>으로 판정하지 않는다. 이름은 스키마를 누가 언제 만들었는지에 따라 달라진다 — 같은 {@code users.username} UNIQUE가
-   * 기존 DB에서는 Hibernate가 지은 {@code UKr43af9ap4edm43mmtq01oddj6}이고 새로 만든 DB에서는 다른 값일 수 있다. 이름을 코드에 적어
-   * 두면 그 목록에 없는 DB에서 중복이 조용히 {@code 503}이 된다.
-   *
-   * <p>대신 방언이 채워 주는 {@link ConstraintKind}를 본다. {@code UNIQUE}면 이 트랜잭션은 <b>확실히</b> 실패해 rollback됐다 —
-   * 결과가 불확실한 상황이 아니다. 어느 컬럼이었는지만 아직 모른다.
-   *
-   * <p>예외 message를 보지 않는다. MariaDB는 {@code Duplicate entry '...' for key '...'}처럼 <b>중복된 값 자체</b>를
-   * message에 담으므로, 그 문자열을 판정에 쓰면 값이 로그·예외 사슬로 흘러갈 경로가 생긴다.
-   */
-  private static boolean isUniqueViolation(DataIntegrityViolationException e) {
-    for (Throwable cause = e; cause != null; cause = cause.getCause()) {
-      if (cause instanceof ConstraintViolationException violation) {
-        return violation.getKind() == ConstraintKind.UNIQUE;
-      }
-    }
-    return false;
   }
 
   /**

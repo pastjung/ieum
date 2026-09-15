@@ -3,9 +3,11 @@ package com.itda.user.controller;
 import com.itda.global.security.AuthenticatedUser;
 import com.itda.user.dto.UserRegistrationRequest;
 import com.itda.user.dto.UserSummaryResponse;
+import com.itda.user.dto.UserWithdrawalRequest;
 import com.itda.user.service.UserRegistrationService;
 import com.itda.user.service.UserSummary;
 import com.itda.user.service.UserSummaryQueryService;
+import com.itda.user.service.UserWithdrawalService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -28,12 +31,15 @@ public class UserController {
 
   private final UserRegistrationService userRegistrationService;
   private final UserSummaryQueryService userSummaryQueryService;
+  private final UserWithdrawalService userWithdrawalService;
 
   public UserController(
       UserRegistrationService userRegistrationService,
-      UserSummaryQueryService userSummaryQueryService) {
+      UserSummaryQueryService userSummaryQueryService,
+      UserWithdrawalService userWithdrawalService) {
     this.userRegistrationService = userRegistrationService;
     this.userSummaryQueryService = userSummaryQueryService;
+    this.userWithdrawalService = userWithdrawalService;
   }
 
   /**
@@ -59,5 +65,19 @@ public class UserController {
   public UserSummaryResponse me(@AuthenticationPrincipal AuthenticatedUser authenticatedUser) {
     return UserSummaryResponse.from(
         this.userSummaryQueryService.getSummary(authenticatedUser.userId()));
+  }
+
+  /**
+   * 회원 탈퇴. 성공은 {@code 204}와 빈 body다.
+   *
+   * <p>대상은 인증 필터가 확인한 principal뿐이다. body·path·query의 사용자 식별자를 받지 않는다. {@code X-Client-Platform}을 읽지
+   * 않고 쿠키를 읽거나 지우지 않으며 토큰을 발급하지 않는다 — 클라이언트의 로컬 저장소 정리는 클라이언트 책임이다.
+   */
+  @PostMapping("/me/withdrawals")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void withdraw(
+      @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+      @RequestBody UserWithdrawalRequest request) {
+    this.userWithdrawalService.withdraw(request.toCommand(authenticatedUser.userId()));
   }
 }

@@ -1,5 +1,6 @@
 package com.itda.user.service;
 
+import com.itda.user.repository.RefreshTokenStore;
 import com.itda.user.repository.UserRepository;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
@@ -54,5 +55,27 @@ public class UserAccountConfiguration {
   @Bean
   public UserSummaryQueryService userSummaryQueryService(UserRepository userRepository) {
     return new UserSummaryQueryService(userRepository);
+  }
+
+  /**
+   * 회원 탈퇴. 트랜잭션 경계는 회원가입과 같은 template이다 — "execute 밖에서 예외를 분류한다"는 규칙이 같다.
+   *
+   * <p>현재 비밀번호 확인은 기존 {@link PasswordVerificationService}를, 폐기 비밀번호 해시는 운영과 같은 {@link
+   * PasswordHasher}를 쓴다. 유출 조회가 붙은 {@code NewPasswordService}는 쓰지 않는다.
+   */
+  @Bean
+  public UserWithdrawalService userWithdrawalService(
+      UserRepository userRepository,
+      PasswordVerificationService passwordVerificationService,
+      PasswordHasher passwordHasher,
+      RefreshTokenStore refreshTokenStore,
+      TransactionOperations userRegistrationTransactionOperations) {
+    return new UserWithdrawalService(
+        userRepository,
+        passwordVerificationService,
+        passwordHasher,
+        refreshTokenStore,
+        userRegistrationTransactionOperations,
+        Clock.systemUTC());
   }
 }

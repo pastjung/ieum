@@ -204,6 +204,9 @@ public class User {
    *
    * <p>가명 식별자와 폐기된 비밀번호 해시는 무작위 값 생성이 필요해 서비스가 만들어 넘긴다. 엔티티는 "status·withdrawn_at·인증 초기화·가명화가 함께
    * 일어난다"는 불변식만 강제한다. Refresh Token 폐기는 Redis 작업이며 이 트랜잭션 밖이다.
+   *
+   * <p>{@code auth_version}도 함께 올린다. 탈퇴 API의 조건부 UPDATE({@code UserRepository.withdraw})와 같은 결과 상태를
+   * 만들어야 두 경로가 갈라지지 않는다.
    */
   public void withdraw(
       String pseudonymizedUsername,
@@ -217,6 +220,8 @@ public class User {
     this.username = normalizeUsername(pseudonymizedUsername);
     this.email = requireNonNull(pseudonymizedEmail, "가명 이메일");
     this.passwordHash = requireText(discardedPasswordHash, "폐기 비밀번호 해시");
+    // 기존 Access·Refresh 인증 세션을 끊는다. 탈퇴 조건부 UPDATE와 같은 상태를 만든다 (ERD 3.1절).
+    this.authVersion++;
     this.updatedAt = now;
   }
 

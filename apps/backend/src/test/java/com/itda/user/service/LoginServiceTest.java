@@ -678,6 +678,19 @@ class LoginServiceTest {
         LocalDateTime now) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int withdraw(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String pseudonymUsername,
+        Email pseudonymEmail,
+        String discardedPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private final class RecordingAccessTokenIssuer implements AccessTokenIssuer {

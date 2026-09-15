@@ -542,6 +542,27 @@ class PasswordResetMariadbTest {
     public boolean existsByEmail(Email email) {
       return this.delegate.existsByEmail(email);
     }
+
+    @Override
+    public int withdraw(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String pseudonymUsername,
+        Email pseudonymEmail,
+        String discardedPasswordHash,
+        LocalDateTime now) {
+      return this.delegate.withdraw(
+          userId,
+          expectedRowVersion,
+          expectedPasswordHash,
+          expectedAuthVersion,
+          pseudonymUsername,
+          pseudonymEmail,
+          discardedPasswordHash,
+          now);
+    }
   }
 
   private static final class StubTokenVerifier implements PasswordResetTokenVerifier {

@@ -77,4 +77,25 @@ public class UserRepositoryImpl implements UserRepository {
         newPasswordHash,
         now);
   }
+
+  @Override
+  public int withdraw(
+      long userId,
+      long expectedRowVersion,
+      String expectedPasswordHash,
+      long expectedAuthVersion,
+      String pseudonymUsername,
+      Email pseudonymEmail,
+      String discardedPasswordHash,
+      LocalDateTime now) {
+    return jpaRepository.withdraw(
+        userId,
+        expectedRowVersion,
+        expectedPasswordHash,
+        expectedAuthVersion,
+        pseudonymUsername,
+        pseudonymEmail.getValue(),
+        discardedPasswordHash,
+        now);
+  }
 }

@@ -460,6 +460,19 @@ class PasswordResetRedisTest extends ActionTokenRedisTestBase {
     public boolean existsByEmail(Email email) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int withdraw(
+        long userId,
+        long expectedRowVersion,
+        String expectedPasswordHash,
+        long expectedAuthVersion,
+        String pseudonymUsername,
+        Email pseudonymEmail,
+        String discardedPasswordHash,
+        LocalDateTime now) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   private static final class FailableTransactionOperations implements TransactionOperations {

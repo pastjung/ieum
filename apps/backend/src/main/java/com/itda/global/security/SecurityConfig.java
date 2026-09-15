@@ -13,6 +13,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 
 /**
  * Access Token 기반 보호의 공통 설정.
@@ -53,8 +54,10 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
 @EnableWebSecurity
 public class SecurityConfig {
 
-  /** 유일한 보호 대상 (API 명세 3.2절). 추가할 때는 이 목록이 아니라 계약 문서가 먼저 움직인다. */
+  /** 보호 대상 (API 명세 3.2·3.2.1절). 추가할 때는 이 목록이 아니라 계약 문서가 먼저 움직인다. */
   private static final String ME_PATH = "/users/me";
+
+  private static final String WITHDRAWALS_PATH = "/users/me/withdrawals";
 
   /**
    * Access Token으로 보호하는 경로.
@@ -73,7 +76,10 @@ public class SecurityConfig {
       AccessAuthenticationEntryPoint accessAuthenticationEntryPoint)
       throws Exception {
     return baseline(http)
-        .securityMatcher(PathPatternRequestMatcher.pathPattern(HttpMethod.GET, ME_PATH))
+        .securityMatcher(
+            new OrRequestMatcher(
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, ME_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, WITHDRAWALS_PATH)))
         .addFilterBefore(
             new AccessTokenAuthenticationFilter(accessAuthenticationService),
             AuthorizationFilter.class)
