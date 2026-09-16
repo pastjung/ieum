@@ -14,27 +14,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
-/**
- * problems — 검증을 통과한 문제 원본 (ERD 4.3절). 수업·커리큘럼·추천학습이 공통으로 참조한다.
- *
- * <p>등록 후 수정·삭제는 제공하지 않는다. 다른 내용은 새 문제로 등록한다. 그래서 상태 변경 메서드가 없다.
- *
- * <p>정답 Cell은 {@link ProblemCell}이 problem_id로 이 문제를 참조하는 단방향 다대일이다. Problem은 Cell 목록을 들고 있지 않으므로
- * Cell이 필요한 쪽에서 {@code ProblemCellRepository}로 조회한다.
- *
- * <p>ERD 4.3절이 "problems·problem_cells를 전체 검증 후 한 트랜잭션으로 저장하고 실패 시 일부도 저장하지 않는다"고 규정하므로, 문제와 Cell
- * 저장은 한 트랜잭션 안에서 함께 수행한다.
- */
 @Entity
 @Table(name = "problems")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Problem {
-
-  /** ERD 4.4절: 문제는 1~6 Cell이다. Cell 개수 검증은 {@link ProblemCell#createAll}이 수행한다. */
-  public static final int MIN_CELLS = 1;
-
-  public static final int MAX_CELLS = 6;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
