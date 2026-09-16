@@ -1,4 +1,3 @@
 package com.itda.problem.dto;
 
-public record RegisterProblemRequest(String targetText) {
-}
+public record RegisterProblemRequest(String targetText) {}

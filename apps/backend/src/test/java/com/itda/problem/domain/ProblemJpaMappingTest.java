@@ -84,7 +84,8 @@ class ProblemJpaMappingTest {
   @Test
   void learning_skills_행을_저장하고_다시_읽는다() {
     LearningSkill saved =
-        entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_01, "ㄱ", "초성 ㄱ", "초성 자리의 ㄱ"));
+        entityManager.persistFlushFind(
+            LearningSkill.of(SkillType.SKILL_01, "ㄱ", "초성 ㄱ", "초성 자리의 ㄱ"));
     entityManager.clear();
 
     LearningSkill found = entityManager.find(LearningSkill.class, saved.getId());
@@ -99,7 +100,9 @@ class ProblemJpaMappingTest {
     entityManager.persistAndFlush(LearningSkill.of(SkillType.SKILL_01, "ㄴ", "초성 ㄴ", null));
 
     assertThatThrownBy(
-            () -> entityManager.persistAndFlush(LearningSkill.of(SkillType.SKILL_01, "ㄴ", "종성 ㄴ", null)))
+            () ->
+                entityManager.persistAndFlush(
+                    LearningSkill.of(SkillType.SKILL_01, "ㄴ", "종성 ㄴ", null)))
         .isInstanceOf(PersistenceException.class);
   }
 
@@ -116,7 +119,8 @@ class ProblemJpaMappingTest {
   @Test
   void problem_skills는_문제와_요소를_FK로_연결해_저장한다() {
     Problem problem =
-        entityManager.persistFlushFind(new Problem(null, ProblemSourceType.SYSTEM, ProblemType.CONSONANT, "ㄱ"));
+        entityManager.persistFlushFind(
+            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.CONSONANT, "ㄱ"));
     LearningSkill skill =
         entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_03, "ㄱ", "초성 ㄱ", null));
 
@@ -133,7 +137,8 @@ class ProblemJpaMappingTest {
   @Test
   void 같은_문제와_같은_요소는_한_번만_연결된다() {
     Problem problem =
-        entityManager.persistFlushFind(new Problem(null, ProblemSourceType.SYSTEM, ProblemType.CONSONANT, "ㄹ"));
+        entityManager.persistFlushFind(
+            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.CONSONANT, "ㄹ"));
     LearningSkill skill =
         entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_04, "ㄹ", "초성 ㄹ", null));
     entityManager.persistAndFlush(new ProblemSkill(problem, skill));
@@ -166,7 +171,8 @@ class ProblemJpaMappingTest {
   @Test
   void 한_문제에_여러_요소를_연결한다() {
     Problem problem =
-        entityManager.persistFlushFind(new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "가방"));
+        entityManager.persistFlushFind(
+            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "가방"));
     LearningSkill first =
         entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_05, "ㄱ", "초성 ㄱ", null));
     LearningSkill second =
@@ -179,7 +185,8 @@ class ProblemJpaMappingTest {
     List<ProblemSkill> links =
         entityManager
             .getEntityManager()
-            .createQuery("select ps from ProblemSkill ps where ps.problem.id = :id", ProblemSkill.class)
+            .createQuery(
+                "select ps from ProblemSkill ps where ps.problem.id = :id", ProblemSkill.class)
             .setParameter("id", problem.getId())
             .getResultList();
 
@@ -194,9 +201,11 @@ class ProblemJpaMappingTest {
     LearningSkill skill =
         entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_06, "ㅁ", "초성 ㅁ", null));
     Problem first =
-        entityManager.persistFlushFind(new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "마을"));
+        entityManager.persistFlushFind(
+            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "마을"));
     Problem second =
-        entityManager.persistFlushFind(new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "머리"));
+        entityManager.persistFlushFind(
+            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "머리"));
 
     entityManager.persistAndFlush(new ProblemSkill(first, skill));
     entityManager.persistAndFlush(new ProblemSkill(second, skill));
@@ -205,7 +214,8 @@ class ProblemJpaMappingTest {
     Long count =
         entityManager
             .getEntityManager()
-            .createQuery("select count(ps) from ProblemSkill ps where ps.skill.id = :id", Long.class)
+            .createQuery(
+                "select count(ps) from ProblemSkill ps where ps.skill.id = :id", Long.class)
             .setParameter("id", skill.getId())
             .getSingleResult();
 
@@ -215,7 +225,8 @@ class ProblemJpaMappingTest {
   private Problem persistWithCells(
       ProblemType problemType, String targetText, List<Integer> expectedPatterns) {
     Problem saved =
-        entityManager.persistFlushFind(new Problem(null, ProblemSourceType.SYSTEM, problemType, targetText));
+        entityManager.persistFlushFind(
+            new Problem(null, ProblemSourceType.SYSTEM, problemType, targetText));
     for (int index = 0; index < expectedPatterns.size(); index++) {
       entityManager.persist(new ProblemCell(saved, index + 1, expectedPatterns.get(index)));
     }

@@ -12,18 +12,14 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1")
 public class ProblemController {
-    private final ProblemService problemService;
+  private final ProblemService problemService;
 
-
-    @PostMapping("/lectures/{lectureId}/problems")
-    public ResponseEntity<Void> registerProblem(
-        @PathVariable Long lectureId,
-        @RequestBody RegisterProblemRequest registerProblemRequest,
-        @AuthenticationPrincipal AuthenticatedUser user
-        ){
-        problemService.registerProblem(user, lectureId, registerProblemRequest);
-        return ResponseEntity.noContent().build();
-
-    }
-
+  @PostMapping("/lectures/{lectureId}/problems")
+  public ResponseEntity<Void> registerProblem(
+      @PathVariable Long lectureId,
+      @RequestBody RegisterProblemRequest registerProblemRequest,
+      @AuthenticationPrincipal AuthenticatedUser user) {
+    problemService.registerProblem(user, lectureId, registerProblemRequest);
+    return ResponseEntity.noContent().build();
+  }
 }

@@ -10,8 +10,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * ProblemCell은 현재 검증 없는 공개 생성자만 제공한다. Cell 개수·순번 연속성·0~63 범위 검증이 도메인에 없으므로 여기서 다루지 않는다 —
- * 호출하는 쪽(ProblemService)의 책임이다.
+ * ProblemCell은 현재 검증 없는 공개 생성자만 제공한다. Cell 개수·순번 연속성·0~63 범위 검증이 도메인에 없으므로 여기서 다루지 않는다 — 호출하는
+ * 쪽(ProblemService)의 책임이다.
  */
 class ProblemCellTest {
 

@@ -146,8 +146,7 @@ class ProblemServiceTest {
 
     assertThatThrownBy(
             () ->
-                problemService.registerProblem(
-                    other, LECTURE_ID, new RegisterProblemRequest("가방")))
+                problemService.registerProblem(other, LECTURE_ID, new RegisterProblemRequest("가방")))
         .isInstanceOf(RuntimeException.class);
 
     verify(fastApiClient, never()).analyze(any());
@@ -243,8 +242,8 @@ class ProblemServiceTest {
   }
 
   /**
-   * 요소 없는 문제는 ERD 4.6절이 금지한다. 빈 목록을 그대로 넘기면 조건 없는 조회가 되어 learning_skills 전체가 한 문제에 연결되므로,
-   * 조회 자체를 하지 않는 것까지 고정한다.
+   * 요소 없는 문제는 ERD 4.6절이 금지한다. 빈 목록을 그대로 넘기면 조건 없는 조회가 되어 learning_skills 전체가 한 문제에 연결되므로, 조회 자체를 하지
+   * 않는 것까지 고정한다.
    */
   @Test
   void 분석_결과의_학습_요소_목록이_비어_있으면_저장하지_않는다() {

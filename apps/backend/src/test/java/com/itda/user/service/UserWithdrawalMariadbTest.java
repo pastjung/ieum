@@ -15,9 +15,9 @@ import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.Participant;
 import com.itda.problem.domain.LearningSkill;
 import com.itda.problem.domain.Problem;
-import com.itda.problem.domain.ProblemSourceType;
 import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSkill;
+import com.itda.problem.domain.ProblemSourceType;
 import com.itda.problem.domain.ProblemType;
 import com.itda.problem.domain.SkillType;
 import com.itda.user.domain.AccountActionPurpose;
@@ -734,8 +734,8 @@ class UserWithdrawalMariadbTest {
   }
 
   /**
-   * 탈퇴 대상 강사가 담당하는 수업과 등록한 INSTRUCTOR 문제를 만든다. 문제·Cell·요소 연결은 각각 별도 엔티티이므로 같은 트랜잭션에서 차례로
-   * 저장한다 (ERD 4.3절).
+   * 탈퇴 대상 강사가 담당하는 수업과 등록한 INSTRUCTOR 문제를 만든다. 문제·Cell·요소 연결은 각각 별도 엔티티이므로 같은 트랜잭션에서 차례로 저장한다 (ERD
+   * 4.3절).
    *
    * @return 등록한 문제의 id
    */

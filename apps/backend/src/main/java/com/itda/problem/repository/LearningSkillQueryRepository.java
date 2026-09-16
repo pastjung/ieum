@@ -5,41 +5,30 @@ import com.itda.problem.domain.QLearningSkill;
 import com.itda.problem.dto.SkillSet;
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
-
-import java.util.List;
 
 @Repository
 @RequiredArgsConstructor
 public class LearningSkillQueryRepository {
 
-    private final JPAQueryFactory queryFactory;
+  private final JPAQueryFactory queryFactory;
 
-    public List<LearningSkill> findAllBySkillSets(
-        List<SkillSet> skillSets
-    ) {
+  public List<LearningSkill> findAllBySkillSets(List<SkillSet> skillSets) {
 
-        QLearningSkill qLearningSkill =
-            QLearningSkill.learningSkill;
+    QLearningSkill qLearningSkill = QLearningSkill.learningSkill;
 
-        BooleanBuilder condition =
-            new BooleanBuilder();
+    BooleanBuilder condition = new BooleanBuilder();
 
-        for (SkillSet set : skillSets) {
-            condition.or(
-                qLearningSkill.skillType.eq(set.skillType())
-                    .and(
-                        qLearningSkill.metadata.eq(
-                            set.metadata()
-                        )
-                    )
-            );
-        }
-
-        return queryFactory
-            .selectFrom(qLearningSkill)
-            .where(condition)
-            .fetch();
+    for (SkillSet set : skillSets) {
+      condition.or(
+          qLearningSkill
+              .skillType
+              .eq(set.skillType())
+              .and(qLearningSkill.metadata.eq(set.metadata())));
     }
+
+    return queryFactory.selectFrom(qLearningSkill).where(condition).fetch();
+  }
 }
