@@ -13,9 +13,13 @@ import com.itda.learning.domain.ProblemAttempt;
 import com.itda.learning.domain.UserSkillMemory;
 import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.Participant;
+import com.itda.problem.domain.LearningSkill;
 import com.itda.problem.domain.Problem;
+import com.itda.problem.domain.ProblemSourceType;
+import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSkill;
 import com.itda.problem.domain.ProblemType;
+import com.itda.problem.domain.SkillType;
 import com.itda.user.domain.AccountActionPurpose;
 import com.itda.user.domain.Email;
 import com.itda.user.domain.PasswordPolicy;
@@ -730,28 +734,34 @@ class UserWithdrawalMariadbTest {
   }
 
   /**
-   * 탈퇴 대상 강사가 담당하는 수업과 등록한 INSTRUCTOR 문제를 만든다. 문제는 애그리거트 규칙대로 Cell을 함께 저장하고 요소 연결을 붙인다.
+   * 탈퇴 대상 강사가 담당하는 수업과 등록한 INSTRUCTOR 문제를 만든다. 문제·Cell·요소 연결은 각각 별도 엔티티이므로 같은 트랜잭션에서 차례로
+   * 저장한다 (ERD 4.3절).
    *
    * @return 등록한 문제의 id
    */
+  /** learning_skills는 (skill_type, metadata)가 유니크다. 시드를 여러 번 돌려도 충돌하지 않게 값을 분리한다. */
+  private static String uniqueMetadata() {
+    return UUID.randomUUID().toString().substring(0, 8);
+  }
+
   private long seedInstructorRows() {
     return inTransaction(
         () -> {
           this.entityManager.persist(
               Lecture.schedule(
                   this.userId, "점자 기초", "탈퇴 보존 확인", participationCode(), NOW.plusDays(1), NOW));
-          Long problemId =
-              this.entityManager.persistAndGetId(
-                  Problem.registerByInstructor(
-                      this.userId,
-                      UUID.randomUUID().toString(),
-                      ProblemType.WORD,
-                      "보존",
-                      List.of(0b000001, 0b000011),
-                      NOW),
-                  Long.class);
-          this.entityManager.persist(ProblemSkill.link(problemId, 1L));
-          return problemId;
+          Problem problem =
+              this.entityManager.persistFlushFind(
+                  new Problem(this.userId, ProblemSourceType.INSTRUCTOR, ProblemType.WORD, "보존"));
+          List<Integer> patterns = List.of(0b000001, 0b000011);
+          for (int index = 0; index < patterns.size(); index++) {
+            this.entityManager.persist(new ProblemCell(problem, index + 1, patterns.get(index)));
+          }
+          LearningSkill skill =
+              this.entityManager.persistFlushFind(
+                  LearningSkill.of(SkillType.SKILL_01, uniqueMetadata(), "초성 ㄱ", null));
+          this.entityManager.persist(new ProblemSkill(problem, skill));
+          return problem.getId();
         });
   }
 

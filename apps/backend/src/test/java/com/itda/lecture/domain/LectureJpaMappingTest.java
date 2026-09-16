@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.itda.problem.domain.Problem;
+import com.itda.problem.domain.ProblemSourceType;
 import com.itda.problem.domain.ProblemType;
 import jakarta.persistence.PersistenceException;
 import java.time.LocalDateTime;
@@ -111,6 +112,6 @@ class LectureJpaMappingTest {
 
   private Problem persistProblem(String targetText) {
     return entityManager.persistFlushFind(
-        Problem.registerAsSystem(ProblemType.WORD, targetText));
+        new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, targetText));
   }
 }

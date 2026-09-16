@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.itda.problem.domain.Problem;
+import com.itda.problem.domain.ProblemSourceType;
 import com.itda.problem.domain.ProblemType;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -110,7 +111,7 @@ class LectureTest {
   @Test
   void 수업_문제_연결은_수업과_문제를_모두_참조한다() {
     Lecture lecture = scheduled();
-    Problem problem = Problem.registerAsSystem(ProblemType.WORD, "가방");
+    Problem problem = new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "가방");
 
     LectureProblem link = new LectureProblem(lecture, problem);
 
@@ -120,7 +121,7 @@ class LectureTest {
 
   @Test
   void 수업_없이는_문제를_연결할_수_없다() {
-    Problem problem = Problem.registerAsSystem(ProblemType.WORD, "가방");
+    Problem problem = new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "가방");
 
     assertThatThrownBy(() -> new LectureProblem(null, problem))
         .isInstanceOf(IllegalArgumentException.class);

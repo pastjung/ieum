@@ -66,31 +66,10 @@ public class Problem {
       ProblemSourceType sourceType,
       ProblemType problemType,
       String targetText) {
-    if (sourceType == null || problemType == null) {
-      throw new IllegalArgumentException("출처와 문제 유형은 필수입니다.");
-    }
-    if (targetText == null || targetText.isBlank()) {
-      throw new IllegalArgumentException("목표 텍스트는 필수입니다.");
-    }
 
     this.creatorUserId = creatorUserId;
     this.sourceType = sourceType;
     this.problemType = problemType;
     this.targetText = targetText;
   }
-
-  /** 강사가 공개 등록하는 문제. source_type·creator_user_id는 서버가 결정한다 (ERD 4.3절). */
-  public static Problem registerByInstructor(
-      Long creatorUserId, ProblemType problemType, String targetText) {
-    if (creatorUserId == null) {
-      throw new IllegalArgumentException("강사 등록 문제는 작성자가 필수입니다.");
-    }
-    return new Problem(creatorUserId, ProblemSourceType.INSTRUCTOR, problemType, targetText);
-  }
-
-  /** 버전 Seed·일회성 마이그레이션으로 등록하는 기본 문제. 작성자는 NULL이다 (ERD 4.7절). */
-  public static Problem registerAsSystem(ProblemType problemType, String targetText) {
-    return new Problem(null, ProblemSourceType.SYSTEM, problemType, targetText);
-  }
-
 }
