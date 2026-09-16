@@ -76,6 +76,10 @@ itda:
     # AuthRedisProperties 주석 참고. 값이 틀리면 다른 환경의 토큰 상태를 조용히 읽게 되므로 기본값을 두지 않는다.
     auth-redis:
       key-prefix: ${AUTH_REDIS_KEY_PREFIX}
+  # 오답 분석·맞춤 학습을 담당하는 FastAPI 서비스 (apps/ai). 주소가 환경마다 달라 소스에 두지 않는다.
+  # 기본값은 로컬 개발용이며 배포 환경은 AI_BASE_URL로 덮어쓴다.
+  ai:
+    base-url: ${AI_BASE_URL:http://localhost:8000}
 
 logging:
   pattern:
