@@ -3,6 +3,8 @@ package com.itda.lecture.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.itda.problem.domain.Problem;
+import com.itda.problem.domain.ProblemType;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -106,13 +108,28 @@ class LectureTest {
   }
 
   @Test
-  void 종료된_수업에는_문제를_연결할_수_없다() {
+  void 수업_문제_연결은_수업과_문제를_모두_참조한다() {
     Lecture lecture = scheduled();
-    lecture.open(NOW);
-    lecture.close(NOW.plusHours(1));
+    Problem problem = Problem.registerAsSystem(ProblemType.WORD, "가방");
 
-    assertThatThrownBy(() -> LectureProblem.link(lecture, 7L))
-        .isInstanceOf(IllegalStateException.class);
+    LectureProblem link = new LectureProblem(lecture, problem);
+
+    assertThat(link.getLecture()).isSameAs(lecture);
+    assertThat(link.getProblem()).isSameAs(problem);
+  }
+
+  @Test
+  void 수업_없이는_문제를_연결할_수_없다() {
+    Problem problem = Problem.registerAsSystem(ProblemType.WORD, "가방");
+
+    assertThatThrownBy(() -> new LectureProblem(null, problem))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void 문제_없이는_수업에_연결할_수_없다() {
+    assertThatThrownBy(() -> new LectureProblem(scheduled(), null))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
