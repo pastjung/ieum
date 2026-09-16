@@ -2,7 +2,8 @@ package com.itda.support.security;
 
 import com.itda.user.domain.Email;
 import com.itda.user.domain.User;
-import com.itda.user.domain.UserRepository;
+import com.itda.user.repository.UserRepository;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -26,8 +27,26 @@ public class StubUserRepository implements UserRepository {
    */
   private final AtomicInteger findByIdCallCount = new AtomicInteger();
 
+  /**
+   * 사용자를 등록한다. 엔티티의 id도 함께 채운다.
+   *
+   * <p>id는 DB가 발급하므로 {@code User.create}만으로는 비어 있다. key와 엔티티의 id가 어긋나면 id를 읽는 호출자가 이 stub에서만
+   * NullPointerException을 만난다.
+   */
   public void register(long id, User user) {
+    assignId(user, id);
     this.usersById.put(id, user);
+  }
+
+  private static void assignId(User user, long id) {
+    try {
+      java.lang.reflect.Field field = User.class.getDeclaredField("id");
+      field.setAccessible(true);
+      field.set(user, id);
+    } catch (ReflectiveOperationException e) {
+      // 엔티티에 setter를 만들지 않는다는 규칙을 테스트 편의로 깨지 않으려고 리플렉션을 쓴다.
+      throw new IllegalStateException("테스트 fixture에 id를 넣지 못했습니다.", e);
+    }
   }
 
   /** 트랜잭션을 시작하지 못하는 장애. DataAccessException이 아니라 TransactionException 계열이다. */
@@ -85,5 +104,46 @@ public class StubUserRepository implements UserRepository {
   @Override
   public boolean existsByEmail(Email email) {
     throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
+  }
+
+  @Override
+  public int markEmailVerified(long userId, long expectedRowVersion, LocalDateTime now) {
+    throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
+  }
+
+  @Override
+  public int recordLoginFailure(
+      long userId, int maxAttempts, LocalDateTime lockedUntil, LocalDateTime now) {
+    throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
+  }
+
+  @Override
+  public int recordLoginSuccess(
+      long userId, long expectedRowVersion, long expectedAuthVersion, LocalDateTime now) {
+    throw new UnsupportedOperationException("인증 경로에서는 쓰지 않는다.");
+  }
+
+  @Override
+  public int resetPassword(
+      long userId,
+      long expectedRowVersion,
+      String expectedPasswordHash,
+      long expectedAuthVersion,
+      String newPasswordHash,
+      LocalDateTime now) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public int withdraw(
+      long userId,
+      long expectedRowVersion,
+      String expectedPasswordHash,
+      long expectedAuthVersion,
+      String pseudonymUsername,
+      Email pseudonymEmail,
+      String discardedPasswordHash,
+      LocalDateTime now) {
+    throw new UnsupportedOperationException();
   }
 }

@@ -73,25 +73,68 @@ dependencies {
   annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
 }
 
-tasks.named('test') {
-    useJUnitPlatform()
+// 실제 MariaDB가 있어야만 의미가 있는 테스트에 붙이는 JUnit tag.
+// 기본 test에서는 빼고 mariadbTest에서만 실행한다 — H2로 통과시키면 검증한 것이 없다.
+ext.mariadbTestTag = 'mariadb'
 
-    // Access·Refresh 서명 key를 테스트 실행마다 새로 만든다. 저장소에 key 문자열을 남기지 않기 위해서다.
-    // doFirst에 두어 task 입력에 포함시키지 않는다 (매번 값이 바뀌어 up-to-date 판정이 무의미해지는 것을 피한다).
-    doFirst {
+// Access·Refresh·action 서명 key를 테스트 실행마다 새로 만든다. 저장소에 key 문자열을 남기지 않기 위해서다.
+// doFirst에 두어 task 입력에 포함시키지 않는다 (매번 값이 바뀌어 up-to-date 판정이 무의미해지는 것을 피한다).
+def applyTestSecrets = { Test task ->
+    task.doFirst {
         def randomKey = {
             byte[] keyBytes = new byte[32]
             new java.security.SecureRandom().nextBytes(keyBytes)
             java.util.Base64.urlEncoder.withoutPadding().encodeToString(keyBytes)
         }
-        systemProperty 'AUTH_JWT_ISSUER', 'itda-backend-test'
-        systemProperty 'AUTH_ACCESS_ACTIVE_KID', 'test-active'
-        systemProperty 'AUTH_ACCESS_ACTIVE_KEY', randomKey()
+        task.systemProperty 'AUTH_JWT_ISSUER', 'itda-backend-test'
+        task.systemProperty 'AUTH_ACCESS_ACTIVE_KID', 'test-active'
+        task.systemProperty 'AUTH_ACCESS_ACTIVE_KEY', randomKey()
         // kid는 Access ring과 겹치면 안 된다 (RefreshTokenConfiguration의 교차 중복 검사)
-        systemProperty 'AUTH_REFRESH_ACTIVE_KID', 'test-refresh-active'
-        systemProperty 'AUTH_REFRESH_ACTIVE_KEY', randomKey()
+        task.systemProperty 'AUTH_REFRESH_ACTIVE_KID', 'test-refresh-active'
+        task.systemProperty 'AUTH_REFRESH_ACTIVE_KEY', randomKey()
+        task.systemProperty 'AUTH_ACTION_ACTIVE_KID', 'test-action-active'
+        task.systemProperty 'AUTH_ACTION_ACTIVE_KEY', randomKey()
         // 인증 상태 Redis 키 prefix. 테스트가 다른 환경의 키를 건드리지 못하게 test로 고정한다.
-        systemProperty 'AUTH_REDIS_KEY_PREFIX', 'test'
+        task.systemProperty 'AUTH_REDIS_KEY_PREFIX', 'test'
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform { excludeTags mariadbTestTag }
+    applyTestSecrets(it)
+}
+
+// 실제 MariaDB 11.8.9에 대고 도는 테스트.
+// Dockerfile의 mariadb-test 스테이지가 실행하며, 로컬에서는 같은 접속 정보의 MariaDB를 띄운 뒤 직접 실행한다.
+//
+// 접속 정보는 환경변수로만 받는다. 비밀번호에는 기본값을 두지 않으며 -D로 넘기지도 않는다.
+// systemProperty는 forked JVM의 명령줄에 그대로 실리므로 ps 출력이나 크래시 덤프에 남을 수 있다.
+tasks.register('mariadbTest', Test) {
+    description = '실제 MariaDB가 필요한 통합 테스트만 실행한다.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags mariadbTestTag }
+    applyTestSecrets(it)
+
+    doFirst {
+        def host = System.getenv('ITDA_TEST_DB_HOST') ?: '127.0.0.1'
+        def port = System.getenv('ITDA_TEST_DB_PORT') ?: '3306'
+        def name = System.getenv('ITDA_TEST_DB_NAME') ?: 'itda_test'
+        def user = System.getenv('ITDA_TEST_DB_USER') ?: 'itda_test'
+        def password = System.getenv('ITDA_TEST_DB_PASSWORD')
+        if (!password) {
+            throw new GradleException(
+                    'ITDA_TEST_DB_PASSWORD 환경변수가 필요합니다. ' +
+                            '비밀번호 기본값을 두지 않는 이유는 저장소와 명령 이력에 남기지 않기 위해서입니다.')
+        }
+        // test 프로필을 그대로 쓰고 datasource만 바꾼다. 프로필까지 바꾸면 검증 대상이 둘로 갈라진다.
+        systemProperty 'spring.datasource.url',
+                "jdbc:mariadb://${host}:${port}/${name}?connectionTimeZone=UTC"
+        systemProperty 'spring.datasource.driver-class-name', 'org.mariadb.jdbc.Driver'
+        systemProperty 'spring.datasource.username', user
+        // 비밀번호만 환경변수로 넘긴다 (Spring Boot relaxed binding).
+        environment 'SPRING_DATASOURCE_PASSWORD', password
     }
 }
 

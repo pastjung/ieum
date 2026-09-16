@@ -1,7 +1,6 @@
 package com.itda.support.security;
 
-import com.itda.user.application.port.out.AccessTokenVerification;
-import com.itda.user.application.port.out.AccessTokenVerifier;
+import com.itda.global.security.AccessTokenVerifier;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,15 +8,15 @@ import java.util.List;
 public class StubAccessTokenVerifier implements AccessTokenVerifier {
 
   private final List<String> verifiedTokens = new ArrayList<>();
-  private AccessTokenVerification result = new AccessTokenVerification.Invalid();
+  private AccessTokenVerifier.Verification result = new AccessTokenVerifier.Verification.Invalid();
 
   @Override
-  public AccessTokenVerification verify(String compactToken) {
+  public AccessTokenVerifier.Verification verify(String compactToken) {
     this.verifiedTokens.add(compactToken);
     return this.result;
   }
 
-  public void willReturn(AccessTokenVerification result) {
+  public void willReturn(AccessTokenVerifier.Verification result) {
     this.result = result;
   }
 

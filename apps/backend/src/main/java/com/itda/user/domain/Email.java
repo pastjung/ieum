@@ -38,7 +38,8 @@ public class Email {
     }
     String normalized = rawValue.trim().toLowerCase(Locale.ROOT);
     if (normalized.length() > MAX_LENGTH || !PATTERN.matcher(normalized).matches()) {
-      throw new IllegalArgumentException("이메일 형식이 올바르지 않습니다: " + rawValue);
+      // 값 자체를 message에 넣지 않는다. 이 예외는 로그·모니터링·상위 예외 message로 흘러갈 수 있다.
+      throw new IllegalArgumentException("이메일 형식이 올바르지 않습니다.");
     }
     return new Email(normalized);
   }
