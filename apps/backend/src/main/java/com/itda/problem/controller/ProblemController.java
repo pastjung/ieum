@@ -1,5 +1,6 @@
 package com.itda.problem.controller;
 
+import com.itda.global.security.AuthenticatedUser;
 import com.itda.problem.dto.RegisterProblemRequest;
 import com.itda.problem.service.ProblemService;
 import lombok.RequiredArgsConstructor;
@@ -18,9 +19,9 @@ public class ProblemController {
     public ResponseEntity<Void> registerProblem(
         @PathVariable Long lectureId,
         @RequestBody RegisterProblemRequest registerProblemRequest,
-        @AuthenticationPrincipal Long userId
-    ){
-        problemService.registerProblem(userId, lectureId, registerProblemRequest);
+        @AuthenticationPrincipal AuthenticatedUser user
+        ){
+        problemService.registerProblem(user, lectureId, registerProblemRequest);
         return ResponseEntity.noContent().build();
 
     }
