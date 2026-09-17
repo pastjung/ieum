@@ -76,6 +76,33 @@ itda:
     # AuthRedisProperties 주석 참고. 값이 틀리면 다른 환경의 토큰 상태를 조용히 읽게 되므로 기본값을 두지 않는다.
     auth-redis:
       key-prefix: ${AUTH_REDIS_KEY_PREFIX}
+  mail:
+    # 계정 메일(이메일 인증·비밀번호 재설정) SMTP 발송. 재시도·backoff·제한 시간·보존 기간은 ERD 3.5절의 계약 값이라
+    # MailDispatchProperties 기본값으로 고정하고 여기서 열지 않는다.
+    dispatch:
+      schedule:
+        # 기본값 꺼짐. 꺼져 있으면 outbox 접수는 되지만 어떤 메일도 나가지 않는다 — "꺼짐"은 "준비됨"이 아니다.
+        # 켜면 아래 provider·link 값이 모두 필요하고, 빠지면 기동 단계에서 실패한다. poll 주기·batch·종료 대기는
+        # MailDispatchScheduleProperties 기본값(10s·5m·20·30s)을 쓴다 (README 「계정 메일 발송」).
+        enabled: ${MAIL_DISPATCH_ENABLED:false}
+    provider:
+      # 기본값을 두지 않는다. 제공자·포트·보안 방식(SSL|STARTTLS)은 운영 계정에 묶인 값이다. 미해결 플레이스홀더는
+      # MailProviderProperties가 기동 단계에서 거부한다.
+      host: ${MAIL_SMTP_HOST}
+      port: ${MAIL_SMTP_PORT}
+      security: ${MAIL_SMTP_SECURITY}
+      username: ${MAIL_SMTP_USERNAME:}
+      password: ${MAIL_SMTP_PASSWORD:}
+      from-address: ${MAIL_FROM_ADDRESS}
+      # 서비스 표시 이름. 환경변수를 생략하면 이음(I:EUM)을 쓰며 제공자 계정·발신 주소와는 별개다.
+      from-name: ${MAIL_FROM_NAME:이음(I:EUM)}
+      # 선택값. 비워 두면 Reply-To 헤더를 만들지 않는다.
+      reply-to: ${MAIL_REPLY_TO:}
+    link:
+      # 메일 링크의 프론트 주소. 토큰은 fragment(#token=)로만 붙는다.
+      # http는 local·test의 루프백에만 허용한다. prod는 루프백을 포함해 https만 허용한다.
+      email-verification-url: ${MAIL_LINK_EMAIL_VERIFICATION_URL}
+      password-reset-url: ${MAIL_LINK_PASSWORD_RESET_URL}
 
 logging:
   pattern:

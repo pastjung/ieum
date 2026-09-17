@@ -103,10 +103,16 @@ public class MailDispatchWorker {
     if (batchSize <= 0) {
       throw new IllegalArgumentException("batch 크기는 1 이상이어야 합니다.");
     }
+    if (Thread.currentThread().isInterrupted()) {
+      return 0;
+    }
     List<MailOutboxEntry> candidates =
         this.mailOutboxRepository.findClaimCandidates(now(), this.policy.maxAttempts(), batchSize);
     int claimed = 0;
     for (MailOutboxEntry candidate : candidates) {
+      if (Thread.currentThread().isInterrupted()) {
+        break;
+      }
       MailOutboxClaim claim = toClaim(candidate, now());
       if (!this.mailOutboxRepository.claim(claim, now(), this.policy.maxAttempts())) {
         // 다른 worker가 이미 가져갔다. 업무 경쟁의 정상 결과이지 장애가 아니며, 처리 시도가 아니므로 식별자도 만들지 않는다.
