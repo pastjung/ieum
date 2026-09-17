@@ -161,6 +161,49 @@ class MailDispatchWorkerTest {
   // ---------- 적격성 ----------
 
   @Test
+  void 종료_인터럽트가_있으면_후보를_조회하거나_선점하지_않는다() {
+    pendingJob(AccountActionPurpose.EMAIL_VERIFICATION);
+    Thread.currentThread().interrupt();
+    try {
+      assertThat(this.worker.processOnce(3)).isZero();
+      assertThat(this.outbox.candidateQueries).isEmpty();
+      assertThat(this.provider.sendCount()).isZero();
+      assertThat(Thread.currentThread().isInterrupted()).isTrue();
+    } finally {
+      Thread.interrupted();
+    }
+  }
+
+  @Test
+  void 처리_중_인터럽트가_오면_다음_후보를_선점하지_않는다() {
+    pendingJob(AccountActionPurpose.EMAIL_VERIFICATION);
+    pendingJob(AccountActionPurpose.EMAIL_VERIFICATION);
+    activeUser(null);
+    AtomicInteger sends = new AtomicInteger();
+    MailDispatchWorker worker =
+        new MailDispatchWorker(
+            this.outbox,
+            this.users,
+            this.actionTokens,
+            this.emailIssuer,
+            new StubActionTokenIssuer(AccountActionPurpose.PASSWORD_RESET),
+            message -> {
+              sends.incrementAndGet();
+              Thread.currentThread().interrupt();
+              return MailProvider.SendOutcome.of(MailProvider.SendResult.RETRYABLE);
+            },
+            new FixedPolicy(),
+            Clock.fixed(NOW, ZoneOffset.UTC));
+    try {
+      assertThat(worker.processOnce(3)).isEqualTo(1);
+      assertThat(sends.get()).isEqualTo(1);
+      assertThat(Thread.currentThread().isInterrupted()).isTrue();
+    } finally {
+      Thread.interrupted();
+    }
+  }
+
+  @Test
   void 계정이_없으면_SKIPPED로_종결한다() {
     pendingJob(AccountActionPurpose.EMAIL_VERIFICATION);
 
