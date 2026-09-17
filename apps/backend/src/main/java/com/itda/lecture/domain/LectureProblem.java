@@ -1,6 +1,6 @@
 package com.itda.lecture.domain;
 
-import jakarta.persistence.Column;
+import com.itda.problem.domain.Problem;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -41,30 +41,19 @@ public class LectureProblem {
   @JoinColumn(name = "lecture_id", nullable = false)
   private Lecture lecture;
 
-  /** problems.id. problem 컨텍스트를 참조하므로 Long으로 둔다. */
-  @Column(name = "problem_id", nullable = false)
-  private Long problemId;
+  /** 연결한 문제. problem_id FK로 단방향 다대일 참조한다. */
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "problem_id", nullable = false)
+  private Problem problem;
 
-  private LectureProblem(Lecture lecture, Long problemId) {
+  public LectureProblem(Lecture lecture, Problem problem) {
     if (lecture == null) {
       throw new IllegalArgumentException("수업은 필수입니다.");
     }
-    if (problemId == null) {
+    if (problem == null) {
       throw new IllegalArgumentException("문제는 필수입니다.");
     }
     this.lecture = lecture;
-    this.problemId = problemId;
-  }
-
-  /**
-   * 수업에 문제를 연결한다. SCHEDULED·OPEN에서만 가능하다 (ERD 3.4절).
-   *
-   * <p>CLOSED에서는 연결·해제·전달을 모두 금지한다.
-   */
-  public static LectureProblem link(Lecture lecture, Long problemId) {
-    if (lecture != null && lecture.getStatus() == LectureStatus.CLOSED) {
-      throw new IllegalStateException("종료된 수업에는 문제를 연결할 수 없습니다.");
-    }
-    return new LectureProblem(lecture, problemId);
+    this.problem = problem;
   }
 }

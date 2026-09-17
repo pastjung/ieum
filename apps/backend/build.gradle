@@ -72,6 +72,12 @@ dependencies {
     // Boot 4부터 @DataJpaTest·TestEntityManager는 starter-test가 아니라 모듈별 test 아티팩트에 있다
     testImplementation 'org.springframework.boot:spring-boot-data-jpa-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+  implementation 'com.querydsl:querydsl-jpa:5.1.0:jakarta'
+
+  annotationProcessor 'com.querydsl:querydsl-apt:5.1.0:jakarta'
+  annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+  annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
 }
 
 // 실제 MariaDB가 있어야만 의미가 있는 테스트에 붙이는 JUnit tag.

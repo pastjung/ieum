@@ -76,6 +76,10 @@ itda:
     # AuthRedisProperties 주석 참고. 값이 틀리면 다른 환경의 토큰 상태를 조용히 읽게 되므로 기본값을 두지 않는다.
     auth-redis:
       key-prefix: ${AUTH_REDIS_KEY_PREFIX}
+  # 오답 분석·맞춤 학습을 담당하는 FastAPI 서비스 (apps/ai). 주소가 환경마다 달라 소스에 두지 않는다.
+  # 기본값은 로컬 개발용이며 배포 환경은 AI_BASE_URL로 덮어쓴다.
+  ai:
+    base-url: ${AI_BASE_URL:http://localhost:8000}
   mail:
     # 계정 메일(이메일 인증·비밀번호 재설정) SMTP 발송. 재시도·backoff·제한 시간·보존 기간은 ERD 3.5절의 계약 값이라
     # MailDispatchProperties 기본값으로 고정하고 여기서 열지 않는다.
