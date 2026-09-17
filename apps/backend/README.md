@@ -91,6 +91,93 @@ logger를 끄거나 level을 올리지 않는다 — 저장소 오류가 났다�
 등록되지 않은 새 민감정보 형식을 자동으로 찾아내지는 않는다. 마스킹 처리 중 예외가 발생하거나 결과가 null이면 원문 대신 level·logger·requestId와
 고정 문구만 남긴다. 파일 appender와 구조화 로그(`logging.structured.*`)는 지금 쓰지 않으며, 추가할 때는 같은 encoder를 거치게 한다.
 
+### 계정 메일 발송 (SMTP outbox)
+
+이메일 인증·비밀번호 재설정 메일은 `mail_outbox`에 접수된 뒤(ERD 3.5절) worker가 SMTP로 보낸다. 접수(요청 API의 `202`)는 항상 되지만
+**발송 실행은 기본값이 꺼져 있다.** 꺼진 환경에서는 어떤 메일도 나가지 않으며 `PENDING` 행만 쌓인다 — "꺼짐"은 "준비됨"이 아니다.
+운영 readiness(SMTP 연결 확인·헬스 체크 반영)는 #19 범위다.
+
+| 설정 (`application.yml` 환경변수) | 필수 | 기본값 | 의미 |
+| --- | --- | --- | --- |
+| `MAIL_DISPATCH_ENABLED` | | `false` | `true`면 provider·worker·스케줄러를 함께 조립한다. 하나만 생기는 조합은 없다 |
+| `MAIL_SMTP_HOST` / `MAIL_SMTP_PORT` | 켜면 필수 | 없음 | 제공자 host·포트. 포트는 관례값(465·587)에 고정하지 않는다 |
+| `MAIL_SMTP_SECURITY` | 켜면 필수 | 없음 | `SSL`(연결부터 TLS) 또는 `STARTTLS`(승격 필수, 실패 시 평문으로 계속하지 않음). `PLAINTEXT`는 `test` 프로필 + 루프백 host에서만 허용 |
+| `MAIL_SMTP_USERNAME` / `MAIL_SMTP_PASSWORD` | `SSL`·`STARTTLS`면 필수 | 없음 | SMTP AUTH(계정·비밀번호)만 지원한다. OAuth·HTTP API는 다루지 않는다 |
+| `MAIL_FROM_ADDRESS` | 켜면 필수 | 없음 | 발신 주소. 표시 이름 없는 단일 주소 |
+| `MAIL_FROM_NAME` | | `이음(I:EUM)` | 환경변수를 생략하면 서비스 표시 이름을 쓴다. 이름을 교체할 수 있으며, 명시적 빈 값은 기존 정책대로 표시 이름을 생략한다. SMTP 인증 계정·발신 주소는 바꾸지 않는다 |
+| `MAIL_REPLY_TO` | | 없음 | 선택. 비우면 `Reply-To` 헤더를 만들지 않는다 |
+| `MAIL_LINK_EMAIL_VERIFICATION_URL` / `MAIL_LINK_PASSWORD_RESET_URL` | 켜면 필수 | 없음 | 메일 링크의 프론트 주소. `local`·`test`에서만 루프백 http 허용, `prod`는 루프백도 https 필수. 외부 주소는 모든 환경에서 https만 허용. 사용자 정보·질의·fragment 금지 |
+
+켜졌는데 값이 빠지거나 형식이 틀리면(미해결 `${...}` 플레이스홀더 포함) 기동 단계에서 실패한다. `MAIL_DISPATCH_ENABLED`에 `true`·`false` 외의 값(`yes`, `on`, `1`, 오타)이
+오면 조용히 꺼진 채 기동하지 않고 실패한다. 실패 원인 예외와 Boot의 기동 실패 출력 어디에도 자격증명 값은 실리지 않는다(테스트가 실제 로그 출력을 검사한다).
+
+선택값인 계정·비밀번호·표시 이름·회신 주소는 null·빈 문자열·공백만 있는 문자열을 "없음"으로 정규화한다. 다만 `SSL`·`STARTTLS`는 그 뒤 계정·비밀번호가
+모두 있는지 검증하므로 빈 자격증명으로 인증을 생략하지 않는다. 비어 있지 않은 값은 앞뒤 공백까지 그대로 보존하며 trim하지 않는다. 회신 주소의 앞뒤 공백 등
+주소 형식 오류도 자동 보정하지 않고 거부한다. `MAIL_FROM_NAME`을 생략했을 때의 YAML 기본값과 명시적으로 빈 값으로 표시 이름을 생략하는 경우는 다르다.
+발송 활성화 시 공통 프로필 판정으로 환경을 확정한 뒤 링크 정책을 검증한다. `prod`와 `local`·`test`를 동시에 켜서 HTTP 제약을 우회할 수 없다.
+
+기동 검증용 SMTP 연결 점검이나 시험 메일 발송은 없다. 다만 **첫 poll은 기동 직후 즉시 돈다** — outbox에 대기 작업이 있으면 기동 직후 실제 발송이 시작된다.
+연결·인증 문제는 그 첫 시도의 결과(`mail_outbox.last_error_kind`, 로그)로 드러난다.
+
+환경변수 키를 두지 않은 값은 코드 기본값을 쓰며, 바꿔야 하면 Spring relaxed binding 이름(예: `ITDA_MAIL_DISPATCH_SCHEDULE_POLL_INTERVAL`)으로 넘긴다.
+
+| 설정 키 | 기본값 | 허용 범위 | 의미 |
+| --- | --- | --- | --- |
+| `itda.mail.dispatch.schedule.poll-interval` | `10s` | 1s ~ 10m | outbox 선점·발송 주기. 첫 poll은 기동 직후 |
+| `itda.mail.dispatch.schedule.cleanup-interval` | `5m` | 1m ~ 24h | 기한·시도 초과 종결과 보존 기간 지난 행 삭제 주기 |
+| `itda.mail.dispatch.schedule.batch-size` | `20` | 1 ~ 500 | 한 poll이 선점하는 최대 건수 |
+| `itda.mail.dispatch.schedule.shutdown-wait` | `30s` | 1s ~ 5m | 종료 시 진행 중 작업을 기다리는 상한. 넘기면 진행 중 SMTP 연결을 끊고 interrupt한 뒤 같은 시간만큼 실제 종료를 다시 기다린다(아래 「종료」). 컨테이너 정지 유예가 더 짧으면 그쪽이 먼저 끝낸다 |
+| `itda.mail.provider.connect-timeout` / `read-timeout` / `write-timeout` | `10s` / `30s` / `30s` | 1ms ~ 2147483647ms | 소켓 단계별 제한(Angus는 밀리초 int로 받는다 — 0으로 잘리거나 int를 넘는 값은 무제한이 되므로 거부). 호출 전체의 상한은 `itda.mail.dispatch.provider-timeout`(계약 값 60s) 하나다 |
+
+**링크와 토큰.** 메일 링크는 `<용도별 프론트 URL>#token=<action token>` 형식이다. 토큰은 fragment로만 실리므로 프론트 서버·프록시의 접근 로그에 남지 않는다.
+클라이언트는 fragment의 토큰을 읽어 기존 완료 API(`POST /api/v1/email-verifications`, `POST /api/v1/password-resets`)의 body에 실어 호출한다.
+백엔드는 GET·query parameter로 토큰을 받는 완료 endpoint를 두지 않는다. 본문은 UTF-8 text/plain이며 HTML·첨부·템플릿 파일이 없다.
+
+**제공자 호출 결과의 분류(API 명세 3.8절)는 SMTP 단계로 정한다.** 연결·EHLO·STARTTLS·AUTH 단계에서 인증 거부, TLS 협상 실패, 서버는 정상 응답했지만
+필수 요건인 STARTTLS를 광고하지 않은 경우(응답 코드와 원인 타입으로 판정)는 `AUTH_CONFIG_ERROR`, 그 밖의 연결 실패는 `RETRYABLE`. 봉투(MAIL·RCPT·DATA 명령)의
+4xx는 `RETRYABLE`, 5xx는 인증 코드(530·534·535·538)와 발신 주소 거부면 `AUTH_CONFIG_ERROR`, 아니면 `REJECTED`. 본문 전송 뒤(DATA 354 이후) 4xx는
+`RETRYABLE`, 5xx는 `REJECTED`, 응답이 유실되면 `UNCERTAIN`. 본문 끝에 250을 받아야 `ACCEPTED`이며 그 뒤의 QUIT·종료 오류는 결과를 바꾸지 않는다.
+`providerRetryAt`은 SMTP에서 항상 비어 있고 어댑터 안에서 재전송하지 않는다(at-least-once는 outbox가 맡는다).
+STARTTLS를 광고한 서버의 `454`(TLS 일시 사용 불가), STARTTLS 응답 전 연결 단절·시간 초과는 `RETRYABLE`이며, 평문 AUTH·발송으로 전환하지 않는다.
+`AUTH_CONFIG_ERROR`도 기존 outbox의 제한된 재시도 정책을 따른다. 여기서 새 재시도 정책이나 운영 알림을 구현하지 않는다(관측성 보완은 #21).
+
+**전체 제한 시간 — A안(호출 격리).** provider 인스턴스당 SMTP 실행 스레드 하나와 감시 스레드 하나를 사용한다. 준비·DNS·연결·발송·정리를 단일 실행
+슬롯으로 관리하며 대기열은 없다. `send`는 호출 시작부터 하나의 `provider-timeout`(기본 60s) 예산만 기다린다. 기한이 지나거나 종료를 요청하면 결과를
+확정하고 원시 소켓을 닫고 interrupt를 요청한다. 본문 전은 `RETRYABLE`, 본문 전송 이후 수락 여부 불명은 `UNCERTAIN`이다. 제한 시간 내 명시적 수락을
+먼저 확정했다면 종료 중 시간 초과로 그 결과를 바꾸지 않는다. 시간 초과가 먼저 확정되면 뒤늦은 결과가 outbox를 덮어쓰지 않는다.
+
+**호출 반환 ≠ DNS 실제 종료.** JDK 동기 해석은 interrupt를 무시할 수 있다. 서버 주소 조회(Jakarta Mail 사전 조회·Angus 소켓 연결)와 EHLO 로컬 이름의
+정방향·역방향 조회 모두 발송 스레드 안에 격리한다. 호출자는 반환하지만 멈춘 작업과 그 메모리(메시지·토큰 참조 포함)는 남을 수 있다. Future 완료나 취소로
+슬롯을 풀지 않으며, 실제 작업·정리가 끝날 때만 재사용한다. 해석이 늦게 돌아와도 닫힌 소켓과 단계 검사로 새로운 연결·발송을 막는다. 이미 서버가 수신한 메일을
+회수할 수 있다는 뜻은 아니다. JVM 스케줄링·GC 정지까지 포함한 실시간 마감 보장은 아니다.
+
+**장애 영향.** 슬롯이 점유된 동안 추가 호출은 즉시 `RETRYABLE`이며 대체 실행기를 만들지 않는다. 상한은 provider 인스턴스당 하나이고 여러 인스턴스 전체의
+상한은 아니다. worker는 이미 선점한 시도이므로 이 결과도 시도 횟수를 소비하고 기존 backoff·최대 시도·기한 정책을 따른다. DNS가 영구 정지하면 메일 발송이
+계속 불가해 프로세스 재시작이 필요할 수 있다. 요청 API의 접수 성공은 발송 가능의 증명이 아니며 최대 시도 소진·기한 초과로 종결된 작업은 자동 복구되지 않는다.
+정리 전까지 새 작업을 거부하는 안전성과 계속 발송 가능한 가용성을 혼동하지 않는다. 실제 DNS 작업 종료 보장이 필요하다면 별도 해석기 설계 승인이 필요하다.
+
+**종료.** context 종료 시 스케줄러가 먼저 정지한다: 새 주기 예약 중단 → 진행 중 작업을 `shutdown-wait`까지 대기 → 넘기면 interrupt로 다음 후보 선점을 막고
+진행 중 SMTP 연결 중단(`abortInFlight`) 요청 → 같은 시간만큼 스케줄러 실행기 종료를 다시 확인. 확인되면 WARN, 확인되지 않으면 ERROR로 기록하고 실행기를
+보존해 종료 전 재시작을 거부한다. 스케줄러 실행기 종료를 provider DNS 작업 종료로 해석하지 않는다.
+끊긴 호출은 본문 전송 전이면 `RETRYABLE`, 본문 전송 뒤면 `UNCERTAIN`으로 outbox에 기록된다(worker가 상태 갱신 전에 끊기면 가시성 만료 뒤 재선점). 그 뒤 어댑터
+`close()`가 새 호출을 거부하고 남은 연결을 끊고 감시 스레드(최대 1s)·발송 스레드(최대 5s)의 실제 종료를 확인한다. 남은 스레드가 있으면 미종료로 기록한다.
+daemon 설정은 JVM 종료를 붙잡지 않는 선택일 뿐 작업 종료의 증거가 아니다.
+
+**로그.** worker·스케줄러·어댑터 로그에는 작업 id·용도·상태·시도 횟수·단계·분류값·SMTP 응답 코드·요청 식별자만 남는다. 수신 주소·토큰·자격증명·서버 응답 원문·예외 message는
+남기지 않는다. Angus Mail의 디버그·프로토콜 로그(JUL 로거 `org.eclipse.angus.mail.smtp`와 `.protocol`, `FINE` 이하)는 EHLO·RCPT TO·본문(토큰 포함)을 그대로
+찍는다. Boot는 JUL을 SLF4J로 잇기 때문에 `logging.level`이나 JUL 설정으로 그 로거를 `DEBUG`/`TRACE`로 열면 애플리케이션 로그에 실리는데, 어댑터가 그 두 JUL 로거의
+레벨을 `INFO`로 고정하고 매 호출 전에 다시 고정해 막는다(두 레벨을 모두 연 상태에서 SLF4J 브리지를 통해 실측). `mail.debug`(System.out 출력)는 어댑터가 끈다. 이 보장은
+그 두 로거 이름에 한하며, 다른 JUL 핸들러를 직접 붙이는 코드는 이 범위 밖이다.
+
+**테스트.** SMTP 어댑터는 루프백의 대본형 서버(`com.itda.support.smtp`)에 진짜 소켓·진짜 TLS로 붙어 검증한다. TLS 자료는 실행마다 `keytool`로 임시 생성하고,
+테스트 인증서만 신뢰하는 `SSLContext`를 JVM 기본값으로 잠시 바꿨다가 되돌린다 — 운영 코드는 기본 `SSLSocketFactory`를 그대로 쓰므로 factory 주입 경로가 따로 없다.
+저장소에 인증서·키를 두지 않으며 외부 SMTP 서버로 나가는 테스트는 없다. 접수→스케줄러→Redis 토큰→SMTP→`PROVIDER_ACCEPTED` 흐름은 `@RequiresRealRedis`
+테스트(`MailDispatchSmtpRedisTest`)가 잇는다.
+
+DNS 회귀는 별도 자식 JVM에만 테스트 resolver SPI를 등록해 외부 DNS 없이 네 조회 경로를 latch로 붙든다. interrupt를 무시해도 호출자가 반환하고,
+점유 중 추가 호출·스레드 증가가 없으며 해제 후 늦은 발송 없이 다음 발송이 복구되는지 확인한다. 일반 테스트 JVM·운영 JVM의 DNS 설정은 바꾸지 않는다.
+시간 초과/수락의 선후관계는 상태 테스트로, 실제 SMTP 응답·TLS·소켓 중단은 루프백 통합 테스트로 구분해 검증한다.
+
 ## DDD 패키지 구조
 
 현재 backend에는 15개 엔티티 테이블이 구현되어 있고 5개 바운디드 컨텍스트로 나눴다 ([docs/product/erd.md](../../docs/product/erd.md)). 제품 ERD에는 후속 구현 대상인 `mail_outbox`가 더해져 총 16개이며, 구현 클래스명과 패키지는 이 문서에서 확정하지 않는다.
@@ -252,13 +339,13 @@ ERD 3.5절의 CHECK 네 개(`attempt_count >= 0`, `delivery_deadline_at > create
 테이블·컬럼·타입까지만 보므로 **운영 스키마에 이 제약이 있다는 근거가 되지 않는다** — 배포 시 `information_schema.CHECK_CONSTRAINTS`로 따로
 확인한다.
 
-**실제 메일 제공자 adapter는 아직 없다.** 운영 코드에는 발송 성공을 가장하는 no-op adapter를 두지 않는다.
-`MailDispatchConfiguration`은 `MailOutboxEnqueueService`와 설정만 등록하고 **`MailDispatchWorker` 빈은 만들지 않는다** —
-`@ConditionalOnBean`으로 "있으면 만든다"를 쓰면 판정이 빈 등록 순서에 좌우돼, 후속 이슈에서 provider를 추가했는데 worker가
-조용히 빠진 채 기동이 성공할 수 있기 때문이다(요청 API는 계속 202를 반환하고 메일만 나가지 않는 상태). 그래서 provider adapter가
-생기는 후속 이슈에서 **provider와 worker를 같은 `@Configuration`에 함께** 조립한다. 지금 worker를 쓰는 곳은 stub provider와
-함께 직접 조립하는 테스트뿐이며 `@EnableScheduling`도 켜지 않는다. 제공자 선택·자격 증명·실제 링크와 본문 template·scheduler
-활성화는 후속 이슈에서 다룬다. `PROVIDER_ACCEPTED`는 **제공자가 접수했다**는 뜻이며 수신함 도달을 뜻하지 않는다.
+**실제 메일 제공자 adapter는 `SmtpMailProvider`다.** 운영 코드에는 발송 성공을 가장하는 no-op adapter를 두지 않는다.
+발송 실행은 기본값이 비활성(`MAIL_DISPATCH_ENABLED=false`)이며, 이때는 outbox 접수만 되고 메일은 나가지 않는다.
+`MAIL_DISPATCH_ENABLED=true`이면 `MailDispatchConfiguration.DispatchEnabled`에서 **provider·worker·scheduler를 함께** 조립한다.
+필수 설정이 유효해야 기동하며, 첫 poll은 기동 직후 실행되므로 처리 가능한 대기 작업이 있으면 실제 발송이 시작될 수 있다.
+상세 설정·시간 제한·종료 정책은 [계정 메일 발송 (SMTP outbox)](#계정-메일-발송-smtp-outbox) 절을 따른다.
+실제 외부 메일 수신 검증·운영 readiness·운영 관측 보완은 이 구현과 별도로 확인해야 한다.
+`PROVIDER_ACCEPTED`는 **제공자가 접수했다**는 뜻이며 수신함 도달을 뜻하지 않는다.
 worker가 제공자 호출 뒤 DB 갱신에 실패하면 같은 메일이 다시 나갈 수 있다 — 이 구조는 at-least-once이고 exactly-once가
 아니다.
 

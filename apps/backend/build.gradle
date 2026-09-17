@@ -53,6 +53,13 @@ dependencies {
         exclude group: 'com.google.crypto.tink', module: 'tink'
     }
 
+    // 계정 메일 SMTP 발송 (docs/product/erd.md 3.5, api-spec.md 3.8). Jakarta Mail API와 그 참조 구현 Angus Mail을
+    // 직접 쓴다. starter-mail(JavaMailSender)을 쓰지 않는 이유: 발송 결과를 다섯 값으로 분류하려면 SMTP 단계별 응답 코드를
+    // 드러내는 SMTPTransport·SMTPSendFailedException 경계가 필요한데 JavaMailSender는 그것을 MailException으로 감싼다.
+    // 버전은 Boot BOM이 관리한다 (jakarta.mail-api 2.1.x, angus-mail 2.0.x).
+    implementation 'jakarta.mail:jakarta.mail-api'
+    implementation 'org.eclipse.angus:angus-mail'
+
     // lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
