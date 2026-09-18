@@ -31,11 +31,28 @@ pipeline {
                     // origin/<target>은 추가 fetch 없이 존재한다 (sh에는 git 자격증명이 없어 fetch 불가)
                     def target = env.gitlabTargetBranch ?: 'dev'
                     def base = "origin/${target}"
-                    env.CH_BACKEND = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/backend/'") == 0 ? 'true' : 'false'
-                    env.CH_WEB     = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/web/'")     == 0 ? 'true' : 'false'
-                    env.CH_AI      = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/ai/'")      == 0 ? 'true' : 'false'
-                    env.CH_MOBILE  = sh(returnStatus: true, script: "git diff --name-only ${base}...HEAD | grep -q '^apps/mobile/'")  == 0 ? 'true' : 'false'
-                    echo "변경 감지 → backend=${env.CH_BACKEND}, web=${env.CH_WEB}, ai=${env.CH_AI}, mobile=${env.CH_MOBILE}"
+                    def changedFiles = sh(
+                        returnStdout: true,
+                        script: "git diff --name-only ${base}...HEAD"
+                    ).trim().readLines()
+
+                    env.CH_BACKEND = changedFiles.any {
+                        it.startsWith('apps/backend/')
+                    }.toString()
+
+                    env.CH_FRONT = changedFiles.any {
+                        it.startsWith('front/')
+                    }.toString()
+
+                    env.CH_AI = changedFiles.any {
+                        it.startsWith('apps/ai/')
+                    }.toString()
+
+                    echo """
+                    변경 감지 → backend=${env.CH_BACKEND}, \
+                    front=${env.CH_FRONT}, \
+                    ai=${env.CH_AI}
+                    """
                 }
             }
         }
@@ -46,17 +63,15 @@ pipeline {
                     when { environment name: 'CH_BACKEND', value: 'true' }
                     steps { sh 'docker build --target test apps/backend' }   // 테스트 실패 = 빌드 실패
                 }
-                stage('web') {
-                    when { environment name: 'CH_WEB', value: 'true' }
-                    steps { sh 'docker build --target test apps/web' }       // 풀빌드(tsc) + eslint
+                stage('frontend') {
+                   when { environment name: 'CH_FRONT', value: 'true' }
+                    steps {
+                        sh 'docker build --target test front'
+                    }
                 }
                 stage('ai') {
                     when { environment name: 'CH_AI', value: 'true' }
                     steps { sh 'docker build --target test apps/ai' }        // pytest 실행
-                }
-                stage('mobile') {
-                    when { environment name: 'CH_MOBILE', value: 'true' }
-                    steps { sh 'docker build --target test apps/mobile' }    // eslint + tsc + jest
                 }
             }
         }
