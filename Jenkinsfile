@@ -89,15 +89,40 @@ pipeline {
                         echo "변경 비교 기준: ${hasBase ? base : '(없음 — 전체 배포)'}"
                         env.DEPLOY_BASE = hasBase ? base : ''
                         if (hasBase) {
-                            services = ['web', 'backend', 'ai'].findAll { svc ->
-                                sh(returnStatus: true,
-                                   script: "git diff --name-only ${base} HEAD | grep -q '^apps/${svc}/'") == 0
+                            def changedFiles = sh(
+                                returnStdout: true,
+                                script: "git diff --name-only ${base} HEAD"
+                            ).trim().readLines()
+
+                            services = []
+
+                            // 모바일 전용 파일을 제외한 front 변경은 웹 배포 대상으로 본다.
+                            def webChanged = changedFiles.any { path ->
+                                path.startsWith('front/') &&
+                                !path.startsWith('front/apps/mobile/')
+                            }
+
+                            if (webChanged) {
+                                services << 'web'
+                            }
+
+                            if (changedFiles.any { path ->
+                                path.startsWith('apps/backend/')
+                            }) {
+                                services << 'backend'
+                            }
+
+                            if (changedFiles.any { path ->
+                                path.startsWith('apps/ai/')
+                            }) {
+                                services << 'ai'
                             }
                         } else {
-                            services = ['web', 'backend', 'ai']   // 비교 기준 없음(첫 빌드 등) → 전체
+                            // 비교할 이전 커밋이 없으면 안전하게 서버 서비스 전체 배포
+                            services = ['web', 'backend', 'ai']
                         }
                         if (!services) {
-                            currentBuild.description = 'apps/* 변경 없음 — 배포할 서비스 없음'
+                            currentBuild.description = '서버 배포 대상 변경 없음'
                             return
                         }
                     } else {
@@ -162,7 +187,11 @@ pipeline {
             steps {
                 script {
                     env.DEPLOY_SERVICES.split(' ').each { svc ->
-                        sh "docker build -t itda-${svc}:${env.DEPLOY_TAG} apps/${svc}"
+                        if (svc == 'web') {
+                            sh "docker build --target web -t itda-web:${env.DEPLOY_TAG} front"
+                        } else {
+                            sh "docker build -t itda-${svc}:${env.DEPLOY_TAG} apps/${svc}"
+                        }
                     }
                 }
             }
