@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import type { Cell } from "@ieum/domain";
-import { cellsToUnicode } from "@ieum/domain";
+import { cellToDots, cellsToUnicode } from "@ieum/domain";
 import { ScreenShell } from "@/components/ScreenShell";
 import { DotPad } from "@/components/DotPad";
 import { AppButton } from "@/components/AppButton";
@@ -38,6 +38,18 @@ export default function ClassPlay() {
   const dot = (color: string) => (
     <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: color }} />
   );
+
+  /** 제출 버튼 짧은 터치: 지금까지 입력한 점을 읽어 준다 */
+  const readInput = () => {
+    if (cells.length === 0) {
+      announce("아직 입력한 칸이 없어요. 점을 짚고 손을 떼면 한 칸이 입력돼요.");
+      return;
+    }
+    const last = cellToDots(cells[cells.length - 1]!);
+    announce(
+      `지금까지 ${cells.length}칸 입력했어요. 마지막 칸은 ${last.join("번, ")}번 점이에요. 길게 누르면 제출돼요.`,
+    );
+  };
 
   const submitAnswer = () => {
     if (cells.length === 0) {
@@ -95,7 +107,7 @@ export default function ClassPlay() {
         {cells.length > 0 ? `${cellsToUnicode(cells)} · ${cells.length}칸` : "입력 전"}
       </Text>
       <DotPad onCommitCell={(cell) => setCells((prev) => [...prev, cell])} />
-      <AppButton label="답안 제출" onPress={submitAnswer} />
+      <AppButton label="길게 눌러 제출" requireLongPress onPress={submitAnswer} onShortPress={readInput} />
     </ScreenShell>
   );
 }

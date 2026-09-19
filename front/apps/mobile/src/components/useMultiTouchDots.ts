@@ -48,9 +48,9 @@ export function useMultiTouchDots(onCommitCell: (cell: Cell) => void) {
     const now = touchesToDots(e);
     for (const dot of now) {
       if (!prev.current.has(dot)) {
+        // 동시 입력 시 점마다 읽으면 음성이 서로 끊기므로, 확정 시점에 한 번에 읽는다
         gathered.current.add(dot);
         void hapticTap();
-        speak(`${dot}번`);
       }
     }
     prev.current = now;
@@ -67,6 +67,7 @@ export function useMultiTouchDots(onCommitCell: (cell: Cell) => void) {
     if (gathered.current.size > 0) {
       const dots = [...gathered.current].sort((a, b) => a - b) as Dot[];
       gathered.current = new Set();
+      speak(`${dots.join("번, ")}번 입력`);
       onCommitCell(dotsToCell(dots));
     }
   };

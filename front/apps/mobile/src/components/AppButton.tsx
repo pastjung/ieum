@@ -12,6 +12,8 @@ interface Props {
   disabled?: boolean;
   /** 길게 눌러 실행 (제출 등 실수 방지용) */
   requireLongPress?: boolean;
+  /** requireLongPress일 때 짧게 터치하면 실행할 동작 (입력 내용 읽어 주기 등) */
+  onShortPress?: () => void;
 }
 
 /** 와이어프레임 공통 버튼 — primary(노랑 72) / secondary(테두리 60) / compact(56) */
@@ -22,6 +24,7 @@ export function AppButton({
   accessibilityHint,
   disabled,
   requireLongPress,
+  onShortPress,
 }: Props) {
   const theme = useTheme();
   const fontScale = useFontScale();
@@ -46,11 +49,15 @@ export function AppButton({
       accessibilityLabel={label}
       accessibilityHint={
         accessibilityHint ??
-        (requireLongPress ? "길게 누르면 실행돼요" : undefined)
+        (requireLongPress
+          ? onShortPress
+            ? "짧게 누르면 입력한 점을 읽어 주고, 길게 누르면 제출돼요"
+            : "길게 누르면 실행돼요"
+          : undefined)
       }
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
-      onPress={requireLongPress ? undefined : handle}
+      onPress={requireLongPress ? onShortPress : handle}
       onLongPress={requireLongPress ? handle : undefined}
       delayLongPress={requireLongPress ? 500 : undefined}
       style={({ pressed }) => [
