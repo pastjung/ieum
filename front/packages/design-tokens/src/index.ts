@@ -27,16 +27,16 @@ export const darkTheme: IeumTheme = {
   },
 };
 
-/** Green 테마 — 와이어프레임(Green) 구현 차수에서 값 확정. 구조만 선점. */
+/** 시각장애인용 Green 와이어프레임 기준 라이트 팔레트 */
 export const greenTheme: IeumTheme = {
   name: "green",
   color: {
-    bg: "#F4FBF8",
-    surface: "#FFFFFF",
-    border: "#9FB8AE",
-    text: "#0B1F18",
-    textMuted: "#3E5A4F",
-    primary: "#046B52",
+    bg: "#FFFFFF",
+    surface: "#EDF1F3",
+    border: "#E4EAED",
+    text: "#16181D",
+    textMuted: "#7C8A93",
+    primary: "#00C896",
     onPrimary: "#FFFFFF",
   },
 };

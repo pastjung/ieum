@@ -5,7 +5,7 @@ import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { authService } from "@/services/authService";
-import { announce } from "@/a11y";
+import { speakAsync } from "@/a11y";
 import { useTheme } from "@/theme";
 
 /** V00 스플래시 — 잠시 보여 준 뒤 상태에 따라 분기 */
@@ -15,16 +15,22 @@ export default function Splash() {
   const mode = useSettingsStore((s) => s.mode);
 
   useEffect(() => {
-    announce("점자를 잇다, 이음");
-    const t = setTimeout(async () => {
+    let cancelled = false;
+    const minWait = new Promise((r) => setTimeout(r, 1500));
+    // 말이 끝나기 전에 화면이 넘어가지 않도록 낭독 완료를 기다린다
+    void Promise.all([speakAsync("점자를 잇다, 이음"), minWait]).then(async () => {
+      if (cancelled) return;
       if (!mode) {
         router.replace("/onboarding/mode");
         return;
       }
       const token = await authService.getToken();
+      if (cancelled) return;
       router.replace(token ? "/(tabs)" : "/auth/sign-in");
-    }, 1500);
-    return () => clearTimeout(t);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [mode, router]);
 
   return (

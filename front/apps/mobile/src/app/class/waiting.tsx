@@ -6,7 +6,7 @@ import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { classService } from "@/services/classService";
 import { useSessionStore } from "@/stores/sessionStore";
-import { announce, hapticSuccess } from "@/a11y";
+import { announce, hapticSuccess, speakAsync } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
 /** V22 수업 대기 — 선생님이 시작하면 자동 입장 (목: 3초 뒤) */
@@ -19,15 +19,23 @@ export default function ClassWaiting() {
   const className = title ?? "수업";
 
   useEffect(() => {
+    let cancelled = false;
     void hapticSuccess();
-    announce(`입장 완료. ${className}, 곧 시작해요. 선생님이 시작하면 알려 드릴게요.`);
-    const t = setTimeout(async () => {
+    const minWait = new Promise((r) => setTimeout(r, 3000));
+    void Promise.all([
+      speakAsync(`입장 완료. ${className}, 곧 시작해요. 선생님이 시작하면 알려 드릴게요.`),
+      minWait,
+    ]).then(async () => {
+      if (cancelled) return;
       const session = await classService.getClassSession();
+      if (cancelled) return;
       start(session, "class");
       announce("수업을 시작해요.");
       router.replace("/class/play");
-    }, 3000);
-    return () => clearTimeout(t);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [className, router, start]);
 
   return (

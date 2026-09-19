@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
-import { announce } from "@/a11y";
+import { speakAsync } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
 /** V17 분석 중 */
@@ -13,9 +13,17 @@ export default function Analyzing() {
   const fontScale = useFontScale();
 
   useEffect(() => {
-    announce("학습 완료! 결과를 분석 중이에요. 잠시만 기다려 주세요.");
-    const t = setTimeout(() => router.replace("/session/summary"), 1800);
-    return () => clearTimeout(t);
+    let cancelled = false;
+    const minWait = new Promise((r) => setTimeout(r, 1800));
+    void Promise.all([
+      speakAsync("학습 완료! 결과를 분석 중이에요. 잠시만 기다려 주세요."),
+      minWait,
+    ]).then(() => {
+      if (!cancelled) router.replace("/session/summary");
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   return (
