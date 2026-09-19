@@ -3,9 +3,8 @@ package com.itda.lecture.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.itda.problem.domain.Level;
 import com.itda.problem.domain.Problem;
-import com.itda.problem.domain.ProblemSourceType;
-import com.itda.problem.domain.ProblemType;
 import jakarta.persistence.PersistenceException;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -111,7 +110,6 @@ class LectureJpaMappingTest {
   }
 
   private Problem persistProblem(String targetText) {
-    return entityManager.persistFlushFind(
-        new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, targetText));
+    return entityManager.persistFlushFind(new Problem(Level.WORD, targetText));
   }
 }

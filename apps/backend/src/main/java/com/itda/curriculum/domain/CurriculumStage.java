@@ -1,6 +1,6 @@
 package com.itda.curriculum.domain;
 
-import com.itda.problem.domain.ProblemType;
+import com.itda.problem.domain.Level;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -21,7 +21,7 @@ public class CurriculumStage {
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
-  private ProblemType level;
+  private Level level;
 
   @Column(name = "order_no", nullable = false, unique = true)
   private int orderNo;

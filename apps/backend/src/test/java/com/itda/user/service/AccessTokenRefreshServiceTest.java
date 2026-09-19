@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
+import com.itda.problem.domain.Level;
 import com.itda.user.domain.Email;
 import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
@@ -398,14 +399,14 @@ class AccessTokenRefreshServiceTest {
   void 재확인에_성공하면_재조회한_사용자로_응답과_Access를_만든다() {
     User promoted = activeVerifiedUser();
     assign(promoted, "role", UserRole.INSTRUCTOR);
-    promoted.changeLevel("L4", NOW);
+    promoted.changeLevel(Level.SENTENCE, NOW);
     this.users.registerOnSecondLookup(promoted);
 
     AuthSession session = refresh();
 
     assertThat(this.accessTokens.claims.get(0).role()).isEqualTo(UserRole.INSTRUCTOR);
     assertThat(session.user().role()).isEqualTo(UserRole.INSTRUCTOR);
-    assertThat(session.user().level()).isEqualTo("L4");
+    assertThat(session.user().level()).isEqualTo(Level.SENTENCE);
     // 세대는 여전히 초기 Snapshot 값이다.
     assertThat(this.accessTokens.claims.get(0).authVersion()).isEqualTo(AUTH_VERSION);
   }

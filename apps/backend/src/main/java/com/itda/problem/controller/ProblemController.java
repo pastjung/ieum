@@ -1,6 +1,8 @@
 package com.itda.problem.controller;
 
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.problem.dto.NewStudyRequest;
+import com.itda.problem.dto.ProblemsResponse;
 import com.itda.problem.dto.RegisterProblemRequest;
 import com.itda.problem.service.ProblemService;
 import lombok.RequiredArgsConstructor;
@@ -21,5 +23,35 @@ public class ProblemController {
       @AuthenticationPrincipal AuthenticatedUser user) {
     problemService.registerProblem(user, lectureId, registerProblemRequest);
     return ResponseEntity.noContent().build();
+  }
+
+  @PostMapping("/learning-sessions")
+  public ResponseEntity<ProblemsResponse> newLearning(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @RequestBody NewStudyRequest newStudyRequest) {
+    ProblemsResponse problemsResponse =
+        problemService.learningWithNewSession(user, newStudyRequest);
+    return ResponseEntity.ok(problemsResponse);
+  }
+
+  @PostMapping("/learning-sessions/{sessionId}")
+  public ResponseEntity<ProblemsResponse> oldLearning(
+      @AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long sessionId) {
+    ProblemsResponse problemsResponse = problemService.learningWithOldSession(user, sessionId);
+    return ResponseEntity.ok(problemsResponse);
+  }
+
+  @PostMapping("/review-sessions")
+  public ResponseEntity<ProblemsResponse> newReview(
+      @AuthenticationPrincipal AuthenticatedUser user) {
+    ProblemsResponse problemsResponse = problemService.reviewWithNewSession(user);
+    return ResponseEntity.ok(problemsResponse);
+  }
+
+  @PostMapping("/review-sessions/{sessionId}")
+  public ResponseEntity<ProblemsResponse> oldReview(
+      @AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long sessionId) {
+    ProblemsResponse problemsResponse = problemService.reviewWithOldSession(user, sessionId);
+    return ResponseEntity.ok(problemsResponse);
   }
 }

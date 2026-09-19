@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
+import com.itda.problem.domain.Level;
 import com.itda.support.security.StubUserRepository;
 import com.itda.user.domain.Email;
 import com.itda.user.domain.User;
@@ -48,7 +49,7 @@ class UserSummaryQueryServiceTest {
   @Test
   void 현재_DB_값으로_요약을_만든다() {
     User user = verifiedLearner();
-    user.changeLevel("L3", CREATED_AT.plusDays(1));
+    user.changeLevel(Level.WORD, CREATED_AT.plusDays(1));
     this.users.register(USER_ID, user);
 
     UserSummary summary = this.service.getSummary(USER_ID);
@@ -58,7 +59,7 @@ class UserSummaryQueryServiceTest {
     assertThat(summary.email()).isEqualTo("a@example.com");
     assertThat(summary.role()).isEqualTo(UserRole.LEARNER);
     assertThat(summary.emailVerified()).isTrue();
-    assertThat(summary.level()).isEqualTo("L3");
+    assertThat(summary.level()).isEqualTo(Level.WORD);
     assertThat(summary.createdAt()).isEqualTo(CREATED_AT);
   }
 

@@ -1,6 +1,6 @@
 package com.itda.problem.domain;
 
-public enum ProblemType {
+public enum Level {
   // 자음
   CONSONANT,
   // 모음

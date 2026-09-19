@@ -17,7 +17,7 @@ class ProblemCellTest {
 
   @Test
   void 문제_순번_정답_패턴을_그대로_보관한다() {
-    Problem problem = new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "가방");
+    Problem problem = new Problem(Level.WORD, "가방");
 
     ProblemCell cell = new ProblemCell(problem, 2, 0b100000);
 
@@ -29,21 +29,21 @@ class ProblemCellTest {
   @ParameterizedTest
   @ValueSource(ints = {0, 1, 62, BraillePattern.MAX_VALUE})
   void 정답_패턴은_6비트_정수를_그대로_담는다(int pattern) {
-    Problem problem = new Problem(null, ProblemSourceType.SYSTEM, ProblemType.VOWEL, "ㅏ");
+    Problem problem = new Problem(Level.VOWEL, "ㅏ");
 
     assertThat(new ProblemCell(problem, 1, pattern).getExpectedPattern()).isEqualTo(pattern);
   }
 
   @Test
   void 빈_점형_0은_미입력이_아니라_명시적인_값이다() {
-    Problem problem = new Problem(null, ProblemSourceType.SYSTEM, ProblemType.VOWEL, "ㅏ");
+    Problem problem = new Problem(Level.VOWEL, "ㅏ");
 
     assertThat(new ProblemCell(problem, 1, 0).getExpectedPattern()).isZero();
   }
 
   @Test
   void 목록_순서대로_만들면_1부터의_Cell_순번이_된다() {
-    Problem problem = new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "가방");
+    Problem problem = new Problem(Level.WORD, "가방");
     List<Integer> patterns = List.of(0b000001, 0b100000, 0);
 
     List<ProblemCell> cells =

@@ -2,6 +2,7 @@ package com.itda.user.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.itda.problem.domain.Level;
 import com.itda.support.web.HttpTestClient;
 import com.itda.support.web.WebApiTest;
 import com.itda.user.domain.Email;
@@ -329,14 +330,14 @@ class UserApiIntegrationTest {
   void JWT가_아니라_현재_DB_값으로_응답한다() {
     String token = verifiedUserToken();
     User stored = this.userRepository.findByUsername(this.username).orElseThrow();
-    stored.changeLevel("L4", LocalDateTime.now(ZoneOffset.UTC));
+    stored.changeLevel(Level.SENTENCE, LocalDateTime.now(ZoneOffset.UTC));
     this.userRepository.save(stored);
 
     Map<String, Object> body =
         HttpTestClient.json(this.client.get(ME, HttpHeaders.AUTHORIZATION, "Bearer " + token));
 
     // 토큰에는 level claim이 없다. DB를 읽었다는 증거다.
-    assertThat(body).containsEntry("level", "L4");
+    assertThat(body).containsEntry("level", "SENTENCE");
   }
 
   @Test

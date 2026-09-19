@@ -1,4 +1,4 @@
-package com.itda.problem.service;
+package com.itda.global;
 
 import com.itda.problem.dto.ProblemAnalyzeResponse;
 import com.itda.problem.dto.RegisterProblemRequest;

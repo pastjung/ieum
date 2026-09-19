@@ -7,17 +7,19 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.itda.curriculum.domain.CurriculumStageRepository;
+import com.itda.global.FastApiClient;
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.learning.domain.LearningSessionRepository;
 import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.LectureProblem;
 import com.itda.lecture.repository.LectureProblemRepository;
 import com.itda.lecture.repository.LectureRepository;
 import com.itda.problem.domain.LearningSkill;
+import com.itda.problem.domain.Level;
 import com.itda.problem.domain.Problem;
 import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSkill;
-import com.itda.problem.domain.ProblemSourceType;
-import com.itda.problem.domain.ProblemType;
 import com.itda.problem.domain.SkillType;
 import com.itda.problem.dto.ProblemAnalyzeResponse;
 import com.itda.problem.dto.RegisterProblemRequest;
@@ -26,6 +28,7 @@ import com.itda.problem.repository.LearningSkillQueryRepository;
 import com.itda.problem.repository.LearningSkillRepository;
 import com.itda.problem.repository.ProblemCellRepository;
 import com.itda.problem.repository.ProblemRepository;
+import com.itda.problem.repository.ProblemSessionRepository;
 import com.itda.problem.repository.ProblemSkillRepository;
 import com.itda.user.domain.UserRole;
 import java.time.LocalDateTime;
@@ -63,6 +66,9 @@ class ProblemServiceTest {
   @Mock private LectureRepository lectureRepository;
   @Mock private LearningSkillRepository learningSkillRepository;
   @Mock private LearningSkillQueryRepository learningSkillQueryRepository;
+  @Mock private LearningSessionRepository learningSessionRepository;
+  @Mock private CurriculumStageRepository curriculumStageRepository;
+  @Mock private ProblemSessionRepository problemSessionRepository;
   @Mock private FastApiClient fastApiClient;
 
   @InjectMocks private ProblemService problemService;
@@ -73,25 +79,23 @@ class ProblemServiceTest {
   @Captor private ArgumentCaptor<LectureProblem> lectureProblemCaptor;
 
   @Test
-  void 등록한_문제는_강사_소유의_INSTRUCTOR_문제로_저장된다() {
+  void 등록한_문제는_분석이_돌려준_단계와_목표_텍스트로_저장된다() {
     givenLecture();
-    givenAnalysis(ProblemType.WORD, List.of(0b000001, 0b100000), List.of(skillSet("ㄱ")));
+    givenAnalysis(Level.WORD, List.of(0b000001, 0b100000), List.of(skillSet("ㄱ")));
     givenSkills(skill("ㄱ"));
 
     problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방"));
 
     verify(problemRepository).save(problemCaptor.capture());
     Problem saved = problemCaptor.getValue();
-    assertThat(saved.getCreatorUserId()).isEqualTo(INSTRUCTOR_ID);
-    assertThat(saved.getSourceType()).isEqualTo(ProblemSourceType.INSTRUCTOR);
-    assertThat(saved.getProblemType()).isEqualTo(ProblemType.WORD);
+    assertThat(saved.getLevel()).isEqualTo(Level.WORD);
     assertThat(saved.getTargetText()).isEqualTo("가방");
   }
 
   @Test
   void 분석이_돌려준_점형이_1부터의_순번으로_저장된다() {
     givenLecture();
-    givenAnalysis(ProblemType.WORD, List.of(0b000001, 0b100000, 0), List.of(skillSet("ㄱ")));
+    givenAnalysis(Level.WORD, List.of(0b000001, 0b100000, 0), List.of(skillSet("ㄱ")));
     givenSkills(skill("ㄱ"));
 
     problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방"));
@@ -108,7 +112,7 @@ class ProblemServiceTest {
   @Test
   void 조회한_학습_요소마다_문제_요소_연결을_만든다() {
     givenLecture();
-    givenAnalysis(ProblemType.WORD, List.of(0b000001), List.of(skillSet("ㄱ"), skillSet("ㅏ")));
+    givenAnalysis(Level.WORD, List.of(0b000001), List.of(skillSet("ㄱ"), skillSet("ㅏ")));
     LearningSkill first = skill("ㄱ");
     LearningSkill second = skill("ㅏ");
     givenSkills(first, second);
@@ -127,7 +131,7 @@ class ProblemServiceTest {
   @Test
   void 등록한_문제를_해당_수업에_연결한다() {
     Lecture lecture = givenLecture();
-    givenAnalysis(ProblemType.WORD, List.of(0b000001), List.of(skillSet("ㄱ")));
+    givenAnalysis(Level.WORD, List.of(0b000001), List.of(skillSet("ㄱ")));
     givenSkills(skill("ㄱ"));
 
     problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방"));
@@ -215,7 +219,7 @@ class ProblemServiceTest {
   @Test
   void 분석_결과에_Cell이_없으면_저장하지_않는다() {
     givenLecture();
-    givenAnalysis(ProblemType.WORD, null, List.of(skillSet("ㄱ")));
+    givenAnalysis(Level.WORD, null, List.of(skillSet("ㄱ")));
 
     assertThatThrownBy(
             () ->
@@ -230,7 +234,7 @@ class ProblemServiceTest {
   @Test
   void 분석_결과의_Cell_목록이_비어_있으면_저장하지_않는다() {
     givenLecture();
-    givenAnalysis(ProblemType.WORD, List.of(), List.of(skillSet("ㄱ")));
+    givenAnalysis(Level.WORD, List.of(), List.of(skillSet("ㄱ")));
 
     assertThatThrownBy(
             () ->
@@ -248,7 +252,7 @@ class ProblemServiceTest {
   @Test
   void 분석_결과의_학습_요소_목록이_비어_있으면_저장하지_않는다() {
     givenLecture();
-    givenAnalysis(ProblemType.WORD, List.of(0b000001), List.of());
+    givenAnalysis(Level.WORD, List.of(0b000001), List.of());
 
     assertThatThrownBy(
             () ->
@@ -263,7 +267,7 @@ class ProblemServiceTest {
   @Test
   void 분석_결과에_학습_요소가_없으면_저장하지_않는다() {
     givenLecture();
-    givenAnalysis(ProblemType.WORD, List.of(0b000001), null);
+    givenAnalysis(Level.WORD, List.of(0b000001), null);
 
     assertThatThrownBy(
             () ->
@@ -282,7 +286,7 @@ class ProblemServiceTest {
     return lecture;
   }
 
-  private void givenAnalysis(ProblemType type, List<Integer> cells, List<SkillSet> skillSets) {
+  private void givenAnalysis(Level type, List<Integer> cells, List<SkillSet> skillSets) {
     given(fastApiClient.analyze(any()))
         .willReturn(new ProblemAnalyzeResponse(type, cells, skillSets));
   }

@@ -1,24 +1,32 @@
 package com.itda.problem.service;
 
+import com.itda.curriculum.domain.CurriculumStage;
+import com.itda.curriculum.domain.CurriculumStageRepository;
+import com.itda.global.FastApiClient;
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.learning.domain.LearningSession;
+import com.itda.learning.domain.LearningSessionRepository;
 import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.LectureProblem;
 import com.itda.lecture.repository.LectureProblemRepository;
 import com.itda.lecture.repository.LectureRepository;
 import com.itda.problem.domain.*;
-import com.itda.problem.dto.ProblemAnalyzeResponse;
-import com.itda.problem.dto.RegisterProblemRequest;
-import com.itda.problem.dto.SkillSet;
+import com.itda.problem.dto.*;
 import com.itda.problem.repository.*;
 import com.itda.user.domain.UserRole;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class ProblemService {
   private final ProblemRepository problemRepository;
@@ -27,25 +35,42 @@ public class ProblemService {
   private final ProblemSkillRepository problemSkillRepository;
   private final LectureRepository lectureRepository;
   private final LearningSkillQueryRepository learningSkillQueryRepository;
+  private final LearningSessionRepository learningSessionRepository;
+  private final CurriculumStageRepository curriculumStageRepository;
+  private final ProblemSessionRepository problemSessionRepository;
   private final FastApiClient fastApiClient;
 
   @Transactional
   public void registerProblem(
       AuthenticatedUser user, Long lectureId, RegisterProblemRequest registerProblemRequest) {
     Lecture lecture = validateInstructor(user, lectureId);
-    Long userId = user.userId();
+    Problem problem =
+        problemRepository
+            .findByTargetText(registerProblemRequest.targetText())
+            .orElseGet(() -> createProblem(lecture, registerProblemRequest));
 
+    List<Integer> expectedPatterns =
+        problemCellRepository.findAllByProblem(problem).stream()
+            .map(ProblemCell::getExpectedPattern)
+            .toList();
+
+    ProblemDetail problemDetail =
+        new ProblemDetail(
+            problem.getId(), 1L, registerProblemRequest.targetText(), expectedPatterns, false);
+    // TODO:수강생들에게 문제 전달
+
+  }
+
+  private Problem createProblem(Lecture lecture, RegisterProblemRequest registerProblemRequest) {
     ProblemAnalyzeResponse analyzeResponse = fastApiClient.analyze(registerProblemRequest);
 
     validateAnalyzeResponse(analyzeResponse);
 
-    ProblemType problemType = analyzeResponse.problemType();
+    Level level = analyzeResponse.level();
     List<Integer> cellPatterns = analyzeResponse.cells();
     List<SkillSet> skillSets = analyzeResponse.skillSets();
 
-    Problem problem =
-        new Problem(
-            userId, ProblemSourceType.INSTRUCTOR, problemType, registerProblemRequest.targetText());
+    Problem problem = new Problem(level, registerProblemRequest.targetText());
     problemRepository.save(problem);
 
     List<LearningSkill> learningSkills = learningSkillQueryRepository.findAllBySkillSets(skillSets);
@@ -64,7 +89,7 @@ public class ProblemService {
 
     problemCellRepository.saveAll(cells);
 
-    // TODO:수강생들에게 문제 전달
+    return problem;
   }
 
   private Lecture validateInstructor(AuthenticatedUser user, Long lectureId) {
@@ -83,11 +108,55 @@ public class ProblemService {
   }
 
   private void validateAnalyzeResponse(ProblemAnalyzeResponse analyzeResponse) {
-    if (analyzeResponse.problemType() == null)
+    if (analyzeResponse.level() == null)
       throw new RuntimeException("FastAPI 응답의 problemType 이 null 입니다.");
     if (analyzeResponse.skillSets() == null || analyzeResponse.skillSets().isEmpty())
       throw new RuntimeException("FastAPI 응답의 skillSets 가 비어 있습니다.");
     if (analyzeResponse.cells() == null || analyzeResponse.cells().isEmpty())
       throw new RuntimeException("FastAPI 응답의 cells 가 비어 있습니다.");
+  }
+
+  @Transactional
+  public ProblemsResponse learningWithNewSession(
+      AuthenticatedUser user, NewStudyRequest newStudyRequest) {
+    CurriculumStage curriculumStage =
+        curriculumStageRepository
+            .findById(newStudyRequest.curriculumId())
+            .orElseThrow(() -> new RuntimeException("해당 커리큘럼이 없습니다."));
+    LearningSession learningSession = createSession(user.userId(), curriculumStage);
+    Level level = curriculumStage.getLevel();
+    List<Problem> problems = problemRepository.findAllByLevel(level);
+
+    Set<Integer> selectedIndexes = new HashSet<>();
+    ThreadLocalRandom random = ThreadLocalRandom.current();
+
+    while (selectedIndexes.size() < 10) {
+      selectedIndexes.add(random.nextInt(problems.size()));
+    }
+
+    List<Problem> randomProblems = selectedIndexes.stream().map(problems::get).toList();
+
+    //      Long sessionId,
+    //      List<org.springframework.http.ProblemDetail> problems
+
+    return null;
+  }
+
+  public ProblemsResponse learningWithOldSession(AuthenticatedUser user, Long sessionId) {
+    return null;
+  }
+
+  public ProblemsResponse reviewWithNewSession(AuthenticatedUser user) {
+    return null;
+  }
+
+  public ProblemsResponse reviewWithOldSession(AuthenticatedUser user, Long sessionId) {
+    return null;
+  }
+
+  private LearningSession createSession(Long userId, CurriculumStage curriculum) {
+    LearningSession learningSession = new LearningSession(userId, curriculum);
+    learningSessionRepository.save(learningSession);
+    return learningSession;
   }
 }
