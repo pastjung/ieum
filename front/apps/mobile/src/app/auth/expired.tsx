@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { authService } from "@/services/authService";
 import { announce } from "@/a11y";
@@ -20,7 +21,7 @@ export default function SessionExpired() {
   return (
     <ScreenShell>
       <View style={styles.center}>
-        <View style={[styles.badge, { backgroundColor: theme.color.primary }]} accessibilityLabel="로그인 만료 캐릭터" />
+        <IeumFace size={130} expression="frown" accessibilityLabel="로그인 만료 캐릭터" />
         <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
           오랜만이에요,{"\n"}다시 로그인해 주세요
         </Text>
@@ -40,5 +41,4 @@ export default function SessionExpired() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 18 },
-  badge: { width: 130, height: 130, borderRadius: 38 },
 });

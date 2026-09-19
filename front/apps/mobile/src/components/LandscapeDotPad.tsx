@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 import type { Cell, Dot } from "@ieum/domain";
 import { radius, useTheme } from "@/theme";
 import { DotButton } from "./DotButton";
-import { useDotGesture } from "./useDotGesture";
+import { useMultiTouchDots } from "./useMultiTouchDots";
 
 interface Props {
   onCommitCell: (cell: Cell) => void;
@@ -25,10 +25,14 @@ const rightPos: Partial<Record<Dot, object>> = {
   4: { right: "54%", bottom: "10%" },
 };
 
-/** 가로 두 손 6점 입력 패드 (V14b) — 세로 패드와 같은 제스처 규칙 */
+/**
+ * 가로 두 손 6점 입력 패드 (V14b) — 세로 패드와 같은 제스처 규칙.
+ * 두 영역에 걸친 동시 입력을 위해 행 전체가 하나의 터치 영역으로 동작한다.
+ * 가운데 버튼은 점 입력 중이 아닐 때 누른다.
+ */
 export function LandscapeDotPad({ onCommitCell, center }: Props) {
   const theme = useTheme();
-  const { active, pressIn, pressOut } = useDotGesture(onCommitCell);
+  const { active, padHandlers, onMeasureDot } = useMultiTouchDots(onCommitCell);
 
   const zone = (dots: Dot[], pos: Partial<Record<Dot, object>>, label: string) => (
     <View
@@ -36,22 +40,13 @@ export function LandscapeDotPad({ onCommitCell, center }: Props) {
       accessibilityLabel={label}
     >
       {dots.map((dot) => (
-        <DotButton
-          key={dot}
-          dot={dot}
-          size={SIZE}
-          on={active.has(dot)}
-          selected={active.has(dot)}
-          onPressIn={() => pressIn(dot)}
-          onPressOut={() => pressOut(dot)}
-          style={pos[dot]!}
-        />
+        <DotButton key={dot} dot={dot} size={SIZE} on={active.has(dot)} onMeasure={onMeasureDot} style={pos[dot]!} />
       ))}
     </View>
   );
 
   return (
-    <View style={styles.row}>
+    <View {...padHandlers} style={styles.row}>
       {zone([3, 2, 1], leftPos, "왼손 입력 영역. 위에서부터 3번, 2번, 1번 점이에요.")}
       <View style={styles.center}>{center}</View>
       {zone([6, 5, 4], rightPos, "오른손 입력 영역. 위에서부터 6번, 5번, 4번 점이에요.")}

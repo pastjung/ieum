@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticSuccess } from "@/a11y";
@@ -29,7 +30,7 @@ export default function ClassEnd() {
   return (
     <ScreenShell>
       <View style={styles.center}>
-        <View style={[styles.badge, { backgroundColor: theme.color.primary }]} accessibilityLabel="수업 종료 캐릭터" />
+        <IeumFace size={130} accessibilityLabel="수업 종료 캐릭터" />
         <Text accessibilityRole="header" style={{ fontSize: 32 * fontScale, fontWeight: "900", color: theme.color.text }}>
           고생했어요
         </Text>
@@ -62,5 +63,4 @@ export default function ClassEnd() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 18 },
-  badge: { width: 130, height: 130, borderRadius: 38 },
 });

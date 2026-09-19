@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { announce, hapticSuccess } from "@/a11y";
@@ -23,7 +24,7 @@ export default function Welcome() {
   return (
     <ScreenShell>
       <View style={styles.center}>
-        <View style={[styles.logo, { backgroundColor: theme.color.primary }]} accessibilityLabel="이음 캐릭터" />
+        <IeumFace size={130} />
         <Text accessibilityRole="header" style={{ fontSize: 30, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
           {name}님,{"\n"}환영해요
         </Text>
@@ -38,5 +39,4 @@ export default function Welcome() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 18 },
-  logo: { width: 130, height: 130, borderRadius: 38 },
 });

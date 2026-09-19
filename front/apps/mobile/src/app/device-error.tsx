@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { announce, hapticError } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
@@ -20,7 +21,7 @@ export default function DeviceError() {
   return (
     <ScreenShell>
       <View style={styles.center}>
-        <View style={[styles.badge, { backgroundColor: theme.color.primary }]} accessibilityLabel="장치 오류 캐릭터" />
+        <IeumFace size={130} expression="worried" accessibilityLabel="장치 오류 캐릭터" />
         <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
           점자 장치와{"\n"}연결이 끊겼어요
         </Text>
@@ -42,5 +43,4 @@ export default function DeviceError() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 18 },
-  badge: { width: 130, height: 130, borderRadius: 38 },
 });

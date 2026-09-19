@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { describeDiff, ordinalKo } from "@ieum/domain";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { BrailleCellView } from "@/components/BrailleCellView";
 import { useSessionStore } from "@/stores/sessionStore";
@@ -69,7 +70,7 @@ export default function Grade() {
       </Text>
       {result.correct ? (
         <View style={styles.center}>
-          <View style={[styles.badge, { backgroundColor: theme.color.primary }]} accessibilityLabel="정답 캐릭터" />
+          <IeumFace size={150} accessibilityLabel="정답 캐릭터" />
           <Text accessibilityRole="header" style={{ fontSize: 40 * fontScale, fontWeight: "900", color: theme.color.primary }}>
             정답이에요!
           </Text>
@@ -123,6 +124,5 @@ export default function Grade() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 28 },
-  badge: { width: 150, height: 150, borderRadius: 42 },
   compare: { borderWidth: 1, padding: 18, flexDirection: "row", justifyContent: "space-around" },
 });

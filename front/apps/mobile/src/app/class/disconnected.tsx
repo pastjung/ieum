@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticError } from "@/a11y";
@@ -22,7 +23,7 @@ export default function ClassDisconnected() {
   return (
     <ScreenShell>
       <View style={styles.center}>
-        <View style={[styles.badge, { backgroundColor: theme.color.primary }]} accessibilityLabel="연결 끊김 캐릭터" />
+        <IeumFace size={130} expression="worried" accessibilityLabel="연결 끊김 캐릭터" />
         <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
           수업과 연결이{"\n"}잠시 끊겼어요
         </Text>
@@ -53,5 +54,4 @@ export default function ClassDisconnected() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 18 },
-  badge: { width: 130, height: 130, borderRadius: 38 },
 });

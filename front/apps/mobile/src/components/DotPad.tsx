@@ -2,7 +2,7 @@ import { StyleSheet, View } from "react-native";
 import type { Cell, Dot } from "@ieum/domain";
 import { dotButtonSize, radius, useTheme } from "@/theme";
 import { DotButton } from "./DotButton";
-import { useDotGesture } from "./useDotGesture";
+import { useMultiTouchDots } from "./useMultiTouchDots";
 
 interface Props {
   /** 한 칸 입력이 확정될 때 (모든 손가락을 떼면) 호출 */
@@ -21,15 +21,16 @@ const positions: Record<Dot, object> = {
   4: { right: "14%", bottom: "3%" },
 };
 
-/** 세로(V) 6점 입력 패드 — 점을 동시에 짚고 손을 떼면 한 칸 입력 */
+/** 세로(V) 6점 입력 패드 — 여러 점을 동시에 짚고 손을 떼면 한 칸 입력 */
 export function DotPad({ onCommitCell, highlightDots }: Props) {
   const theme = useTheme();
-  const { active, pressIn, pressOut } = useDotGesture(onCommitCell);
+  const { active, padHandlers, onMeasureDot } = useMultiTouchDots(onCommitCell);
 
   return (
     <View
+      {...padHandlers}
       style={[styles.pad, { borderColor: theme.color.border, borderRadius: radius.card }]}
-      accessibilityLabel="점자 입력 영역. 1번부터 6번까지 점 버튼이 있어요. 점을 동시에 짚고 손을 떼면 한 칸이 입력돼요."
+      accessibilityLabel="점자 입력 영역. 1번부터 6번까지 점이 있어요. 점을 동시에 짚고 손을 떼면 한 칸이 입력돼요."
     >
       {([3, 6, 2, 5, 1, 4] as Dot[]).map((dot) => (
         <DotButton
@@ -37,9 +38,7 @@ export function DotPad({ onCommitCell, highlightDots }: Props) {
           dot={dot}
           size={dotButtonSize}
           on={active.has(dot) || !!highlightDots?.includes(dot)}
-          selected={active.has(dot)}
-          onPressIn={() => pressIn(dot)}
-          onPressOut={() => pressOut(dot)}
+          onMeasure={onMeasureDot}
           style={positions[dot]}
         />
       ))}

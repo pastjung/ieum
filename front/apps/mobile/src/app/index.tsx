@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { authService } from "@/services/authService";
 import { announce } from "@/a11y";
@@ -28,7 +29,7 @@ export default function Splash() {
 
   return (
     <ScreenShell style={styles.center}>
-      <View style={[styles.logo, { backgroundColor: theme.color.primary }]} accessibilityLabel="이음 로고" />
+      <IeumFace size={110} accessibilityLabel="이음 로고" />
       <Text style={[styles.title, { color: theme.color.text }]} accessibilityRole="header">
         I:EUM
       </Text>
@@ -39,6 +40,5 @@ export default function Splash() {
 
 const styles = StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", gap: 22 },
-  logo: { width: 110, height: 110, borderRadius: 32 },
   title: { fontSize: 44, fontWeight: "900", letterSpacing: -0.5 },
 });

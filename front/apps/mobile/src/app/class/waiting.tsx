@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { classService } from "@/services/classService";
 import { useSessionStore } from "@/stores/sessionStore";
@@ -32,7 +33,7 @@ export default function ClassWaiting() {
   return (
     <ScreenShell>
       <View style={styles.center}>
-        <View style={[styles.badge, { backgroundColor: theme.color.primary }]} accessibilityLabel="대기 중 캐릭터" />
+        <IeumFace size={130} accessibilityLabel="대기 중 캐릭터" />
         <Text style={{ fontSize: 15, fontWeight: "700", color: theme.color.primary }}>입장 완료</Text>
         <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
           {className}{"\n"}곧 시작해요
@@ -48,5 +49,4 @@ export default function ClassWaiting() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 18 },
-  badge: { width: 130, height: 130, borderRadius: 38 },
 });

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { announce } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
@@ -19,7 +20,7 @@ export default function Analyzing() {
 
   return (
     <ScreenShell style={styles.center}>
-      <View style={[styles.badge, { backgroundColor: theme.color.primary }]} accessibilityLabel="분석 중 캐릭터" />
+      <IeumFace size={130} expression="worried" accessibilityLabel="분석 중 캐릭터" />
       <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
         학습 완료!{"\n"}결과를 분석 중이에요
       </Text>
@@ -32,5 +33,4 @@ export default function Analyzing() {
 
 const styles = StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", gap: 22 },
-  badge: { width: 130, height: 130, borderRadius: 38 },
 });
