@@ -65,8 +65,11 @@ export function AppButton({
         { minHeight, borderRadius: radius.control },
         isPrimary
           ? { backgroundColor: theme.color.primary }
-          : { borderWidth: 2, borderColor: theme.color.border },
-        pressed && { opacity: 0.7 },
+          : { borderWidth: 2, borderColor: theme.color.border, backgroundColor: theme.color.bg },
+        theme.shadow != null && {
+          boxShadow: `0 4px 0 ${isPrimary ? theme.shadow.primary : theme.shadow.control}`,
+        },
+        pressed && { opacity: 0.7, boxShadow: "none" },
         disabled && { opacity: 0.4 },
       ]}
     >

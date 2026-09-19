@@ -38,7 +38,8 @@ export default function Learn() {
             style={({ pressed }) => [
               styles.tile,
               { borderColor: theme.color.border, borderRadius: radius.card },
-              pressed && { opacity: 0.7, borderColor: theme.color.primary },
+              theme.shadow != null && { boxShadow: `0 4px 0 ${theme.shadow.control}` },
+              pressed && { opacity: 0.7, borderColor: theme.color.primary, boxShadow: "none" },
             ]}
           >
             <Text style={{ fontSize: 32 * fontScale, fontWeight: "900", color: theme.color.primary }}>{t.label}</Text>

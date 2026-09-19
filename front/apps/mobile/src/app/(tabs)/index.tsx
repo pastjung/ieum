@@ -40,7 +40,10 @@ export default function Home() {
         primary
           ? { backgroundColor: theme.color.primary }
           : { borderWidth: 2, borderColor: theme.color.border },
-        pressed && { opacity: 0.8 },
+        theme.shadow != null && {
+          boxShadow: `0 4px 0 ${primary ? theme.shadow.primary : theme.shadow.control}`,
+        },
+        pressed && { opacity: 0.8, boxShadow: "none" },
       ]}
     >
       <Text style={{ fontSize: 28 * fontScale, fontWeight: "900", color: primary ? theme.color.onPrimary : theme.color.text }}>

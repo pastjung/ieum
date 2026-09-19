@@ -40,7 +40,8 @@ export default function ModeSelect() {
           style={({ pressed }) => [
             styles.option,
             { backgroundColor: theme.color.primary, borderRadius: radius.card },
-            pressed && { opacity: 0.8 },
+            theme.shadow != null && { boxShadow: `0 6px 0 ${theme.shadow.primary}` },
+            pressed && { opacity: 0.8, boxShadow: "none" },
           ]}
         >
           <Text style={{ fontSize: 26, fontWeight: "900", color: theme.color.onPrimary }}>음성 중심</Text>
@@ -53,7 +54,8 @@ export default function ModeSelect() {
           style={({ pressed }) => [
             styles.option,
             { borderWidth: 2, borderColor: theme.color.border, borderRadius: radius.card },
-            pressed && { opacity: 0.8 },
+            theme.shadow != null && { boxShadow: `0 6px 0 ${theme.shadow.control}` },
+            pressed && { opacity: 0.8, boxShadow: "none" },
           ]}
         >
           <Text style={{ fontSize: 26, fontWeight: "900", color: theme.color.text }}>화면 중심</Text>

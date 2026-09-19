@@ -87,7 +87,9 @@ export function ListRow({
           borderWidth: highlighted ? 3 : 2,
           minHeight: controlHeight.row,
           borderRadius: radius.control,
+          backgroundColor: theme.color.bg,
         },
+        theme.shadow != null && { boxShadow: `0 4px 0 ${theme.shadow.control}` },
         pressed && { opacity: 0.7 },
       ]}
     >

@@ -11,6 +11,11 @@ export interface IeumTheme {
     primary: string;
     onPrimary: string;
   };
+  /** B모드(Green) 하드 섀도 — 버튼·카드 아래 4px 단색 그림자. 없으면 플랫(Dark). */
+  shadow?: {
+    primary: string;
+    control: string;
+  };
 }
 
 /** 시각장애인용 Dark 와이어프레임 기준 팔레트 (본문 대비 7:1 이상) */
@@ -38,6 +43,10 @@ export const greenTheme: IeumTheme = {
     textMuted: "#7C8A93",
     primary: "#00C896",
     onPrimary: "#FFFFFF",
+  },
+  shadow: {
+    primary: "#00A87E",
+    control: "#DCE3E7",
   },
 };
 
