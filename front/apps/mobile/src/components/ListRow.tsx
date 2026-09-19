@@ -4,6 +4,8 @@ import { hapticSelect } from "@/a11y";
 
 interface Props {
   label: string;
+  /** 라벨 아래 작은 설명 줄 */
+  description?: string;
   /** 3px 노란 테두리 강조 (선택된 행, 가장 약한 항목) */
   highlighted?: boolean;
   value?: string;
@@ -17,6 +19,7 @@ interface Props {
 /** 설정·목록 공통 행 (최소 높이 64) */
 export function ListRow({
   label,
+  description,
   highlighted,
   value,
   emphasizeValue,
@@ -28,16 +31,20 @@ export function ListRow({
   const fontScale = useFontScale();
   const content = (
     <>
-      <Text
-        style={{
-          color: theme.color.text,
-          fontSize: fontSize.buttonSecondary * fontScale,
-          fontWeight: highlighted ? "900" : "700",
-          flexShrink: 1,
-        }}
-      >
-        {label}
-      </Text>
+      <View style={{ flexShrink: 1, gap: 3 }}>
+        <Text
+          style={{
+            color: theme.color.text,
+            fontSize: fontSize.buttonSecondary * fontScale,
+            fontWeight: highlighted ? "900" : "700",
+          }}
+        >
+          {label}
+        </Text>
+        {description != null && (
+          <Text style={{ color: theme.color.textMuted, fontSize: 13.5 * fontScale }}>{description}</Text>
+        )}
+      </View>
       <View style={styles.valueWrap}>
         {value != null &&
           (emphasizeValue ? (
@@ -66,7 +73,8 @@ export function ListRow({
       </View>
     </>
   );
-  const a11yLabel = value != null ? `${label}, ${value}` : label;
+  const base = description != null ? `${label}, ${description}` : label;
+  const a11yLabel = value != null ? `${base}, ${value}` : base;
   return (
     <Pressable
       accessibilityRole={onPress ? "button" : "text"}
@@ -102,6 +110,7 @@ const styles = StyleSheet.create({
   row: {
     borderWidth: 2,
     paddingHorizontal: 18,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

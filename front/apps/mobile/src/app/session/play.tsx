@@ -7,6 +7,7 @@ import { DotPad } from "@/components/DotPad";
 import { LandscapeDotPad } from "@/components/LandscapeDotPad";
 import { AppButton } from "@/components/AppButton";
 import { useSessionStore } from "@/stores/sessionStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { announce, hapticTap, speak } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
@@ -21,6 +22,7 @@ export default function SessionPlay() {
   const index = useSessionStore((s) => s.index);
   const submit = useSessionStore((s) => s.submit);
   const problem = useSessionStore((s) => s.current)();
+  const isScreenMode = useSettingsStore((s) => s.mode) === "screen";
   const [cells, setCells] = useState<Cell[]>([]);
 
   useEffect(() => {
@@ -132,6 +134,24 @@ export default function SessionPlay() {
       <Text accessibilityRole="header" style={{ fontSize: 28 * fontScale, fontWeight: "900", lineHeight: 38, color: theme.color.text }}>
         {problem.prompt}
       </Text>
+      {isScreenMode && (
+        <View
+          style={{
+            minHeight: 64,
+            borderWidth: 2,
+            borderColor: theme.color.border,
+            borderRadius: 14,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: 12,
+          }}
+          accessibilityLabel={`입력한 점자 ${cells.length}칸`}
+        >
+          <Text style={{ fontSize: 40, color: theme.color.text, letterSpacing: 6 }}>
+            {cells.length > 0 ? cellsToUnicode(cells) : "⠀"}
+          </Text>
+        </View>
+      )}
       <View style={{ flexDirection: "row", gap: 10 }}>
         <View style={{ flex: 1 }}>
           <AppButton label="문제 다시 듣기" variant="compact" onPress={() => speak(problem.prompt, { force: true })} />

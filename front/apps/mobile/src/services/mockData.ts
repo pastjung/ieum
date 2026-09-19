@@ -59,14 +59,41 @@ export const homeSummary: HomeSummary = {
 };
 
 export const learningThemes = [
-  { id: "consonant", label: "자음" },
-  { id: "vowel", label: "모음" },
-  { id: "abbrev-char", label: "약자" },
-  { id: "word", label: "단어" },
-  { id: "abbrev-word", label: "약어" },
-  { id: "sentence", label: "문장" },
+  { id: "consonant", label: "자음", solved: 48, correct: 43 },
+  { id: "vowel", label: "모음", solved: 36, correct: 27 },
+  { id: "abbrev-char", label: "약자", solved: 24, correct: 15 },
+  { id: "word", label: "단어", solved: 12, correct: 7 },
+  { id: "abbrev-word", label: "약어", solved: 0, correct: 0 },
+  { id: "sentence", label: "문장", solved: 0, correct: 0 },
 ] as const;
 export type LearningThemeId = (typeof learningThemes)[number]["id"];
+
+/** L10 홈 · 오늘의 복습 요소 */
+export const todayReview = ["받침 ㅆ", "자음 ㅅ", "모음 ㅕ"];
+
+/** L26 내 실력 대시보드 (화면 중심 모드) */
+export const skillDashboard = {
+  overallPercent: 76,
+  overallLabel: "모음 익히는 중",
+  overallDetail: "규칙 12개 중 9개를 익혔어요",
+  stats: [
+    { label: "연속 학습", value: "7일" },
+    { label: "푼 문제", value: "184" },
+    { label: "정답률", value: "82%" },
+  ],
+  rules: [
+    { label: "자음 규칙 'ㅅ'", percent: 94 },
+    { label: "모음 규칙 'ㅢ'", percent: 91 },
+    { label: "받침 규칙 'ㅌ'", percent: 88 },
+    { label: "이중모음 'ㅒ'", percent: 86 },
+    { label: "겹받침 'ㄺ'", percent: 85 },
+    { label: "첫소리 ㅇ '아'", percent: 79 },
+    { label: "모음 연쇄 '예'", percent: 76 },
+    { label: "약자 '그리고'", percent: 63 },
+    { label: "된소리 'ㅆ'", percent: 42 },
+    { label: "문장부호 '.'", percent: null },
+  ] as { label: string; percent: number | null }[],
+};
 
 export const skillLevels = [
   { label: "모음 ㅏ·ㅓ", level: "familiar" as const },

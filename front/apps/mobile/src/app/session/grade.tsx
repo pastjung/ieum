@@ -20,6 +20,7 @@ export default function Grade() {
   const result = useSessionStore((s) => s.lastResult);
   const next = useSessionStore((s) => s.next);
   const answers = useSessionStore((s) => s.answers);
+  const problem = useSessionStore((s) => s.current)();
   const kind = useSessionStore((s) => s.kind);
   const disconnectShown = useSessionStore((s) => s.disconnectShown);
   const markDisconnectShown = useSessionStore((s) => s.markDisconnectShown);
@@ -74,6 +75,11 @@ export default function Grade() {
           <Text accessibilityRole="header" style={{ fontSize: 40 * fontScale, fontWeight: "900", color: theme.color.primary }}>
             정답이에요!
           </Text>
+          {problem != null && (
+            <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 28, textAlign: "center" }}>
+              '{problem.target}' {result.total}칸을 모두{"\n"}정확히 입력했어요.
+            </Text>
+          )}
         </View>
       ) : (
         <>
