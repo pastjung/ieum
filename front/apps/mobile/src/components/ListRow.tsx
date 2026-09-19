@@ -4,6 +4,8 @@ import { hapticSelect } from "@/a11y";
 
 interface Props {
   label: string;
+  /** 3px 노란 테두리 강조 (선택된 행, 가장 약한 항목) */
+  highlighted?: boolean;
   value?: string;
   /** value를 강조(노랑 칩)로 표시 */
   emphasizeValue?: boolean;
@@ -15,6 +17,7 @@ interface Props {
 /** 설정·목록 공통 행 (최소 높이 64) */
 export function ListRow({
   label,
+  highlighted,
   value,
   emphasizeValue,
   onPress,
@@ -29,7 +32,7 @@ export function ListRow({
         style={{
           color: theme.color.text,
           fontSize: fontSize.buttonSecondary * fontScale,
-          fontWeight: "700",
+          fontWeight: highlighted ? "900" : "700",
           flexShrink: 1,
         }}
       >
@@ -79,7 +82,12 @@ export function ListRow({
       }
       style={({ pressed }) => [
         styles.row,
-        { borderColor: theme.color.border, minHeight: controlHeight.row, borderRadius: radius.control },
+        {
+          borderColor: highlighted ? theme.color.primary : theme.color.border,
+          borderWidth: highlighted ? 3 : 2,
+          minHeight: controlHeight.row,
+          borderRadius: radius.control,
+        },
         pressed && { opacity: 0.7 },
       ]}
     >

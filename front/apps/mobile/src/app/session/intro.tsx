@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { ScreenShell } from "@/components/ScreenShell";
+import { IeumFace } from "@/components/IeumFace";
 import { BackHeader } from "@/components/BackHeader";
 import { AppButton } from "@/components/AppButton";
 import { learningService } from "@/services/learningService";
@@ -46,6 +47,7 @@ export default function SessionIntro() {
     return (
       <ScreenShell>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 18 }}>
+          <IeumFace size={130} expression="frown" accessibilityLabel="아쉬워하는 이음 캐릭터" />
           <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
             학습 준비가{"\n"}안 됐어요
           </Text>

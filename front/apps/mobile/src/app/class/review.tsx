@@ -32,7 +32,7 @@ export default function ClassReview() {
           key={o.id}
           label={o.label}
           value={`오답 ${o.wrongCount}개`}
-          emphasizeValue={o.id === selected}
+          highlighted={o.id === selected}
           accessibilityHint={o.id === selected ? "지금 선택돼 있어요" : "누르면 이 단계를 선택해요"}
           onPress={() => {
             setSelected(o.id);

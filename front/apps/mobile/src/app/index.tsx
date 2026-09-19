@@ -30,9 +30,14 @@ export default function Splash() {
   return (
     <ScreenShell style={styles.center}>
       <IeumFace size={110} accessibilityLabel="이음 로고" />
-      <Text style={[styles.title, { color: theme.color.text }]} accessibilityRole="header">
-        I:EUM
-      </Text>
+      <View style={styles.wordmark} accessibilityRole="header" accessibilityLabel="이음">
+        <Text style={[styles.title, { color: theme.color.text }]}>I</Text>
+        <View style={styles.dots}>
+          <View style={[styles.dot, { backgroundColor: theme.color.primary }]} />
+          <View style={[styles.dot, { backgroundColor: theme.color.primary }]} />
+        </View>
+        <Text style={[styles.title, { color: theme.color.text }]}>EUM</Text>
+      </View>
       <Text style={{ fontSize: 18, color: theme.color.textMuted }}>점자를 잇다, 이음</Text>
     </ScreenShell>
   );
@@ -41,4 +46,7 @@ export default function Splash() {
 const styles = StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", gap: 22 },
   title: { fontSize: 44, fontWeight: "900", letterSpacing: -0.5 },
+  wordmark: { flexDirection: "row", alignItems: "center", gap: 8 },
+  dots: { gap: 8 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
 });

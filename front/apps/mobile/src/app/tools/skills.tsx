@@ -40,6 +40,7 @@ export default function Skills() {
           label={skill.label}
           value={levelLabel[skill.level]}
           emphasizeValue={skill.level === "needs-practice"}
+          highlighted={skill.level === "needs-practice"}
         />
       ))}
       <View style={{ marginTop: "auto" }}>
