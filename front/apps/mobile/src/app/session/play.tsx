@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useRouter } from "expo-router";
 import { cellsToUnicode, type Cell } from "@ieum/domain";
 import { ScreenShell } from "@/components/ScreenShell";
 import { DotPad } from "@/components/DotPad";
+import { LandscapeDotPad } from "@/components/LandscapeDotPad";
 import { AppButton } from "@/components/AppButton";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticTap, speak } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
-/** V14 문제 풀이 · 세로 V패드 */
+/** V14 문제 풀이 · 세로 V패드 / V14b 가로 두 손 입력 (기기를 돌리면 전환) */
 export default function SessionPlay() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
   const session = useSessionStore((s) => s.session);
   const index = useSessionStore((s) => s.index);
   const submit = useSessionStore((s) => s.submit);
@@ -31,7 +34,6 @@ export default function SessionPlay() {
   }, []);
 
   if (!session || !problem) {
-    // 세션 없이 직접 진입한 경우 안내 화면으로
     return (
       <ScreenShell style={styles.center}>
         <Text style={{ color: theme.color.text, fontSize: 20, fontWeight: "700" }}>진행 중인 학습이 없어요</Text>
@@ -49,6 +51,55 @@ export default function SessionPlay() {
     router.replace("/session/grade");
   };
 
+  const eraseLast = () =>
+    setCells((prev) => {
+      if (prev.length === 0) {
+        announce("지울 칸이 없어요.");
+        return prev;
+      }
+      announce("한 칸 지웠어요.");
+      return prev.slice(0, -1);
+    });
+
+  // V14b 가로 두 손 입력 — 왼손 3·2·1, 오른손 6·5·4
+  if (isLandscape) {
+    return (
+      <ScreenShell>
+        <View style={styles.topRow}>
+          <Text accessibilityRole="header" style={{ fontSize: 17 * fontScale, fontWeight: "800", color: theme.color.text, flexShrink: 1 }}>
+            {problem.prompt}
+          </Text>
+          <Text
+            accessibilityLabel={`${session.problems.length}문제 중 ${index + 1}번`}
+            style={{ fontSize: 18, fontWeight: "700", color: theme.color.text, fontVariant: ["tabular-nums"] }}
+          >
+            {index + 1} / {session.problems.length}
+          </Text>
+          <AppButton label="나가기" variant="compact" accessibilityHint="학습을 중단하고 홈으로 가요" onPress={() => router.replace("/(tabs)")} />
+        </View>
+        <LandscapeDotPad
+          onCommitCell={commit}
+          center={
+            <>
+              <View style={{ flex: 1 }}>
+                <AppButton label={"다시\n듣기"} variant="compact" onPress={() => speak(problem.prompt, { force: true })} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <AppButton label="지우기" variant="compact" onPress={eraseLast} />
+              </View>
+              <View style={{ flex: 1.4 }}>
+                <AppButton label={"입력\n완료"} requireLongPress onPress={submitAnswer} />
+              </View>
+            </>
+          }
+        />
+        <Text style={{ fontSize: 13, color: theme.color.textMuted, textAlign: "center" }}>
+          양손 파지 — 왼손 3·2·1, 오른손 6·5·4
+        </Text>
+      </ScreenShell>
+    );
+  }
+
   return (
     <ScreenShell>
       <View style={styles.topRow}>
@@ -60,7 +111,7 @@ export default function SessionPlay() {
           {index + 1} / {session.problems.length}
         </Text>
         <Text
-          accessibilityLabel={`지금까지 ${cells.length}칸 입력`}
+          accessibilityLabel={`지금까지 ${cells.length}칸 입력. 기기를 가로로 돌리면 두 손 입력이 돼요.`}
           style={{ fontSize: 18, color: theme.color.textMuted }}
         >
           {cells.length > 0 ? `${cellsToUnicode(cells)} · ${cells.length}칸` : "입력 전"}
@@ -74,21 +125,7 @@ export default function SessionPlay() {
           <AppButton label="문제 다시 듣기" variant="compact" onPress={() => speak(problem.prompt, { force: true })} />
         </View>
         <View style={{ flex: 1 }}>
-          <AppButton
-            label="한 칸 지우기"
-            variant="compact"
-            accessibilityHint="마지막에 입력한 칸을 지워요"
-            onPress={() =>
-              setCells((prev) => {
-                if (prev.length === 0) {
-                  announce("지울 칸이 없어요.");
-                  return prev;
-                }
-                announce("한 칸 지웠어요.");
-                return prev.slice(0, -1);
-              })
-            }
-          />
+          <AppButton label="한 칸 지우기" variant="compact" accessibilityHint="마지막에 입력한 칸을 지워요" onPress={eraseLast} />
         </View>
       </View>
       <DotPad onCommitCell={commit} />

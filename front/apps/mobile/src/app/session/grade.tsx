@@ -19,6 +19,9 @@ export default function Grade() {
   const result = useSessionStore((s) => s.lastResult);
   const next = useSessionStore((s) => s.next);
   const answers = useSessionStore((s) => s.answers);
+  const kind = useSessionStore((s) => s.kind);
+  const disconnectShown = useSessionStore((s) => s.disconnectShown);
+  const markDisconnectShown = useSessionStore((s) => s.markDisconnectShown);
 
   const diffText = result ? describeDiff(result) : null;
 
@@ -46,9 +49,15 @@ export default function Grade() {
 
   const goNext = () => {
     if (next()) {
-      router.replace("/session/play");
+      // 수업 데모: 두 번째 문항 뒤 연결 끊김(V29)을 한 번 보여 준다 — 실연동 시 실제 이벤트로 교체
+      if (kind === "class" && !disconnectShown && index + 1 === 2) {
+        markDisconnectShown();
+        router.replace("/class/disconnected");
+        return;
+      }
+      router.replace(kind === "class" ? "/class/play" : "/session/play");
     } else {
-      router.replace("/session/analyzing");
+      router.replace(kind === "class" ? "/class/end" : "/session/analyzing");
     }
   };
 

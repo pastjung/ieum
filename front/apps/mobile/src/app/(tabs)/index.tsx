@@ -72,19 +72,19 @@ export default function Home() {
         {data?.inProgress ? (
           <>
             {bigButton("이어서 학습", `${data.inProgress.title} · ${data.inProgress.progressLabel}`, true, goSession, 1.4)}
-            {bigButton("수업 참여", null, false, () => announce("수업 참여는 준비 중이에요. 다음 업데이트에서 만나요."))}
+            {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
             <ListRow
               label="점자 장치"
               value={data.deviceConnected ? "연결됨" : "연결 안 됨"}
-              accessibilityHint="점자 장치 연결은 준비 중이에요"
-              onPress={() => announce("점자 장치 연결은 준비 중이에요.")}
+              accessibilityHint="장치 연결 상태를 확인해요"
+              onPress={() => router.push("/device-error")}
             />
           </>
         ) : (
           <>
             {bigButton("복습 시작", null, true, goSession, 1.4)}
             {bigButton("새 단계 학습", null, false, () => router.push("/(tabs)/learn"))}
-            {bigButton("수업 참여", null, false, () => announce("수업 참여는 준비 중이에요."))}
+            {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
           </>
         )}
       </View>

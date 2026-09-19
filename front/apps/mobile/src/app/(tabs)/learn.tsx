@@ -45,7 +45,8 @@ export default function Learn() {
           </Pressable>
         ))}
       </View>
-      <View style={{ paddingBottom: 14 }}>
+      <View style={{ paddingBottom: 14, gap: 10 }}>
+        <AppButton label="점자 사전" variant="compact" onPress={() => router.push("/tools/dictionary")} accessibilityHint="단어의 점자를 찾아봐요" />
         <AppButton label="모음 이어서 하기" onPress={() => start("vowel")} />
       </View>
     </ScreenShell>

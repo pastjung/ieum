@@ -25,17 +25,39 @@ export default function SessionIntro() {
   const fontScale = useFontScale();
   const { theme: themeId } = useLocalSearchParams<{ theme?: LearningThemeId }>();
   const start = useSessionStore((s) => s.start);
-  const { data: session } = useQuery({
+  const { data: session, isError, refetch } = useQuery({
     queryKey: ["freeSession", themeId ?? "default"],
     queryFn: () => learningService.getFreeSession(themeId),
   });
 
   useEffect(() => {
+    if (isError) {
+      announce("학습 준비가 안 됐어요. 잠시 후 다시 해 보세요.");
+      return;
+    }
     if (!session) return;
     announce(
       `${session.title}. ${session.problems.length}문항이에요. 점을 동시에 짚고 손을 떼면 한 칸이 입력돼요. 시작하기를 누르면 시작해요.`,
     );
   }, [session]);
+
+  // V32 세션 준비 실패
+  if (isError) {
+    return (
+      <ScreenShell>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 18 }}>
+          <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
+            학습 준비가{"\n"}안 됐어요
+          </Text>
+          <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 30 }}>잠시 후 다시 해 보세요.</Text>
+        </View>
+        <View style={{ gap: 12 }}>
+          <AppButton label="다시 시도" onPress={() => void refetch()} />
+          <AppButton label="다른 단계 복습" variant="secondary" onPress={() => router.replace("/(tabs)/learn")} />
+        </View>
+      </ScreenShell>
+    );
+  }
 
   return (
     <ScreenShell>

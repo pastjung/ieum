@@ -2,6 +2,8 @@ import { create } from "zustand";
 import type { LearningSession, Problem } from "@ieum/contracts";
 import { gradeAnswer, type Cell, type GradeResult } from "@ieum/domain";
 
+export type SessionKind = "free" | "class";
+
 interface AnswerRecord {
   problemId: string;
   cells: Cell[];
@@ -10,24 +12,31 @@ interface AnswerRecord {
 
 interface SessionState {
   session: LearningSession | null;
+  kind: SessionKind;
   index: number;
   answers: AnswerRecord[];
   lastResult: GradeResult | null;
-  start: (session: LearningSession) => void;
+  /** 수업 중 연결 끊김 데모를 이미 보여줬는지 (V29) */
+  disconnectShown: boolean;
+  start: (session: LearningSession, kind?: SessionKind) => void;
   current: () => Problem | null;
   submit: (cells: Cell[]) => GradeResult;
   /** 다음 문항으로. 마지막이었으면 false */
   next: () => boolean;
   correctCount: () => number;
+  markDisconnectShown: () => void;
   reset: () => void;
 }
 
 export const useSessionStore = create<SessionState>()((set, get) => ({
   session: null,
+  kind: "free",
   index: 0,
   answers: [],
   lastResult: null,
-  start: (session) => set({ session, index: 0, answers: [], lastResult: null }),
+  disconnectShown: false,
+  start: (session, kind = "free") =>
+    set({ session, kind, index: 0, answers: [], lastResult: null, disconnectShown: false }),
   current: () => {
     const { session, index } = get();
     return session?.problems[index] ?? null;
@@ -50,5 +59,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     return true;
   },
   correctCount: () => get().answers.filter((a) => a.result.correct).length,
-  reset: () => set({ session: null, index: 0, answers: [], lastResult: null }),
+  markDisconnectShown: () => set({ disconnectShown: true }),
+  reset: () =>
+    set({ session: null, kind: "free", index: 0, answers: [], lastResult: null, disconnectShown: false }),
 }));

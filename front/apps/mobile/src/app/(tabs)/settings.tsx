@@ -42,7 +42,8 @@ export default function Settings() {
             announce(next === "voice" ? "음성 중심으로 바꿨어요" : "화면 중심으로 바꿨어요");
           }}
         />
-        <ListRow label="점자 장치 · 연결 안 됨" chevron accessibilityHint="점자 장치 연결은 준비 중이에요" onPress={() => announce("점자 장치 연결은 준비 중이에요.")} />
+        <ListRow label="점자 장치 · 연결 안 됨" chevron accessibilityHint="장치 연결 상태를 확인해요" onPress={() => router.push("/device-error")} />
+        <ListRow label="손 캘리브레이션" chevron accessibilityHint="여섯 점 위치를 다시 익혀요" onPress={() => router.push("/calibration")} />
         <View
           style={[styles.themeRow, { borderColor: theme.color.border, minHeight: controlHeight.row, borderRadius: radius.control }]}
           accessibilityLabel={`화면 테마, 현재 ${s.theme === "dark" ? "다크" : "그린"}`}
@@ -85,7 +86,7 @@ export default function Settings() {
             });
           }}
         />
-        <ListRow label="회원 탈퇴" chevron accessibilityHint="회원 탈퇴는 준비 중이에요" onPress={() => announce("회원 탈퇴는 준비 중이에요.")} />
+        <ListRow label="회원 탈퇴" chevron accessibilityHint="계정을 삭제하는 화면으로 가요" onPress={() => router.push("/account/withdraw")} />
       </ScrollView>
     </ScreenShell>
   );

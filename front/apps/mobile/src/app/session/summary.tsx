@@ -67,6 +67,7 @@ export default function Summary() {
           </View>
         ))}
       </View>
+      <AppButton label="내 실력 자세히 보기" variant="compact" onPress={() => router.push("/tools/skills")} />
       <View style={{ marginTop: "auto", gap: 12 }}>
         <AppButton label="다음 학습 시작" onPress={() => finish("/(tabs)/learn")} />
         <AppButton label="홈으로" variant="secondary" onPress={() => finish("/(tabs)")} />

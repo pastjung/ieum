@@ -75,7 +75,7 @@ export default function SignIn() {
         <AppButton
           label="비밀번호를 잊었어요"
           variant="compact"
-          onPress={() => announce("비밀번호 재설정은 준비 중이에요. 다음 업데이트에서 만나요.")}
+          onPress={() => router.push("/auth/reset-password")}
         />
         <AppButton label="회원가입" variant="secondary" onPress={() => router.push("/auth/sign-up")} />
       </View>
