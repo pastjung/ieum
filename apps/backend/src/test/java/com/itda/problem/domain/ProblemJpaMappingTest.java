@@ -22,15 +22,14 @@ class ProblemJpaMappingTest {
   @Test
   void 정답_Cell은_problem_id로_문제를_참조해_저장된다() {
     LocalDateTime before = LocalDateTime.now();
-    Problem saved = persistWithCells(ProblemType.WORD, "가방", List.of(0b000001, 0b100000));
+    Problem saved = persistWithCells(Level.WORD, "가방", List.of(0b000001, 0b100000));
     entityManager.clear();
 
     Problem found = entityManager.find(Problem.class, saved.getId());
     List<ProblemCell> cells =
         problemCellRepository.findByProblemIdOrderByCellIndexAsc(saved.getId());
 
-    assertThat(found.getSourceType()).isEqualTo(ProblemSourceType.SYSTEM);
-    assertThat(found.getProblemType()).isEqualTo(ProblemType.WORD);
+    assertThat(found.getLevel()).isEqualTo(Level.WORD);
     assertThat(found.getTargetText()).isEqualTo("가방");
     assertThat(found.getCreatedAt()).isNotNull().isAfterOrEqualTo(before);
     assertThat(cells).hasSize(2);
@@ -44,7 +43,7 @@ class ProblemJpaMappingTest {
 
   @Test
   void 정답_패턴은_TINYINT_컬럼_하나로_매핑된다() {
-    Problem saved = persistWithCells(ProblemType.VOWEL, "ㅏ", List.of(0b000111));
+    Problem saved = persistWithCells(Level.VOWEL, "ㅏ", List.of(0b000111));
     entityManager.clear();
 
     Object stored =
@@ -59,26 +58,13 @@ class ProblemJpaMappingTest {
 
   @Test
   void 빈_점형_정답도_0으로_저장된다() {
-    Problem saved = persistWithCells(ProblemType.VOWEL, "ㅏ", List.of(0));
+    Problem saved = persistWithCells(Level.VOWEL, "ㅏ", List.of(0));
     entityManager.clear();
 
     List<ProblemCell> cells =
         problemCellRepository.findByProblemIdOrderByCellIndexAsc(saved.getId());
 
     assertThat(cells.get(0).getExpectedPattern()).isZero();
-  }
-
-  @Test
-  void 강사_등록_문제는_작성자와_함께_저장된다() {
-    Problem saved =
-        entityManager.persistFlushFind(
-            new Problem(9L, ProblemSourceType.INSTRUCTOR, ProblemType.CONSONANT, "ㄱ"));
-    entityManager.clear();
-
-    Problem found = entityManager.find(Problem.class, saved.getId());
-
-    assertThat(found.getSourceType()).isEqualTo(ProblemSourceType.INSTRUCTOR);
-    assertThat(found.getCreatorUserId()).isEqualTo(9L);
   }
 
   @Test
@@ -118,9 +104,7 @@ class ProblemJpaMappingTest {
 
   @Test
   void problem_skills는_문제와_요소를_FK로_연결해_저장한다() {
-    Problem problem =
-        entityManager.persistFlushFind(
-            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.CONSONANT, "ㄱ"));
+    Problem problem = entityManager.persistFlushFind(new Problem(Level.CONSONANT, "ㄱ"));
     LearningSkill skill =
         entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_03, "ㄱ", "초성 ㄱ", null));
 
@@ -136,9 +120,7 @@ class ProblemJpaMappingTest {
 
   @Test
   void 같은_문제와_같은_요소는_한_번만_연결된다() {
-    Problem problem =
-        entityManager.persistFlushFind(
-            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.CONSONANT, "ㄹ"));
+    Problem problem = entityManager.persistFlushFind(new Problem(Level.CONSONANT, "ㄹ"));
     LearningSkill skill =
         entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_04, "ㄹ", "초성 ㄹ", null));
     entityManager.persistAndFlush(new ProblemSkill(problem, skill));
@@ -149,7 +131,7 @@ class ProblemJpaMappingTest {
 
   @Test
   void 등록_시각은_저장_시점에_Hibernate가_채운다() {
-    Problem problem = new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "자동");
+    Problem problem = new Problem(Level.WORD, "자동");
     assertThat(problem.getCreatedAt()).isNull();
 
     Problem saved = entityManager.persistFlushFind(problem);
@@ -159,7 +141,7 @@ class ProblemJpaMappingTest {
 
   @Test
   void 정답_패턴은_6점을_모두_채운_63까지_저장한다() {
-    Problem saved = persistWithCells(ProblemType.VOWEL, "ㅏ", List.of(0b111111));
+    Problem saved = persistWithCells(Level.VOWEL, "ㅏ", List.of(0b111111));
     entityManager.clear();
 
     List<ProblemCell> cells =
@@ -170,9 +152,7 @@ class ProblemJpaMappingTest {
 
   @Test
   void 한_문제에_여러_요소를_연결한다() {
-    Problem problem =
-        entityManager.persistFlushFind(
-            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "가방"));
+    Problem problem = entityManager.persistFlushFind(new Problem(Level.WORD, "가방"));
     LearningSkill first =
         entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_05, "ㄱ", "초성 ㄱ", null));
     LearningSkill second =
@@ -200,12 +180,8 @@ class ProblemJpaMappingTest {
   void 같은_요소를_여러_문제가_참조한다() {
     LearningSkill skill =
         entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_06, "ㅁ", "초성 ㅁ", null));
-    Problem first =
-        entityManager.persistFlushFind(
-            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "마을"));
-    Problem second =
-        entityManager.persistFlushFind(
-            new Problem(null, ProblemSourceType.SYSTEM, ProblemType.WORD, "머리"));
+    Problem first = entityManager.persistFlushFind(new Problem(Level.WORD, "마을"));
+    Problem second = entityManager.persistFlushFind(new Problem(Level.WORD, "머리"));
 
     entityManager.persistAndFlush(new ProblemSkill(first, skill));
     entityManager.persistAndFlush(new ProblemSkill(second, skill));
@@ -222,11 +198,8 @@ class ProblemJpaMappingTest {
     assertThat(count).isEqualTo(2);
   }
 
-  private Problem persistWithCells(
-      ProblemType problemType, String targetText, List<Integer> expectedPatterns) {
-    Problem saved =
-        entityManager.persistFlushFind(
-            new Problem(null, ProblemSourceType.SYSTEM, problemType, targetText));
+  private Problem persistWithCells(Level level, String targetText, List<Integer> expectedPatterns) {
+    Problem saved = entityManager.persistFlushFind(new Problem(level, targetText));
     for (int index = 0; index < expectedPatterns.size(); index++) {
       entityManager.persist(new ProblemCell(saved, index + 1, expectedPatterns.get(index)));
     }

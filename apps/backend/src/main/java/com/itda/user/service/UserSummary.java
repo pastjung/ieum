@@ -1,5 +1,6 @@
 package com.itda.user.service;
 
+import com.itda.problem.domain.Level;
 import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
 import java.time.LocalDateTime;
@@ -22,7 +23,7 @@ public record UserSummary(
     String email,
     UserRole role,
     boolean emailVerified,
-    String level,
+    Level level,
     LocalDateTime createdAt) {
 
   public static UserSummary from(User user) {

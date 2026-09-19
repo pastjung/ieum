@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,55 +17,6 @@ class LearningJpaMappingTest {
   private static final String KEY = "0b3f8a1c-1111-4222-8333-444455556666";
 
   @Autowired private TestEntityManager entityManager;
-
-  private static List<AssignedProblem> validAssignment() {
-    List<AssignedProblem> items = new ArrayList<>();
-    long[] firstHalf = {101, 102, 103, 104, 105};
-    long[] secondHalf = {103, 101, 105, 102, 104};
-    for (int i = 0; i < firstHalf.length; i++) {
-      items.add(AssignedProblem.of(i + 1, firstHalf[i]));
-    }
-    for (int i = 0; i < secondHalf.length; i++) {
-      items.add(AssignedProblem.of(i + 6, secondHalf[i]));
-    }
-    return items;
-  }
-
-  @Test
-  void 배정_JSON이_왕복해도_순서와_값이_유지된다() {
-    LearningSession saved =
-        entityManager.persistFlushFind(LearningSession.create(1L, 2L, validAssignment(), NOW));
-    entityManager.clear();
-
-    LearningSession found = entityManager.find(LearningSession.class, saved.getId());
-
-    assertThat(found.getAssignedProblems()).hasSize(LearningSession.ITEM_COUNT);
-    assertThat(found.getAssignedProblems())
-        .extracting(AssignedProblem::itemNo)
-        .containsExactly(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-    // problem_id는 ERD 5.5절대로 10진수 문자열로 보존된다.
-    assertThat(found.getAssignedProblems())
-        .extracting(AssignedProblem::problemId)
-        .containsExactly("101", "102", "103", "104", "105", "103", "101", "105", "102", "104");
-  }
-
-  @Test
-  void 세션_상태는_시각_컬럼에서_파생되며_컬럼이_없다() {
-    LearningSession session =
-        entityManager.persistFlushFind(LearningSession.create(1L, 2L, validAssignment(), NOW));
-    assertThat(session.status()).isEqualTo(SessionStatus.IN_PROGRESS);
-
-    session.markCompleted(NOW.plusMinutes(30));
-    session.markAnalysisApplied(NOW.plusMinutes(31));
-    entityManager.flush();
-    entityManager.clear();
-
-    LearningSession found = entityManager.find(LearningSession.class, session.getId());
-
-    assertThat(found.status()).isEqualTo(SessionStatus.ANALYZED);
-    assertThat(found.getCompletedAt()).isEqualTo(NOW.plusMinutes(30));
-    assertThat(found.getAnalysisAppliedAt()).isEqualTo(NOW.plusMinutes(31));
-  }
 
   @Test
   void 풀이를_저장하면_Cell과_요소_평가가_cascade로_함께_저장된다() {

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
+import com.itda.problem.domain.Level;
 import com.itda.user.domain.Email;
 import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
@@ -386,7 +387,7 @@ class LoginServiceTest {
     User moved = activeVerifiedUser();
     assign(moved, "rowVersion", SNAPSHOT_ROW_VERSION + 5);
     assign(moved, "role", UserRole.INSTRUCTOR);
-    moved.changeLevel("L4", NOW_UTC);
+    moved.changeLevel(Level.SENTENCE, NOW_UTC);
     this.users.registerOnReread(moved);
 
     AuthSession session = login();
@@ -394,7 +395,7 @@ class LoginServiceTest {
     // 갱신에 실제로 성공한 상태가 응답과 토큰의 근거다. 오래된 Snapshot을 쓰면 바뀐 값이 그대로 나간다.
     assertThat(this.accessTokens.claims.get(0).role()).isEqualTo(UserRole.INSTRUCTOR);
     assertThat(session.user().role()).isEqualTo(UserRole.INSTRUCTOR);
-    assertThat(session.user().level()).isEqualTo("L4");
+    assertThat(session.user().level()).isEqualTo(Level.SENTENCE);
   }
 
   @Test

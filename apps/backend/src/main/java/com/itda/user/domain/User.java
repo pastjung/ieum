@@ -1,5 +1,6 @@
 package com.itda.user.domain;
 
+import com.itda.problem.domain.Level;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -63,13 +64,10 @@ public class User {
   @Column(nullable = false, length = 20)
   private UserRole role;
 
-  /**
-   * 현재까지 열린 최고 단계 코드 (curriculum_stages.level 값). ERD에 물리 FK가 없어 String으로 둔다.
-   *
-   * <p>자가 진단 전 학습자와 INSTRUCTOR·ADMIN은 NULL이다.
-   */
-  @Column(length = 30)
-  private String level;
+  /** 현재까지 열린 최고 단계. 자가 진단 전 학습자와 INSTRUCTOR·ADMIN은 NULL이다. */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "level", length = 20)
+  private Level level;
 
   @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
@@ -193,7 +191,7 @@ public class User {
    * <p>"과거 단계 복습은 level을 낮추지 않는다"(ERD 4.7절)는 단계 순서를 알아야 판정할 수 있고 그 순서는 curriculum_stages.order_no에
    * 있다. 다른 컨텍스트의 데이터이므로 단조성 검증은 애플리케이션 서비스가 담당한다.
    */
-  public void changeLevel(String newLevel, LocalDateTime now) {
+  public void changeLevel(Level newLevel, LocalDateTime now) {
     requireActive();
     this.level = newLevel;
     this.updatedAt = now;

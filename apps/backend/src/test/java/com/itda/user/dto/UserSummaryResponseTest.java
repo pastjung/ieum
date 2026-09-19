@@ -2,6 +2,7 @@ package com.itda.user.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.itda.problem.domain.Level;
 import com.itda.user.domain.UserRole;
 import com.itda.user.service.UserSummary;
 import java.time.LocalDateTime;
@@ -23,7 +24,7 @@ class UserSummaryResponseTest {
 
   private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
-  private static UserSummaryResponse response(String level) {
+  private static UserSummaryResponse response(Level level) {
     return UserSummaryResponse.from(
         new UserSummary(USER_ID, USERNAME, EMAIL, UserRole.LEARNER, true, level, CREATED_AT));
   }
@@ -31,7 +32,7 @@ class UserSummaryResponseTest {
   @Test
   void 계약이_정한_일곱_필드를_그대로_직렬화한다() {
     Map<String, Object> json =
-        MAPPER.readValue(MAPPER.writeValueAsString(response("L3")), Map.class);
+        MAPPER.readValue(MAPPER.writeValueAsString(response(Level.WORD)), Map.class);
 
     assertThat(json)
         .containsOnlyKeys(
@@ -42,7 +43,7 @@ class UserSummaryResponseTest {
         .containsEntry("email", EMAIL)
         .containsEntry("role", "LEARNER")
         .containsEntry("emailVerified", true)
-        .containsEntry("level", "L3")
+        .containsEntry("level", "WORD")
         .containsEntry("createdAt", "2026-09-13T09:00:00.000Z");
   }
 
@@ -58,7 +59,7 @@ class UserSummaryResponseTest {
   @Test
   void toString에_개인정보가_없다() {
     // DTO는 로그·예외 message로 흘러가기 쉽다. record 기본 toString은 모든 컴포넌트를 그대로 찍는다.
-    UserSummaryResponse response = response("L3");
+    UserSummaryResponse response = response(Level.WORD);
 
     assertThat(response).hasToString("UserSummaryResponse[REDACTED]");
     assertThat(response.toString())
@@ -70,6 +71,6 @@ class UserSummaryResponseTest {
   @Test
   void toString을_가려도_직렬화_결과는_그대로다() {
     // 마스킹을 @JsonIgnore나 필드 제거로 구현하면 여기서 깨진다.
-    assertThat(MAPPER.writeValueAsString(response("L3"))).contains(USERNAME).contains(EMAIL);
+    assertThat(MAPPER.writeValueAsString(response(Level.WORD))).contains(USERNAME).contains(EMAIL);
   }
 }

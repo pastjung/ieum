@@ -1,5 +1,6 @@
 package com.itda.user.dto;
 
+import com.itda.problem.domain.Level;
 import com.itda.user.service.UserSummary;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -28,7 +29,7 @@ public record UserSummaryResponse(
     String email,
     String role,
     boolean emailVerified,
-    String level,
+    Level level,
     String createdAt) {
 
   private static final DateTimeFormatter UTC_ISO_8601 =

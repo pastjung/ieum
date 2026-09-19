@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
-import com.itda.learning.domain.AssignedProblem;
 import com.itda.learning.domain.CellSubmission;
 import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.ProblemAttempt;
@@ -14,11 +13,10 @@ import com.itda.learning.domain.UserSkillMemory;
 import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.Participant;
 import com.itda.problem.domain.LearningSkill;
+import com.itda.problem.domain.Level;
 import com.itda.problem.domain.Problem;
 import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSkill;
-import com.itda.problem.domain.ProblemSourceType;
-import com.itda.problem.domain.ProblemType;
 import com.itda.problem.domain.SkillType;
 import com.itda.user.domain.AccountActionPurpose;
 import com.itda.user.domain.Email;
@@ -47,7 +45,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
-import java.util.stream.IntStream;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -750,9 +747,7 @@ class UserWithdrawalMariadbTest {
           this.entityManager.persist(
               Lecture.schedule(
                   this.userId, "점자 기초", "탈퇴 보존 확인", participationCode(), NOW.plusDays(1), NOW));
-          Problem problem =
-              this.entityManager.persistFlushFind(
-                  new Problem(this.userId, ProblemSourceType.INSTRUCTOR, ProblemType.WORD, "보존"));
+          Problem problem = this.entityManager.persistFlushFind(new Problem(Level.WORD, "보존"));
           List<Integer> patterns = List.of(0b000001, 0b000011);
           for (int index = 0; index < patterns.size(); index++) {
             this.entityManager.persist(new ProblemCell(problem, index + 1, patterns.get(index)));
@@ -782,7 +777,7 @@ class UserWithdrawalMariadbTest {
           this.entityManager.persist(Participant.join(attendedLectureId, this.userId, NOW));
           Long sessionId =
               this.entityManager.persistAndGetId(
-                  LearningSession.create(this.userId, 1L, assignment(), NOW), Long.class);
+                  new LearningSession(this.userId, null), Long.class);
           this.entityManager.persist(
               ProblemAttempt.forFreeSession(
                   this.userId,
@@ -799,13 +794,6 @@ class UserWithdrawalMariadbTest {
                   this.userId, 1L, true, new BigDecimal("0.500000"), "bkt-v1", NOW, NOW));
           return null;
         });
-  }
-
-  /** 서로 다른 문제 5개를 연속 반복 없이 10항목에 배정한다. */
-  private static List<AssignedProblem> assignment() {
-    return IntStream.rangeClosed(1, LearningSession.ITEM_COUNT)
-        .mapToObj(itemNo -> AssignedProblem.of(itemNo, (itemNo - 1) % 5 + 1L))
-        .toList();
   }
 
   private static String participationCode() {
