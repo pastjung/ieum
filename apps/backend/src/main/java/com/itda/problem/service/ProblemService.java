@@ -14,11 +14,9 @@ import com.itda.problem.domain.*;
 import com.itda.problem.dto.*;
 import com.itda.problem.repository.*;
 import com.itda.user.domain.UserRole;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -49,8 +47,10 @@ public class ProblemService {
             .findByTargetText(registerProblemRequest.targetText())
             .orElseGet(() -> createProblem(lecture, registerProblemRequest));
 
+    lectureProblemRepository.save(new LectureProblem(lecture, problem));
+
     List<Integer> expectedPatterns =
-        problemCellRepository.findAllByProblem(problem).stream()
+        problemCellRepository.findAllByProblemOrderByCellIndex(problem).stream()
             .map(ProblemCell::getExpectedPattern)
             .toList();
 
@@ -79,8 +79,6 @@ public class ProblemService {
         learningSkills.stream().map(skill -> new ProblemSkill(problem, skill)).toList();
 
     problemSkillRepository.saveAll(problemSkills);
-
-    lectureProblemRepository.save(new LectureProblem(lecture, problem));
 
     List<ProblemCell> cells = new ArrayList<>();
     for (int i = 0; i < cellPatterns.size(); i++) {
@@ -127,31 +125,158 @@ public class ProblemService {
     Level level = curriculumStage.getLevel();
     List<Problem> problems = problemRepository.findAllByLevel(level);
 
+    if (problems.size() < 12) {
+      throw new RuntimeException("출제 가능한 문제가 부족합니다.");
+    }
+
     Set<Integer> selectedIndexes = new HashSet<>();
     ThreadLocalRandom random = ThreadLocalRandom.current();
 
-    while (selectedIndexes.size() < 10) {
+    while (selectedIndexes.size() < 12) {
       selectedIndexes.add(random.nextInt(problems.size()));
     }
 
     List<Problem> randomProblems = selectedIndexes.stream().map(problems::get).toList();
 
-    //      Long sessionId,
-    //      List<org.springframework.http.ProblemDetail> problems
+    List<ProblemSession> problemSessions = new ArrayList<>();
 
-    return null;
+    for (int i = 0; i < randomProblems.size(); i++) {
+      Problem problem = randomProblems.get(i);
+
+      problemSessions.add(new ProblemSession(problem, learningSession, (long) i + 1));
+    }
+
+    problemSessionRepository.saveAll(problemSessions);
+
+    List<ProblemDetail> problemDetails = new ArrayList<>();
+
+    List<Long> problemIds = randomProblems.stream().map(Problem::getId).toList();
+
+    Map<Long, List<Integer>> cellMap =
+        problemCellRepository
+            .findAllByProblem_IdInOrderByProblem_IdAscCellIndexAsc(problemIds)
+            .stream()
+            .collect(
+                Collectors.groupingBy(
+                    pc -> pc.getProblem().getId(),
+                    Collectors.mapping(ProblemCell::getExpectedPattern, Collectors.toList())));
+    for (int i = 0; i < randomProblems.size(); i++) {
+      Problem p = randomProblems.get(i);
+      problemDetails.add(
+          new ProblemDetail(
+              p.getId(),
+              (long) i + 1,
+              p.getTargetText(),
+              cellMap.getOrDefault(p.getId(), List.of()),
+              false));
+    }
+
+    return new ProblemsResponse(learningSession.getId(), problemDetails);
   }
 
-  public ProblemsResponse learningWithOldSession(AuthenticatedUser user, Long sessionId) {
-    return null;
+  public ProblemsResponse studyWithOldSession(AuthenticatedUser user, Long sessionId) {
+    validateLearningSession(user, sessionId);
+    List<ProblemSession> selectedSessions =
+        problemSessionRepository.findAllBySession_IdOrderBySequence(sessionId);
+
+    List<ProblemDetail> problemDetails = new ArrayList<>();
+
+    List<Long> problemIds = selectedSessions.stream().map(ps -> ps.getProblem().getId()).toList();
+    Map<Long, List<Integer>> cellMap =
+        problemCellRepository
+            .findAllByProblem_IdInOrderByProblem_IdAscCellIndexAsc(problemIds)
+            .stream()
+            .collect(
+                Collectors.groupingBy(
+                    pc -> pc.getProblem().getId(),
+                    Collectors.mapping(ProblemCell::getExpectedPattern, Collectors.toList())));
+
+    for (int i = 0; i < selectedSessions.size(); i++) {
+      ProblemSession s = selectedSessions.get(i);
+      Problem p = s.getProblem();
+      problemDetails.add(
+          new ProblemDetail(
+              p.getId(),
+              s.getSequence(),
+              p.getTargetText(),
+              cellMap.getOrDefault(p.getId(), List.of()),
+              s.isCompleted()));
+    }
+
+    return new ProblemsResponse(sessionId, problemDetails);
   }
 
+  private void validateLearningSession(AuthenticatedUser user, Long sessionId) {
+    LearningSession ls =
+        learningSessionRepository
+            .findById(sessionId)
+            .orElseThrow(() -> new RuntimeException("학습 세션이 없습니다."));
+    if (!ls.getUserId().equals(user.userId())) {
+      throw new RuntimeException("해당 세션의 소유자가 아닙니다.");
+    }
+  }
+
+  @Transactional
   public ProblemsResponse reviewWithNewSession(AuthenticatedUser user) {
-    return null;
-  }
 
-  public ProblemsResponse reviewWithOldSession(AuthenticatedUser user, Long sessionId) {
-    return null;
+    LearningSession learningSession = createSession(user.userId(), null);
+
+    // fastapi로 사용자의 기록을 보내고 level, learningSkillIds 를 받아오기
+    ReviewAnalyzeRequest reviewAnalyzeRequest = new ReviewAnalyzeRequest();
+    ReviewAnalyzeResponse response = fastApiClient.reviewAnalyze(reviewAnalyzeRequest);
+
+    Level level = response.level();
+    List<Long> learningSkillIds = response.learningSkillIds();
+
+    List<Problem> problems =
+        problemRepository.findAllByLevelAndLearningSkillIds(level, learningSkillIds);
+
+    if (problems.size() < 12) {
+      throw new RuntimeException("출제 가능한 문제가 부족합니다.");
+    }
+
+    Set<Integer> selectedIndexes = new HashSet<>();
+    ThreadLocalRandom random = ThreadLocalRandom.current();
+
+    while (selectedIndexes.size() < 12) {
+      selectedIndexes.add(random.nextInt(problems.size()));
+    }
+
+    List<Problem> randomProblems = selectedIndexes.stream().map(problems::get).toList();
+
+    List<ProblemSession> problemSessions = new ArrayList<>();
+
+    for (int i = 0; i < randomProblems.size(); i++) {
+      Problem problem = randomProblems.get(i);
+
+      problemSessions.add(new ProblemSession(problem, learningSession, (long) i + 1));
+    }
+
+    problemSessionRepository.saveAll(problemSessions);
+
+    List<ProblemDetail> problemDetails = new ArrayList<>();
+
+    List<Long> problemIds = randomProblems.stream().map(Problem::getId).toList();
+
+    Map<Long, List<Integer>> cellMap =
+        problemCellRepository
+            .findAllByProblem_IdInOrderByProblem_IdAscCellIndexAsc(problemIds)
+            .stream()
+            .collect(
+                Collectors.groupingBy(
+                    pc -> pc.getProblem().getId(),
+                    Collectors.mapping(ProblemCell::getExpectedPattern, Collectors.toList())));
+    for (int i = 0; i < randomProblems.size(); i++) {
+      Problem p = randomProblems.get(i);
+      problemDetails.add(
+          new ProblemDetail(
+              p.getId(),
+              (long) i + 1,
+              p.getTargetText(),
+              cellMap.getOrDefault(p.getId(), List.of()),
+              false));
+    }
+    return new ProblemsResponse(learningSession.getId(), problemDetails);
   }
 
   private LearningSession createSession(Long userId, CurriculumStage curriculum) {
