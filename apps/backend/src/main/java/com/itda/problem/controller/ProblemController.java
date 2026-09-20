@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1")
 public class ProblemController {
   private final ProblemService problemService;
 
@@ -34,10 +33,10 @@ public class ProblemController {
     return ResponseEntity.ok(problemsResponse);
   }
 
-  @PostMapping("/learning-sessions/{sessionId}")
+  @GetMapping("/learning-sessions/{sessionId}")
   public ResponseEntity<ProblemsResponse> oldLearning(
       @AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long sessionId) {
-    ProblemsResponse problemsResponse = problemService.learningWithOldSession(user, sessionId);
+    ProblemsResponse problemsResponse = problemService.studyWithOldSession(user, sessionId);
     return ResponseEntity.ok(problemsResponse);
   }
 
@@ -48,10 +47,10 @@ public class ProblemController {
     return ResponseEntity.ok(problemsResponse);
   }
 
-  @PostMapping("/review-sessions/{sessionId}")
+  @GetMapping("/review-sessions/{sessionId}")
   public ResponseEntity<ProblemsResponse> oldReview(
       @AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long sessionId) {
-    ProblemsResponse problemsResponse = problemService.reviewWithOldSession(user, sessionId);
+    ProblemsResponse problemsResponse = problemService.studyWithOldSession(user, sessionId);
     return ResponseEntity.ok(problemsResponse);
   }
 }
