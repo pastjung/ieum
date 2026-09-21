@@ -3,7 +3,7 @@
 > 교육자와 학습자, 디지털 입력과 촉각 경험을 이어 주는 시각장애인 점자 학습 플랫폼
 
 <p align="center">
-  <img src="./images/service-preview.png" alt="이음 학습자용 모바일 서비스 화면" width="720" />
+  <img src="./docs/images/service-preview.png" alt="이음 학습자용 모바일 서비스 화면" width="720" />
 </p>
 
 이음은 점자를 처음 배우거나 꾸준한 반복 연습이 필요한 학습자를 위한 **실시간 점자 수업 및 개인 맞춤 복습 서비스**입니다. 교육자의 온라인 수업, 스마트폰 6점 입력, 세부 오답 분석, 맞춤형 복습, 저비용 촉각 출력을 하나의 학습 과정으로 연결합니다.
@@ -177,3 +177,20 @@ flowchart TB
 ## 데이터 출처
 
 > 국립국어원(2025). *국립국어원 묵자-점자 병렬 말뭉치 2025* (버전 1.0). 2026-06-30 공개. [국립국어원 모두의 말뭉치](https://kli.korean.go.kr/corpus)
+
+## 로컬 실행
+
+```bash
+docker compose up --build --watch
+```
+
+이 한 줄로 web + backend + ai 전체가 뜨고, 코드를 저장하면 자동 반영된다. 개인 환경변수가 필요하면 `cp .env.example .env` 후 값을 채운다. 상세는 [docs/infra/docker.md](./docs/infra/docker.md).
+
+## 협업 규칙
+
+- [제품 설계 문서 — 기능·API·ERD·사용자 Flow·커리큘럼](./docs/product/README.md)
+- [저장소 폴더 구조](./docs/conventions/repository-structure.md)
+- [Git 브랜치 전략](./docs/conventions/git/branch-strategy.md)
+- [Git 커밋 전략](./docs/conventions/git/commit-convention.md)
+- [GitLab 프로젝트 설정](./docs/conventions/git/gitlab-settings.md)
+- [인프라 개요 — CI/CD·배포·롤백](./docs/infra/README.md)

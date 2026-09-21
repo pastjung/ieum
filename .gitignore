@@ -1,36 +1,100 @@
-# --- common ---
+# Operating systems
 .DS_Store
 Thumbs.db
-*.log
-.env
-.env.*
-!.env.example
+
+# Editors and IDEs
 .idea/
 .vscode/
 *.iml
+*.iws
+*.ipr
 
-# --- backend (java/gradle) ---
-backend/build/
-backend/.gradle/
-backend/out/
+# Environment variables and secrets
+*.pem
+*.key
+*.p12
+*.pfx
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+!**/.env.config.example
+!**/.env.tags.example
 
-# --- ai (python) ---
-ai/.venv/
-ai/__pycache__/
-ai/**/__pycache__/
-ai/.pytest_cache/
-ai/*.egg-info/
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# --- web / mobile (node) ---
-web/node_modules/
-web/dist/
-mobile/node_modules/
-mobile/android/build/
-mobile/android/app/build/
-mobile/android/.gradle/
-mobile/ios/Pods/
-mobile/ios/build/
-mobile/vendor/
-mobile/.bundle/
-mobile/*.keystore
-!mobile/debug.keystore
+# Java and Gradle
+.gradle/
+**/.gradle/
+build/
+**/build/
+!**/src/**/build/
+out/
+**/out/
+# DDD outbound port 패키지는 IDE 빌드 산출물이 아니라 소스 코드다.
+!**/src/**/port/out/
+!**/src/**/port/out/**
+*.class
+*.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# Python
+.venv/
+**/.venv/
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+**/.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node.js and TypeScript
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+**/coverage/
+*.tsbuildinfo
+.npm/
+.eslintcache
+.cache/
+.parcel-cache/
+
+# React Native
+.expo/
+apps/mobile/android/.gradle/
+apps/mobile/android/build/
+apps/mobile/android/app/build/
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+*.jks
+*.keystore
+!apps/mobile/android/app/debug.keystore
+google-services.json
+
+# Test and local tooling
+.tox/
+.nox/
+.hypothesis/
+.history/
+
+# AI 작업 스크래치 (repo 무관)
+Claude outputs/
