@@ -13,7 +13,7 @@ import org.springframework.stereotype.Repository;
 public interface ProblemRepository extends JpaRepository<Problem, Long> {
   Optional<Problem> findByTargetText(String s);
 
-  List<Problem> findAllByLevel(Level level);
+  List<Problem> findAllByLevelAndIdNotIn(Level level, List<Long> ids);
 
   @Query(
       """

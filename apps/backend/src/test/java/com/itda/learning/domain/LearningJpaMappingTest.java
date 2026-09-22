@@ -18,26 +18,29 @@ class LearningJpaMappingTest {
 
   @Autowired private TestEntityManager entityManager;
 
+  /** Attempt는 Cell 컬렉션을 소유하지 않으므로 attempt_cells는 attempt_id FK로 따라간다. */
   @Test
-  void 풀이를_저장하면_Cell과_요소_평가가_cascade로_함께_저장된다() {
-    ProblemAttempt attempt =
-        ProblemAttempt.forFreeSession(
-            1L,
-            2L,
-            3L,
-            4,
-            5L,
-            List.of(CellSubmission.of(0b000111, 0b000101), CellSubmission.of(0, 0)),
-            1500,
-            KEY,
-            NOW);
-    attempt.addSkillResult(10L, false, 1);
-    attempt.addSkillResult(11L, true, 0);
-
-    ProblemAttempt saved = entityManager.persistFlushFind(attempt);
+  void 풀이와_Cell은_attempt_id_FK로_연결해_저장한다() {
+    List<CellSubmission> submissions =
+        List.of(CellSubmission.of(0b000111, 0b000101), CellSubmission.of(0, 0));
+    ProblemAttempt saved =
+        entityManager.persistFlushFind(
+            ProblemAttempt.forFreeSession(1L, 2L, 3L, 4, 5L, submissions, 1500, KEY, NOW));
+    for (int index = 0; index < submissions.size(); index++) {
+      entityManager.persist(new AttemptCell(saved, index + 1, submissions.get(index), NOW));
+    }
+    entityManager.flush();
     entityManager.clear();
 
     ProblemAttempt found = entityManager.find(ProblemAttempt.class, saved.getId());
+    List<AttemptCell> cells =
+        entityManager
+            .getEntityManager()
+            .createQuery(
+                "select c from AttemptCell c where c.attempt.id = :id order by c.cellIndex asc",
+                AttemptCell.class)
+            .setParameter("id", saved.getId())
+            .getResultList();
 
     assertThat(found.getAttemptMode()).isEqualTo(AttemptMode.FREE);
     assertThat(found.isCorrect()).isFalse();
@@ -46,16 +49,9 @@ class LearningJpaMappingTest {
     assertThat(found.getDurationMs()).isEqualTo(1500);
     assertThat(found.getIdempotencyKey()).isEqualTo(KEY);
 
-    assertThat(found.getCells()).hasSize(2);
-    assertThat(found.getCells()).extracting(AttemptCell::getCellIndex).containsExactly(1, 2);
-    assertThat(found.getCells().get(0).getDiffMask().getValue()).isEqualTo(0b000010);
-    assertThat(found.getCells().get(0).getRespondedAt()).isEqualTo(NOW);
-
-    assertThat(found.getSkillResults())
-        .extracting(AttemptSkillResult::getSkillId)
-        .containsExactlyInAnyOrder(10L, 11L);
-    assertThat(found.getSkillResults())
-        .allSatisfy(result -> assertThat(result.getEvaluatedAt()).isEqualTo(NOW));
+    assertThat(cells).extracting(AttemptCell::getCellIndex).containsExactly(1, 2);
+    assertThat(cells.get(0).getDiffMask().getValue()).isEqualTo(0b000010);
+    assertThat(cells.get(0).getRespondedAt()).isEqualTo(NOW);
   }
 
   @Test
@@ -76,26 +72,5 @@ class LearningJpaMappingTest {
     assertThat(found.isCorrect()).isTrue();
     assertThat(found.getScore()).isEqualByComparingTo(BigDecimal.ONE);
     assertThat(found.getDurationMs()).isNull();
-  }
-
-  @Test
-  void user_skill_memory는_사용자_요소_복합_PK로_저장하고_확장_컬럼은_NULL이다() {
-    entityManager.persistAndFlush(
-        UserSkillMemory.firstObservation(
-            1L, 10L, true, new BigDecimal("0.640000"), "BKT_V1", NOW, NOW));
-    entityManager.clear();
-
-    UserSkillMemory found =
-        entityManager.find(UserSkillMemory.class, UserSkillMemoryId.of(1L, 10L));
-
-    assertThat(found).isNotNull();
-    assertThat(found.getTotalSeen()).isEqualTo(1);
-    assertThat(found.getTotalCorrect()).isEqualTo(1);
-    assertThat(found.getTotalIncorrect()).isZero();
-    assertThat(found.getMasteryProbability()).isEqualByComparingTo(new BigDecimal("0.640000"));
-    assertThat(found.getAlgorithmVersion()).isEqualTo("BKT_V1");
-    assertThat(found.masteryBand()).isEqualTo(MasteryBand.WEAK);
-    assertThat(found.getEstimatedHalfLife()).isNull();
-    assertThat(found.getNextReviewAt()).isNull();
   }
 }

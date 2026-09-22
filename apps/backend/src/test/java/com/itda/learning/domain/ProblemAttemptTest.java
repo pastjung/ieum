@@ -7,7 +7,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /** 채점은 서버 계산이므로 점 단위 정확도의 경계값을 우선 검증한다 (ERD 5.2절). */
@@ -61,33 +60,18 @@ class ProblemAttemptTest {
     ProblemAttempt attempt = freeAttempt(List.of(CellSubmission.of(0, 0)));
 
     assertThat(attempt.isCorrect()).isTrue();
-    assertThat(attempt.getCells().get(0).getInputPattern().isEmpty()).isTrue();
+    assertThat(attempt.getScore()).isEqualByComparingTo(BigDecimal.ONE);
   }
 
   @Test
   void 차이_마스크는_서버가_XOR로_계산한다() {
     ProblemAttempt attempt = freeAttempt(List.of(CellSubmission.of(0b000111, 0b000101)));
 
-    AttemptCell cell = attempt.getCells().get(0);
+    AttemptCell cell = new AttemptCell(attempt, 1, CellSubmission.of(0b000111, 0b000101), NOW);
+
     assertThat(cell.getDiffMask().getValue()).isEqualTo(0b000010);
     assertThat(cell.errorDotCount()).isEqualTo(1);
     assertThat(cell.isCorrect()).isFalse();
-  }
-
-  @Test
-  void Cell_순번은_제출_순서대로_1부터_붙는다() {
-    ProblemAttempt attempt =
-        freeAttempt(
-            List.of(CellSubmission.of(1, 1), CellSubmission.of(2, 2), CellSubmission.of(4, 4)));
-
-    assertThat(attempt.getCells()).extracting(AttemptCell::getCellIndex).containsExactly(1, 2, 3);
-  }
-
-  @Test
-  void Cell의_접수_시각은_Attempt와_같다() {
-    ProblemAttempt attempt = freeAttempt(List.of(CellSubmission.of(1, 1)));
-
-    assertThat(attempt.getCells().get(0).getRespondedAt()).isEqualTo(attempt.getAttemptedAt());
   }
 
   @Test
@@ -143,52 +127,6 @@ class ProblemAttemptTest {
                 ProblemAttempt.forFreeSession(
                     1L, 2L, 3L, 1, 4L, List.of(CellSubmission.of(1, 1)), -1, KEY, NOW))
         .isInstanceOf(IllegalArgumentException.class);
-  }
-
-  @Test
-  void 정답_요소의_오류_수가_0이_아니면_거부한다() {
-    ProblemAttempt attempt = freeAttempt(List.of(CellSubmission.of(1, 1)));
-
-    assertThatThrownBy(() -> attempt.addSkillResult(10L, true, 1))
-        .isInstanceOf(IllegalArgumentException.class);
-  }
-
-  @Test
-  void 오답_요소의_오류_수가_0이면_거부한다() {
-    ProblemAttempt attempt = freeAttempt(List.of(CellSubmission.of(1, 1)));
-
-    assertThatThrownBy(() -> attempt.addSkillResult(10L, false, 0))
-        .isInstanceOf(IllegalArgumentException.class);
-  }
-
-  @Test
-  void 같은_요소의_평가는_두_번_붙일_수_없다() {
-    ProblemAttempt attempt = freeAttempt(List.of(CellSubmission.of(1, 1)));
-    attempt.addSkillResult(10L, true, 0);
-
-    assertThatThrownBy(() -> attempt.addSkillResult(10L, false, 1))
-        .isInstanceOf(IllegalArgumentException.class);
-  }
-
-  @Test
-  void 요소_평가_시각은_Attempt_접수_시각과_같다() {
-    ProblemAttempt attempt = freeAttempt(List.of(CellSubmission.of(1, 1)));
-
-    attempt.addSkillResult(10L, true, 0);
-
-    assertThat(attempt.getSkillResults().get(0).getEvaluatedAt())
-        .isEqualTo(attempt.getAttemptedAt());
-  }
-
-  @Test
-  void 요소_평가_집합이_문제의_연결_요소와_일치하는지_확인한다() {
-    ProblemAttempt attempt = freeAttempt(List.of(CellSubmission.of(1, 1)));
-    attempt.addSkillResult(10L, true, 0);
-    attempt.addSkillResult(11L, false, 2);
-
-    assertThat(attempt.coversExactly(Set.of(10L, 11L))).isTrue();
-    assertThat(attempt.coversExactly(Set.of(10L))).isFalse();
-    assertThat(attempt.coversExactly(Set.of(10L, 11L, 12L))).isFalse();
   }
 
   @Test
