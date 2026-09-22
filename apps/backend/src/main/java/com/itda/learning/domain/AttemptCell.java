@@ -89,8 +89,13 @@ public class AttemptCell {
     return diffMask.isEmpty();
   }
 
-  /** 이 Cell의 오류 점 수. 차이 마스크의 1비트 개수다 (ERD 5.2절 score 계산). */
-  public int errorDotCount() {
-    return diffMask.dotCount();
+  /** 정답에는 있지만 입력에는 없는 점 위치의 마스크. 원본 두 점형에서 계산하므로 별도 컬럼으로 저장하지 않는다. */
+  public BraillePattern getMissingMask() {
+    return expectedPattern.missingIn(inputPattern);
+  }
+
+  /** 입력에는 있지만 정답에는 없는 점 위치의 마스크. 원본 두 점형에서 계산하므로 별도 컬럼으로 저장하지 않는다. */
+  public BraillePattern getExtraMask() {
+    return expectedPattern.extraIn(inputPattern);
   }
 }

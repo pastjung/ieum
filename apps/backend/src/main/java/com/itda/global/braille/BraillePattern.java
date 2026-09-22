@@ -27,7 +27,7 @@ public class BraillePattern {
   /** 6점을 모두 채운 값. 유효 범위는 0 이상 이 값 이하다. */
   public static final int MAX_VALUE = 0b111111;
 
-  /** 한 Cell의 점 개수. score 계산의 분모 단위다 (ERD 5.2절). */
+  /** 한 Cell의 점 개수. */
   public static final int DOTS_PER_CELL = 6;
 
   /**
@@ -64,9 +64,20 @@ public class BraillePattern {
     return new BraillePattern(this.value ^ other.value);
   }
 
-  /** 켜진 점의 개수. 차이 마스크에 적용하면 그 Cell의 오류 점 수가 된다 (ERD 5.2절 score 계산). */
-  public int dotCount() {
-    return Integer.bitCount(value);
+  /** 정답인 이 패턴에는 있지만 사용자 입력에는 없는 점만 반환한다. */
+  public BraillePattern missingIn(BraillePattern input) {
+    if (input == null) {
+      throw new IllegalArgumentException("입력 패턴은 필수입니다.");
+    }
+    return new BraillePattern(this.value & ~input.value & MAX_VALUE);
+  }
+
+  /** 사용자 입력에는 있지만 정답인 이 패턴에는 없는 점만 반환한다. */
+  public BraillePattern extraIn(BraillePattern input) {
+    if (input == null) {
+      throw new IllegalArgumentException("입력 패턴은 필수입니다.");
+    }
+    return new BraillePattern(input.value & ~this.value & MAX_VALUE);
   }
 
   public boolean isEmpty() {

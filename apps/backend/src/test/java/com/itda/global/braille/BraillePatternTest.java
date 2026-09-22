@@ -45,17 +45,26 @@ class BraillePatternTest {
   }
 
   @Test
-  void 모두_다른_패턴의_차이는_여섯_점_전부다() {
-    BraillePattern allDots = BraillePattern.of(63);
+  void 누락_마스크는_정답에는_있지만_입력에는_없는_점이다() {
+    BraillePattern expected = BraillePattern.of(0b001011);
+    BraillePattern input = BraillePattern.of(0b010101);
 
-    assertThat(allDots.diff(BraillePattern.empty()).dotCount()).isEqualTo(6);
+    assertThat(expected.missingIn(input).getValue()).isEqualTo(0b001010);
   }
 
   @Test
-  void 점_개수는_켜진_비트_수다() {
-    assertThat(BraillePattern.empty().dotCount()).isZero();
-    assertThat(BraillePattern.of(0b010101).dotCount()).isEqualTo(3);
-    assertThat(BraillePattern.of(63).dotCount()).isEqualTo(6);
+  void 추가_마스크는_입력에는_있지만_정답에는_없는_점이다() {
+    BraillePattern expected = BraillePattern.of(0b001011);
+    BraillePattern input = BraillePattern.of(0b010101);
+
+    assertThat(expected.extraIn(input).getValue()).isEqualTo(0b010100);
+  }
+
+  @Test
+  void 모두_다른_패턴의_차이는_여섯_점_전부다() {
+    BraillePattern allDots = BraillePattern.of(63);
+
+    assertThat(allDots.diff(BraillePattern.empty()).getValue()).isEqualTo(63);
   }
 
   @Test

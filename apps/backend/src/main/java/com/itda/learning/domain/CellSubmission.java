@@ -8,7 +8,7 @@ import com.itda.global.braille.BraillePattern;
  * <p>expectedPattern은 <b>서버가 problems의 정답에서 복사한 값</b>이다. ERD 5.2절이 "클라이언트 값을 받지 않음"으로 규정한다.
  * inputPattern만 사용자가 명시한 값이며 빈 점형은 0으로 온다 — 누락 Cell과 구분해야 한다.
  *
- * <p>diff_mask·score·is_correct는 이 두 값에서 서버가 계산하므로 여기에 담지 않는다.
+ * <p>diff_mask·is_correct는 이 두 값에서 서버가 계산하므로 여기에 담지 않는다.
  */
 public record CellSubmission(BraillePattern expectedPattern, BraillePattern inputPattern) {
 

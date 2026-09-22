@@ -36,4 +36,8 @@ public class ProblemSession {
     this.problem = problem;
     this.session = session;
   }
+
+  public void complete() {
+    this.completed = true;
+  }
 }

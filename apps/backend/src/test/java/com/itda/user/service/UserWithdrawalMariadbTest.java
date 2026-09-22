@@ -786,8 +786,6 @@ class UserWithdrawalMariadbTest {
                   1,
                   1L,
                   List.of(CellSubmission.of(0b000111, 0b000111)),
-                  1500,
-                  UUID.randomUUID().toString(),
                   NOW));
           this.entityManager.persist(
               UserSkillMemory.firstObservation(

@@ -14,7 +14,6 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 class LearningJpaMappingTest {
 
   private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 9, 12, 0);
-  private static final String KEY = "0b3f8a1c-1111-4222-8333-444455556666";
 
   @Autowired private TestEntityManager entityManager;
 
@@ -28,8 +27,6 @@ class LearningJpaMappingTest {
             4,
             5L,
             List.of(CellSubmission.of(0b000111, 0b000101), CellSubmission.of(0, 0)),
-            1500,
-            KEY,
             NOW);
     attempt.addSkillResult(10L, false, 1);
     attempt.addSkillResult(11L, true, 0);
@@ -41,10 +38,6 @@ class LearningJpaMappingTest {
 
     assertThat(found.getAttemptMode()).isEqualTo(AttemptMode.FREE);
     assertThat(found.isCorrect()).isFalse();
-    // 2 Cell = 점 위치 12개, 오류 점 1개 → (12-1)/12 = 0.9167
-    assertThat(found.getScore()).isEqualByComparingTo(new BigDecimal("0.9167"));
-    assertThat(found.getDurationMs()).isEqualTo(1500);
-    assertThat(found.getIdempotencyKey()).isEqualTo(KEY);
 
     assertThat(found.getCells()).hasSize(2);
     assertThat(found.getCells()).extracting(AttemptCell::getCellIndex).containsExactly(1, 2);
@@ -63,7 +56,7 @@ class LearningJpaMappingTest {
     ProblemAttempt saved =
         entityManager.persistFlushFind(
             ProblemAttempt.forLiveLecture(
-                1L, 2L, 9L, List.of(CellSubmission.of(63, 63)), null, KEY, NOW));
+                1L, 2L, 9L, List.of(CellSubmission.of(63, 63)), NOW));
     entityManager.clear();
 
     ProblemAttempt found = entityManager.find(ProblemAttempt.class, saved.getId());
@@ -74,8 +67,6 @@ class LearningJpaMappingTest {
     assertThat(found.getSessionItemNo()).isNull();
     assertThat(found.getCurriculumStageId()).isNull();
     assertThat(found.isCorrect()).isTrue();
-    assertThat(found.getScore()).isEqualByComparingTo(BigDecimal.ONE);
-    assertThat(found.getDurationMs()).isNull();
   }
 
   @Test
