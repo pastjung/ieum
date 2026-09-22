@@ -9,7 +9,6 @@ import com.itda.global.error.ErrorCode;
 import com.itda.learning.domain.CellSubmission;
 import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.ProblemAttempt;
-import com.itda.learning.domain.UserSkillMemory;
 import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.Participant;
 import com.itda.problem.domain.LearningSkill;
@@ -31,7 +30,6 @@ import com.itda.user.repository.UserRepository;
 import com.itda.user.repository.UserRepositoryImpl;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -787,9 +785,6 @@ class UserWithdrawalMariadbTest {
                   1L,
                   List.of(CellSubmission.of(0b000111, 0b000111)),
                   NOW));
-          this.entityManager.persist(
-              UserSkillMemory.firstObservation(
-                  this.userId, 1L, true, new BigDecimal("0.500000"), "bkt-v1", NOW, NOW));
           return null;
         });
   }

@@ -21,7 +21,9 @@ import lombok.NoArgsConstructor;
 /**
  * attempt_cells — 한 제출에서 Cell별로 정답과 입력을 비교한 결과 (ERD 5.2절).
  *
- * <p>ProblemAttempt 애그리거트에 속한다. diff_mask는 서버가 expected XOR input으로 계산하므로 이 클래스에는 값을 주입하는 경로가 없다.
+ * <p>attempt_id FK를 단방향 {@link jakarta.persistence.ManyToOne}으로 소유한다. ProblemAttempt가 Cell 컬렉션을 갖지
+ * 않으므로 저장은 Attempt를 저장한 뒤 호출하는 서비스가 직접 한다. diff_mask는 서버가 expected XOR input으로 계산하므로 이 클래스에는 값을
+ * 주입하는 경로가 없다.
  */
 @Entity
 @Table(
@@ -70,7 +72,8 @@ public class AttemptCell {
   @Column(name = "responded_at", nullable = false)
   private LocalDateTime respondedAt;
 
-  AttemptCell(ProblemAttempt attempt, int cellIndex, CellSubmission submission, LocalDateTime now) {
+  public AttemptCell(
+      ProblemAttempt attempt, int cellIndex, CellSubmission submission, LocalDateTime now) {
     if (attempt == null) {
       throw new IllegalArgumentException("풀이는 필수입니다.");
     }

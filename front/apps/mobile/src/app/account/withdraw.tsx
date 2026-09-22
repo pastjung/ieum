@@ -1,0 +1,55 @@
+import { useEffect, useState } from "react";
+import { Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { ScreenShell } from "@/components/ScreenShell";
+import { BackHeader } from "@/components/BackHeader";
+import { BigInput } from "@/components/BigInput";
+import { AppButton } from "@/components/AppButton";
+import { authService } from "@/services/authService";
+import { announce, hapticError } from "@/a11y";
+import { useFontScale, useTheme } from "@/theme";
+
+/** V27a 회원 탈퇴 확인 — 계속 사용이 기본 행동(primary) */
+export default function Withdraw() {
+  const router = useRouter();
+  const theme = useTheme();
+  const fontScale = useFontScale();
+  const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    announce("회원 탈퇴예요. 정말 떠나시겠어요? 탈퇴하면 되돌릴 수 없어요. 확인을 위해 비밀번호를 입력하세요.");
+  }, []);
+
+  const withdraw = async () => {
+    if (password.length < 8) {
+      void hapticError();
+      announce("비밀번호를 확인해 주세요. 8자 이상이에요.");
+      return;
+    }
+    await authService.signOut();
+    announce("탈퇴가 완료됐어요. 그동안 함께해서 고마웠어요.");
+    router.replace("/auth/sign-in");
+  };
+
+  return (
+    <ScreenShell>
+      <BackHeader title="회원 탈퇴" />
+      <Text accessibilityRole="header" style={{ fontSize: 26 * fontScale, fontWeight: "900", lineHeight: 38, color: theme.color.text }}>
+        정말{"\n"}떠나시겠어요?
+      </Text>
+      <Text style={{ fontSize: 16 * fontScale, color: theme.color.textMuted, lineHeight: 29 }}>탈퇴하면 되돌릴 수 없어요.</Text>
+      <BigInput
+        label="확인을 위해 비밀번호를 입력하세요"
+        accessibilityLabel="비밀번호"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        focused
+      />
+      <View style={{ marginTop: "auto", gap: 12 }}>
+        <AppButton label="탈퇴하기" variant="secondary" onPress={() => void withdraw()} accessibilityHint="계정을 삭제해요. 되돌릴 수 없어요" />
+        <AppButton label="계속 사용할래요" onPress={() => router.back()} />
+      </View>
+    </ScreenShell>
+  );
+}

@@ -29,12 +29,16 @@ public class ProblemSession {
   @JoinColumn(name = "session_id", nullable = false)
   private LearningSession session;
 
+  @Column(name = "sequence", nullable = false)
+  private Long sequence;
+
   @Column(name = "completed", nullable = false)
   private boolean completed = false;
 
-  public ProblemSession(Problem problem, LearningSession session) {
+  public ProblemSession(Problem problem, LearningSession session, Long sequence) {
     this.problem = problem;
     this.session = session;
+    this.sequence = sequence;
   }
 
   public void complete() {
