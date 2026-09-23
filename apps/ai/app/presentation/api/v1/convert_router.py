@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.application.convert_service import ConversionFailedError, ConvertService
-from app.infrastructure.stub_converter import AlwaysPassValidator, StubBrailleConverter
+from app.infrastructure.rule_engine import RuleBrailleConverter, RuleValidatorByRoundTrip
 from app.presentation.api.v1.schemas import ApiResponse, ConvertRequest, ConvertResponse
 
 router = APIRouter(prefix="/convert", tags=["convert"])
@@ -9,7 +9,7 @@ router = APIRouter(prefix="/convert", tags=["convert"])
 
 def get_convert_service() -> ConvertService:
     """의존성 주입 — infrastructure 구현체를 여기서만 조립한다."""
-    return ConvertService(converter=StubBrailleConverter(), validator=AlwaysPassValidator())
+    return ConvertService(converter=RuleBrailleConverter(), validator=RuleValidatorByRoundTrip())
 
 
 @router.post("/braille", response_model=ApiResponse[ConvertResponse], response_model_by_alias=True)

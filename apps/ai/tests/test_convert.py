@@ -16,7 +16,7 @@ def test_convert_braille():
     assert res.status_code == 200
     body = res.json()
     assert body["success"] is True
-    assert body["data"]["engineVersion"] == "v2"
+    assert body["data"]["engineVersion"] == "kbraille-2024-r18-v1"
     assert len(body["data"]["cells"]) == 3
 
 

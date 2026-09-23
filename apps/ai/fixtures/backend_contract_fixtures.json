@@ -1,0 +1,241 @@
+{
+ "analyze:가방": {
+  "request": {
+   "targetText": "가방"
+  },
+  "response": {
+   "level": "CONTRACTION",
+   "cells": [
+    43,
+    24,
+    54
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_13",
+     "metadata": "가"
+    },
+    {
+     "skillType": "SKILL_13",
+     "metadata": "바"
+    },
+    {
+     "skillType": "SKILL_03",
+     "metadata": "ㅇ"
+    }
+   ]
+  }
+ },
+ "analyze:음식": {
+  "request": {
+   "targetText": "음식"
+  },
+  "response": {
+   "level": "VOWEL",
+   "cells": [
+    42,
+    34,
+    32,
+    21,
+    1
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㅇ생략"
+    },
+    {
+     "skillType": "SKILL_03",
+     "metadata": "ㄱ"
+    },
+    {
+     "skillType": "SKILL_03",
+     "metadata": "ㅁ"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅡ"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅣ"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㅅ"
+    }
+   ]
+  }
+ },
+ "analyze:나이": {
+  "request": {
+   "targetText": "나이"
+  },
+  "response": {
+   "level": "CONTRACTION",
+   "cells": [
+    9,
+    35,
+    21
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_14",
+     "metadata": "약자미사용"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㅇ생략"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅏ"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅣ"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㄴ"
+    }
+   ]
+  }
+ },
+ "analyze:학교": {
+  "request": {
+   "targetText": "학교"
+  },
+  "response": {
+   "level": "CONTRACTION",
+   "cells": [
+    26,
+    1,
+    8,
+    44
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_13",
+     "metadata": "하"
+    },
+    {
+     "skillType": "SKILL_03",
+     "metadata": "ㄱ"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅛ"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㄱ"
+    }
+   ]
+  }
+ },
+ "analyze:그래서": {
+  "request": {
+   "targetText": "그래서"
+  },
+  "response": {
+   "level": "CONTRACTION_WORD",
+   "cells": [
+    1,
+    14
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_18",
+     "metadata": "그래서"
+    }
+   ]
+  }
+ },
+ "analyze:까치": {
+  "request": {
+   "targetText": "까치"
+  },
+  "response": {
+   "level": "CONTRACTION",
+   "cells": [
+    32,
+    43,
+    48,
+    21
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_02",
+     "metadata": "된소리표"
+    },
+    {
+     "skillType": "SKILL_13",
+     "metadata": "가"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅣ"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㅊ"
+    }
+   ]
+  }
+ },
+ "reviewAnalyze:basic": {
+  "request": {
+   "skillStates": [
+    {
+     "learningSkillId": 23,
+     "nAttempts": 12,
+     "nCorrect": 4,
+     "lastPracticedAt": "2026-09-18T10:20:00",
+     "masteryProb": 0.31,
+     "errorCounts": {
+      "dot_missing": 1,
+      "dot_extra": 2,
+      "mirror": 3
+     }
+    },
+    {
+     "learningSkillId": 16,
+     "nAttempts": 8,
+     "nCorrect": 2,
+     "lastPracticedAt": "2026-09-20T10:20:00",
+     "masteryProb": 0.4,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 66,
+     "nAttempts": 9,
+     "nCorrect": 8,
+     "lastPracticedAt": "2026-09-22T09:00:00",
+     "masteryProb": 0.91,
+     "errorCounts": {}
+    }
+   ]
+  },
+  "response": {
+   "level": "CONSONANT",
+   "learningSkillIds": [
+    23,
+    16
+   ]
+  }
+ },
+ "reviewAnalyze:empty": {
+  "request": {
+   "skillStates": []
+  },
+  "response": {
+   "level": "CONSONANT",
+   "learningSkillIds": [
+    1,
+    2,
+    43
+   ]
+  }
+ }
+}
