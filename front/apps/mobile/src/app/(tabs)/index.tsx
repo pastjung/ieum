@@ -35,13 +35,16 @@ function VoiceHome() {
   const stepLabel = data?.level ? LEVEL_LABEL[data.level] : "자가 진단 전";
 
   useEffect(() => {
-    if (!homeSummary) return;
+    // homeSummary(목)가 data(실제 사용자 정보)보다 먼저 도착하는 경우가 대부분이다.
+    // 둘 다 준비되기 전에는 이름·단계가 들어간 문장을 만들지 않는다 — 빈 이름이나
+    // "자가 진단 전"을 사실처럼 낭독하면 안 되고, 나중에 두 번째 낭독이 겹쳐도 안 된다
+    if (!homeSummary || !data) return;
     announce(
       homeSummary.inProgress
         ? `홈이에요. ${userName}님, ${stepLabel}를 배우는 중이에요. 이어서 학습을 누르면 ${homeSummary.inProgress.title}을 계속해요.`
         : `홈이에요. 진행 중인 학습이 없어요. 복습을 시작하거나 새 단계를 배울 수 있어요.`,
     );
-  }, [homeSummary, userName, stepLabel]);
+  }, [homeSummary, data, userName, stepLabel]);
 
   const goSession = () => {
     void hapticTap();
@@ -83,7 +86,7 @@ function VoiceHome() {
           홈
         </Text>
         <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, marginTop: 4 }}>
-          {homeSummary
+          {homeSummary && data
             ? homeSummary.inProgress
               ? `${userName}님, ${stepLabel}를 배우는 중이에요.`
               : "진행 중인 학습이 없어요."
