@@ -49,3 +49,38 @@ export const sessionResultSchema = z.object({
   ),
 });
 export type SessionResult = z.infer<typeof sessionResultSchema>;
+
+/** users.level — 단계 번호가 아니라 학습 범주다. NULL이면 자가 진단 전 */
+export const levelSchema = z.enum([
+  "CONSONANT",
+  "VOWEL",
+  "WORD",
+  "SENTENCE",
+  "CONTRACTION",
+  "CONTRACTION_WORD",
+]);
+export type Level = z.infer<typeof levelSchema>;
+
+/** 가입·내 정보·로그인 응답이 공유하는 사용자 요약 (API 명세 3.2.1) */
+export const userSummarySchema = z.object({
+  /** BIGINT의 10진수 문자열. number로 바꾸지 않는다 */
+  userId: z.string(),
+  username: z.string(),
+  email: z.string(),
+  role: z.string(),
+  emailVerified: z.boolean(),
+  level: levelSchema.nullable(),
+  createdAt: z.string(),
+});
+export type UserSummary = z.infer<typeof userSummarySchema>;
+
+/** MOBILE 인증 응답 (API 명세 3.3.1). WEB은 refresh 필드가 없다 */
+export const authSessionSchema = z.object({
+  accessToken: z.string(),
+  tokenType: z.string(),
+  accessTokenExpiresAt: z.string(),
+  refreshToken: z.string(),
+  refreshTokenExpiresAt: z.string(),
+  user: userSummarySchema,
+});
+export type AuthSessionResponse = z.infer<typeof authSessionSchema>;
