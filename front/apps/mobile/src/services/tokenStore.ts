@@ -14,13 +14,28 @@ let accessToken: string | null = null;
 export const tokenStore: TokenStore = {
   getAccess: () => accessToken,
 
-  getRefresh: () => SecureStore.getItemAsync(REFRESH_KEY),
+  /**
+   * 조회가 거부돼도 던지지 않는다 — 호출처(세션 복구·로그아웃)는 "읽을 수 없음"과
+   * "없음"을 똑같이 다뤄야 하고, 조회 실패가 로컬 정리를 막으면 안 된다.
+   * 저장소 자체가 망가졌다면 clear()가 거부해 호출처가 사용자에게 알린다
+   */
+  async getRefresh() {
+    try {
+      return await SecureStore.getItemAsync(REFRESH_KEY);
+    } catch {
+      return null;
+    }
+  },
 
   async save(tokens: AuthSessionTokens) {
     accessToken = tokens.accessToken;
     await SecureStore.setItemAsync(REFRESH_KEY, tokens.refreshToken);
   },
 
+  /**
+   * 메모리부터 지운다 — SecureStore 삭제가 거부돼도 이 기기의 로그아웃은 성립해야 한다.
+   * 거부는 삼키지 않고 올린다. 남은 Refresh Token을 사용자가 알아야 하기 때문이다
+   */
   async clear() {
     accessToken = null;
     await SecureStore.deleteItemAsync(REFRESH_KEY);

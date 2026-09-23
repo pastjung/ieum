@@ -5,7 +5,7 @@ import { ScreenShell } from "@/components/ScreenShell";
 import { ListRow } from "@/components/ListRow";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { authService } from "@/services/authService";
-import { announce, hapticSelect } from "@/a11y";
+import { announce, hapticError, hapticSelect, speakAsync } from "@/a11y";
 import { controlHeight, radius, useFontScale, useTheme } from "@/theme";
 
 /** V27 설정 */
@@ -18,6 +18,22 @@ export default function Settings() {
   useEffect(() => {
     announce("설정이에요.");
   }, []);
+
+  const logOut = async () => {
+    try {
+      await authService.signOut();
+      announce("로그아웃했어요.");
+    } catch {
+      // 기기 보안 저장소 정리가 거부돼도 메모리의 Access Token은 이미 지워졌다 —
+      // 이 기기의 로그아웃은 성립하므로 화면 전환은 반드시 진행한다.
+      // 조용히 넘어가면 사용자는 로그아웃됐다고 잘못 믿는다.
+      // announce()는 다음 화면의 진입 안내가 Speech.stop()으로 즉시 잘라내므로
+      // 이 문장만큼은 낭독이 끝날 때까지 기다렸다가 이동한다
+      void hapticError();
+      await speakAsync("기기에서는 로그아웃했어요. 다만 저장된 로그인 정보를 지우지 못했어요.");
+    }
+    router.replace("/auth/sign-in");
+  };
 
   const setTheme = (name: "dark" | "green") => {
     void hapticSelect();
@@ -79,12 +95,7 @@ export default function Settings() {
           label="로그아웃"
           chevron
           accessibilityHint="로그아웃하고 로그인 화면으로 가요"
-          onPress={() => {
-            void authService.signOut().then(() => {
-              announce("로그아웃했어요.");
-              router.replace("/auth/sign-in");
-            });
-          }}
+          onPress={() => void logOut()}
         />
         <ListRow label="회원 탈퇴" chevron accessibilityHint="계정을 삭제하는 화면으로 가요" onPress={() => router.push("/account/withdraw")} />
       </ScrollView>
