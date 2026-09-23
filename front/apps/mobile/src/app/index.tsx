@@ -18,16 +18,22 @@ export default function Splash() {
     let cancelled = false;
     const minWait = new Promise((r) => setTimeout(r, 1500));
     // 말이 끝나기 전에 화면이 넘어가지 않도록 낭독 완료를 기다린다
-    void Promise.all([speakAsync("점자를 잇다, 이음"), minWait]).then(async () => {
-      if (cancelled) return;
-      if (!mode) {
-        router.replace("/onboarding/mode");
-        return;
-      }
-      const restored = await authService.restore();
-      if (cancelled) return;
-      router.replace(restored ? "/(tabs)" : "/auth/sign-in");
-    });
+    void Promise.all([speakAsync("점자를 잇다, 이음"), minWait])
+      .then(async () => {
+        if (cancelled) return;
+        if (!mode) {
+          router.replace("/onboarding/mode");
+          return;
+        }
+        const restored = await authService.restore();
+        if (cancelled) return;
+        router.replace(restored ? "/(tabs)" : "/auth/sign-in");
+      })
+      .catch(() => {
+        // restore()는 던지지 않게 만들었지만, 예기치 못한 실패로 스플래시에 갇히는 것을 막는 방어선이다
+        if (cancelled) return;
+        router.replace("/auth/sign-in");
+      });
     return () => {
       cancelled = true;
     };

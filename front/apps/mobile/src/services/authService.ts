@@ -1,3 +1,4 @@
+import { ApiError } from "@ieum/api-client";
 import {
   authSessionSchema,
   userSummarySchema,
@@ -41,9 +42,18 @@ export const authService = {
     try {
       await persistSession(await api.post("/access-tokens", { refreshToken }, { auth: false }));
       return true;
-    } catch {
-      // 만료·폐기·형식 위반을 구분하지 않는다. 어느 쪽이든 다시 로그인해야 한다
-      await tokenStore.clear();
+    } catch (error) {
+      // 자격 증명이 죽었다는 뜻은 서버가 인증을 거부했을 때(401·403)뿐이다.
+      // 네트워크 끊김·5xx·응답 형식 위반은 토큰 상태에 대해 아무것도 말해 주지 않으므로 그대로 둔다 —
+      // 다음 실행에서 네트워크가 돌아오면 다시 시도할 수 있다
+      const authRejected = error instanceof ApiError && (error.status === 401 || error.status === 403);
+      if (authRejected) {
+        try {
+          await tokenStore.clear();
+        } catch {
+          // clear 자체가 실패해도 restore()는 절대 던지지 않는다 — 스플래시가 멈추면 안 된다
+        }
+      }
       return false;
     }
   },

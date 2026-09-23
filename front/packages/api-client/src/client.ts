@@ -63,28 +63,39 @@ export function createClient(config: ApiClientConfig): ApiClient {
 
   async function doRefresh(): Promise<boolean> {
     const refreshToken = await config.tokens.getRefresh();
-    if (refreshToken) {
-      try {
-        const session = await sendOnce<{ accessToken?: unknown; refreshToken?: unknown }>(
-          "POST",
-          "/access-tokens",
-          { body: { refreshToken }, auth: false },
-        );
-        if (typeof session.accessToken === "string" && typeof session.refreshToken === "string") {
-          await config.tokens.save({
-            accessToken: session.accessToken,
-            refreshToken: session.refreshToken,
-          });
-          return true;
-        }
-      } catch {
-        // 아래 공통 실패 경로로 내려간다
-      }
+    if (!refreshToken) {
+      // 보관할 Refresh Token 자체가 없다 — 정리하고 만료를 알린다
+      await config.tokens.clear();
+      config.onSessionExpired();
+      return false;
     }
-    // single-flight라 이 정리는 갱신 1회당 한 번만 일어난다
-    await config.tokens.clear();
-    config.onSessionExpired();
-    return false;
+    try {
+      const session = await sendOnce<{ accessToken?: unknown; refreshToken?: unknown }>(
+        "POST",
+        "/access-tokens",
+        { body: { refreshToken }, auth: false },
+      );
+      if (typeof session.accessToken === "string" && typeof session.refreshToken === "string") {
+        await config.tokens.save({
+          accessToken: session.accessToken,
+          refreshToken: session.refreshToken,
+        });
+        return true;
+      }
+      // 응답 형식이 어긋난 것은 인증 거부가 아니다 — 토큰은 그대로 둔다
+      return false;
+    } catch (error) {
+      // 자격 증명이 죽었다는 뜻은 서버가 인증을 거부했을 때(401·403)뿐이다.
+      // 네트워크 끊김·5xx는 토큰 상태에 대해 아무것도 말해 주지 않으므로 지우지 않는다
+      const authRejected = error instanceof ApiError && (error.status === 401 || error.status === 403);
+      if (!authRejected) {
+        return false;
+      }
+      // single-flight라 이 정리는 갱신 1회당 한 번만 일어난다
+      await config.tokens.clear();
+      config.onSessionExpired();
+      return false;
+    }
   }
 
   function refreshOnce(): Promise<boolean> {

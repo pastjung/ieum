@@ -203,6 +203,32 @@ describe("api-client 401 자동 갱신", () => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
   });
 
+  it("갱신 중 네트워크가 끊기면 Refresh Token을 남기고 만료를 알리지 않는다", async () => {
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValueOnce(fakeResponse(401, { code: "UNAUTHORIZED", message: "인증이 필요합니다." }))
+      .mockImplementationOnce(async () => {
+        throw new TypeError("Network request failed");
+      });
+    const { store, state } = memoryTokenStore("stale", "refresh-1");
+    const onSessionExpired = jest.fn();
+    const api = createClient({
+      baseUrl: "http://localhost:8080/api/v1",
+      platform: "MOBILE",
+      tokens: store,
+      onSessionExpired,
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    // 갱신 자체는 네트워크 문제로 실패했을 뿐이다 — 원요청의 401이 그대로 던져진다
+    await expect(api.get("/users/me")).rejects.toMatchObject({ status: 401, code: "UNAUTHORIZED" });
+
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(state.access).toBe("stale");
+    expect(state.refresh).toBe("refresh-1");
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
   it("Refresh Token이 없으면 갱신을 시도하지 않는다", async () => {
     const fetchFn = jest
       .fn()
