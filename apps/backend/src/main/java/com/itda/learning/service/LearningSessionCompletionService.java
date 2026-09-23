@@ -10,8 +10,12 @@ import com.itda.learning.domain.ProblemAttempt;
 import com.itda.learning.domain.ProblemAttemptRepository;
 import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSession;
+import com.itda.problem.domain.UserWrongProblem;
 import com.itda.problem.repository.ProblemCellRepository;
 import com.itda.problem.repository.ProblemSessionRepository;
+import com.itda.problem.repository.UserWrongProblemRepository;
+import com.itda.user.domain.User;
+import com.itda.user.repository.UserJpaRepository;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -38,6 +42,8 @@ public class LearningSessionCompletionService {
   private final ProblemCellRepository problemCellRepository;
   private final ProblemAttemptRepository problemAttemptRepository;
   private final AttemptCellRepository attemptCellRepository;
+  private final UserWrongProblemRepository userWrongProblemRepository;
+  private final UserJpaRepository userJpaRepository;
 
   @Transactional
   public CompletionResult complete(long userId, long sessionId, CompletionCommand command) {
@@ -90,10 +96,57 @@ public class LearningSessionCompletionService {
 
     List<ProblemAttempt> savedAttempts = problemAttemptRepository.saveAllAndFlush(attempts);
     List<AttemptCell> savedAttemptCells = attemptCellRepository.saveAllAndFlush(attemptCells);
+    updateWrongProblems(userId, assignedProblems, attempts);
     session.complete(completedAt);
     learningSessionRepository.saveAndFlush(session);
 
     return toResult(session, assignedProblems, savedAttempts, savedAttemptCells);
+  }
+
+  private void updateWrongProblems(
+      long userId, List<ProblemSession> assignedProblems, List<ProblemAttempt> attempts) {
+    List<Long> problemIds =
+        assignedProblems.stream().map(assigned -> assigned.getProblem().getId()).toList();
+    Map<Long, UserWrongProblem> wrongProblemsByProblemId =
+        userWrongProblemRepository.findAllByUser_IdAndProblem_IdIn(userId, problemIds).stream()
+            .collect(
+                Collectors.toMap(
+                    wrongProblem -> wrongProblem.getProblem().getId(), Function.identity()));
+    Map<Long, ProblemAttempt> attemptsByProblemId =
+        attempts.stream()
+            .collect(Collectors.toMap(ProblemAttempt::getProblemId, Function.identity()));
+
+    User userReference = null;
+    List<UserWrongProblem> newWrongProblems = new ArrayList<>();
+    for (ProblemSession assigned : assignedProblems) {
+      Long problemId = assigned.getProblem().getId();
+      ProblemAttempt attempt = attemptsByProblemId.get(problemId);
+      if (attempt == null) {
+        throw new IllegalStateException("배정 문제에 대응하는 풀이 시도가 없습니다.");
+      }
+
+      UserWrongProblem existingWrongProblem = wrongProblemsByProblemId.get(problemId);
+      if (attempt.isCorrect()) {
+        if (existingWrongProblem != null) {
+          existingWrongProblem.complete();
+        }
+        continue;
+      }
+      if (existingWrongProblem != null) {
+        continue;
+      }
+
+      if (userReference == null) {
+        userReference = userJpaRepository.getReferenceById(userId);
+      }
+      newWrongProblems.add(
+          new UserWrongProblem(
+              userReference, assigned.getProblem(), assigned.getProblem().getLevel()));
+    }
+
+    if (!newWrongProblems.isEmpty()) {
+      userWrongProblemRepository.saveAll(newWrongProblems);
+    }
   }
 
   private CompletionResult handleCompletedSession(

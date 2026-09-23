@@ -23,8 +23,12 @@ import com.itda.problem.domain.Level;
 import com.itda.problem.domain.Problem;
 import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSession;
+import com.itda.problem.domain.UserWrongProblem;
 import com.itda.problem.repository.ProblemCellRepository;
 import com.itda.problem.repository.ProblemSessionRepository;
+import com.itda.problem.repository.UserWrongProblemRepository;
+import com.itda.user.domain.User;
+import com.itda.user.repository.UserJpaRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -51,12 +55,16 @@ class LearningSessionCompletionServiceTest {
   @Mock private ProblemCellRepository problemCellRepository;
   @Mock private ProblemAttemptRepository problemAttemptRepository;
   @Mock private AttemptCellRepository attemptCellRepository;
+  @Mock private UserWrongProblemRepository userWrongProblemRepository;
+  @Mock private UserJpaRepository userJpaRepository;
 
   private LearningSessionCompletionService service;
   private LearningSession session;
   private ProblemSession problemSession;
+  private User user;
   private AtomicReference<List<ProblemAttempt>> savedAttempts;
   private AtomicReference<List<AttemptCell>> savedAttemptCells;
+  private AtomicReference<List<UserWrongProblem>> savedWrongProblems;
 
   @BeforeEach
   void setUp() {
@@ -66,7 +74,9 @@ class LearningSessionCompletionServiceTest {
             problemSessionRepository,
             problemCellRepository,
             problemAttemptRepository,
-            attemptCellRepository);
+            attemptCellRepository,
+            userWrongProblemRepository,
+            userJpaRepository);
 
     CurriculumStage curriculumStage = org.mockito.Mockito.mock(CurriculumStage.class);
     given(curriculumStage.getId()).willReturn(5L);
@@ -77,6 +87,7 @@ class LearningSessionCompletionServiceTest {
     ReflectionTestUtils.setField(problem, "id", PROBLEM_ID);
     problemSession = new ProblemSession(problem, session);
     ReflectionTestUtils.setField(problemSession, "id", PROBLEM_SESSION_ID);
+    user = org.mockito.Mockito.mock(User.class);
 
     given(learningSessionRepository.findByIdForCompletion(SESSION_ID))
         .willReturn(Optional.of(session));
@@ -84,6 +95,11 @@ class LearningSessionCompletionServiceTest {
         .willReturn(List.of(problemSession));
     given(problemCellRepository.findByProblemIdOrderByCellIndexAsc(PROBLEM_ID))
         .willReturn(List.of(new ProblemCell(problem, 1, 0b001011)));
+    given(
+            userWrongProblemRepository.findAllByUser_IdAndProblem_IdIn(
+                USER_ID, List.of(PROBLEM_ID)))
+        .willReturn(List.of());
+    given(userJpaRepository.getReferenceById(USER_ID)).willReturn(user);
 
     savedAttempts = new AtomicReference<>();
     given(problemAttemptRepository.saveAllAndFlush(org.mockito.ArgumentMatchers.anyList()))
@@ -103,6 +119,14 @@ class LearningSessionCompletionServiceTest {
               List<AttemptCell> cells = invocation.getArgument(0);
               savedAttemptCells.set(cells);
               return cells;
+            });
+    savedWrongProblems = new AtomicReference<>();
+    given(userWrongProblemRepository.saveAll(org.mockito.ArgumentMatchers.anyList()))
+        .willAnswer(
+            invocation -> {
+              List<UserWrongProblem> wrongProblems = invocation.getArgument(0);
+              savedWrongProblems.set(wrongProblems);
+              return wrongProblems;
             });
     given(learningSessionRepository.saveAndFlush(session)).willReturn(session);
   }
@@ -126,6 +150,56 @@ class LearningSessionCompletionServiceTest {
     assertThat(result.problemResults().getFirst().cells().getFirst().extraDots())
         .containsExactly(3, 5);
     assertThat(problemSession.isCompleted()).isTrue();
+    assertThat(savedWrongProblems.get())
+        .singleElement()
+        .satisfies(
+            wrongProblem -> {
+              assertThat(wrongProblem.getUser()).isSameAs(user);
+              assertThat(wrongProblem.getProblem()).isSameAs(problemSession.getProblem());
+              assertThat(wrongProblem.isCompleted()).isFalse();
+            });
+  }
+
+  @Test
+  void 처음부터_맞힌_문제는_오답_목록에_추가하지_않는다() {
+    service.complete(USER_ID, SESSION_ID, command(0b001011));
+
+    verify(userWrongProblemRepository, never())
+        .saveAll(org.mockito.ArgumentMatchers.anyList());
+  }
+
+  @Test
+  void 기존_오답_문제를_다시_틀리면_새로_추가하지_않는다() {
+    UserWrongProblem existingWrongProblem =
+        new UserWrongProblem(
+            user, problemSession.getProblem(), problemSession.getProblem().getLevel());
+    given(
+            userWrongProblemRepository.findAllByUser_IdAndProblem_IdIn(
+                USER_ID, List.of(PROBLEM_ID)))
+        .willReturn(List.of(existingWrongProblem));
+
+    service.complete(USER_ID, SESSION_ID, command(0b010101));
+
+    assertThat(existingWrongProblem.isCompleted()).isFalse();
+    verify(userWrongProblemRepository, never())
+        .saveAll(org.mockito.ArgumentMatchers.anyList());
+  }
+
+  @Test
+  void 기존_오답_문제를_맞히면_완료_상태로_변경한다() {
+    UserWrongProblem existingWrongProblem =
+        new UserWrongProblem(
+            user, problemSession.getProblem(), problemSession.getProblem().getLevel());
+    given(
+            userWrongProblemRepository.findAllByUser_IdAndProblem_IdIn(
+                USER_ID, List.of(PROBLEM_ID)))
+        .willReturn(List.of(existingWrongProblem));
+
+    service.complete(USER_ID, SESSION_ID, command(0b001011));
+
+    assertThat(existingWrongProblem.isCompleted()).isTrue();
+    verify(userWrongProblemRepository, never())
+        .saveAll(org.mockito.ArgumentMatchers.anyList());
   }
 
   @Test
