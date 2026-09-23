@@ -3,7 +3,9 @@ import { Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
 import { AppButton } from "@/components/AppButton";
-import { announce } from "@/a11y";
+import { authService } from "@/services/authService";
+import { describeAuthError } from "@/services/authErrors";
+import { announce, hapticError } from "@/a11y";
 import { useTheme } from "@/theme";
 
 /** V02 이메일 인증 안내 */
@@ -32,7 +34,17 @@ export default function VerifyEmail() {
         <AppButton
           label="메일 다시 보내기"
           variant="secondary"
-          onPress={() => announce("인증 메일을 다시 보냈어요. 메일함을 확인해 주세요.")}
+          disabled={!email}
+          onPress={() => {
+            if (!email) return;
+            void authService
+              .requestEmailVerification(email)
+              .then(() => announce("인증 메일을 다시 보냈어요. 메일함을 확인해 주세요."))
+              .catch((error) => {
+                void hapticError();
+                announce(describeAuthError(error));
+              });
+          }}
         />
       </View>
     </ScreenShell>

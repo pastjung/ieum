@@ -6,6 +6,7 @@ import { BackHeader } from "@/components/BackHeader";
 import { BigInput } from "@/components/BigInput";
 import { AppButton } from "@/components/AppButton";
 import { authService } from "@/services/authService";
+import { describeAuthError } from "@/services/authErrors";
 import { announce, hapticError } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
@@ -26,9 +27,15 @@ export default function Withdraw() {
       announce("비밀번호를 확인해 주세요. 8자 이상이에요.");
       return;
     }
-    await authService.signOut();
-    announce("탈퇴가 완료됐어요. 그동안 함께해서 고마웠어요.");
-    router.replace("/auth/sign-in");
+    try {
+      await authService.withdraw(password);
+      announce("탈퇴가 완료됐어요. 그동안 함께해서 고마웠어요.");
+      router.replace("/auth/sign-in");
+    } catch (error) {
+      // 비밀번호 불일치는 403 CURRENT_PASSWORD_MISMATCH다. 화면에 머물러 다시 입력받는다
+      void hapticError();
+      announce(describeAuthError(error));
+    }
   };
 
   return (

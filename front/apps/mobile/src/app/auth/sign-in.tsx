@@ -4,10 +4,12 @@ import { useRouter } from "expo-router";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signInSchema, type SignInInput } from "@ieum/contracts";
+import { ApiError } from "@ieum/api-client";
 import { ScreenShell } from "@/components/ScreenShell";
 import { BigInput } from "@/components/BigInput";
 import { AppButton } from "@/components/AppButton";
 import { authService } from "@/services/authService";
+import { describeAuthError } from "@/services/authErrors";
 import { announce, hapticError } from "@/a11y";
 import { useTheme } from "@/theme";
 
@@ -26,8 +28,16 @@ export default function SignIn() {
 
   const onSubmit = handleSubmit(
     async (values) => {
-      const { userName } = await authService.signIn(values);
-      router.replace({ pathname: "/auth/welcome", params: { userName } });
+      try {
+        const { userName } = await authService.signIn(values);
+        router.replace({ pathname: "/auth/welcome", params: { userName } });
+      } catch (error) {
+        void hapticError();
+        announce(describeAuthError(error));
+        if (error instanceof ApiError && error.code === "EMAIL_VERIFICATION_REQUIRED") {
+          router.push("/auth/verify-email");
+        }
+      }
     },
     (errors) => {
       void hapticError();

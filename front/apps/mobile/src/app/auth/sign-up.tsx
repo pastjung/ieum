@@ -10,6 +10,7 @@ import { BackHeader } from "@/components/BackHeader";
 import { BigInput } from "@/components/BigInput";
 import { AppButton } from "@/components/AppButton";
 import { authService } from "@/services/authService";
+import { describeAuthError } from "@/services/authErrors";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { announce, hapticError } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
@@ -51,8 +52,13 @@ function VoiceSignUp() {
       return;
     }
     const values = getValues();
-    await authService.signUp(values);
-    router.replace({ pathname: "/auth/verify-email", params: { email: values.email } });
+    try {
+      await authService.signUp(values);
+      router.replace({ pathname: "/auth/verify-email", params: { email: values.email } });
+    } catch (error) {
+      void hapticError();
+      announce(describeAuthError(error));
+    }
   };
 
   return (
@@ -111,8 +117,13 @@ function ScreenSignUp() {
 
   const onSubmit = handleSubmit(
     async ({ username, email, password }) => {
-      await authService.signUp({ username, email, password });
-      router.replace({ pathname: "/auth/verify-email", params: { email } });
+      try {
+        await authService.signUp({ username, email, password });
+        router.replace({ pathname: "/auth/verify-email", params: { email } });
+      } catch (error) {
+        void hapticError();
+        announce(describeAuthError(error));
+      }
     },
     (errors) => {
       void hapticError();

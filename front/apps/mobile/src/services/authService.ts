@@ -73,4 +73,19 @@ export const authService = {
   getMe(): Promise<UserSummary> {
     return api.get<unknown>("/users/me").then((payload) => userSummarySchema.parse(payload));
   },
+
+  /** 성공은 204다. 로컬 토큰까지 지워야 탈퇴가 끝난다 */
+  async withdraw(currentPassword: string): Promise<void> {
+    await api.post("/users/me/withdrawals", { currentPassword });
+    await tokenStore.clear();
+  },
+
+  /** 202는 메일 작업의 접수만 뜻한다. 계정 존재 여부를 알려 주지 않는다 */
+  async requestEmailVerification(email: string): Promise<void> {
+    await api.post("/email-verification-requests", { email }, { auth: false });
+  },
+
+  async requestPasswordReset(email: string): Promise<void> {
+    await api.post("/password-reset-requests", { email }, { auth: false });
+  },
 };
