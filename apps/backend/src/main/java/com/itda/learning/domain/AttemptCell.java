@@ -1,9 +1,6 @@
 package com.itda.learning.domain;
 
-import com.itda.global.braille.BraillePattern;
-import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
-import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -18,13 +15,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * attempt_cells — 한 제출에서 Cell별로 정답과 입력을 비교한 결과 (ERD 5.2절).
- *
- * <p>attempt_id FK를 단방향 {@link jakarta.persistence.ManyToOne}으로 소유한다. ProblemAttempt가 Cell 컬렉션을 갖지
- * 않으므로 저장은 Attempt를 저장한 뒤 호출하는 서비스가 직접 한다. diff_mask는 서버가 expected XOR input으로 계산하므로 이 클래스에는 값을
- * 주입하는 경로가 없다.
- */
+/** 문제 풀이 시도에서 셀별 정답 패턴과 입력 패턴의 비교 결과를 저장한다. */
 @Entity
 @Table(
     name = "attempt_cells",
@@ -35,6 +26,8 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AttemptCell {
+
+  private static final int MAX_PATTERN = 0b111111;
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -47,58 +40,52 @@ public class AttemptCell {
   @Column(name = "cell_index", nullable = false)
   private int cellIndex;
 
-  /** 서버가 문제 정답에서 복사한 패턴. */
-  @Embedded
-  @AttributeOverride(
-      name = "value",
-      column = @Column(name = "expected_pattern", nullable = false, columnDefinition = "TINYINT"))
-  private BraillePattern expectedPattern;
+  @Column(name = "expected_pattern", nullable = false, columnDefinition = "TINYINT")
+  private int expectedPattern;
 
-  /** 사용자가 명시한 패턴. 0은 빈 점형이며 누락 Cell과 구분한다. */
-  @Embedded
-  @AttributeOverride(
-      name = "value",
-      column = @Column(name = "input_pattern", nullable = false, columnDefinition = "TINYINT"))
-  private BraillePattern inputPattern;
+  @Column(name = "input_pattern", nullable = false, columnDefinition = "TINYINT")
+  private int inputPattern;
 
-  /** expected XOR input. 서버 계산값이다. */
-  @Embedded
-  @AttributeOverride(
-      name = "value",
-      column = @Column(name = "diff_mask", nullable = false, columnDefinition = "TINYINT"))
-  private BraillePattern diffMask;
+  /** 정답과 입력에서 서로 다른 점을 나타내는 XOR 비트 마스크다. */
+  @Column(name = "diff_mask", nullable = false, columnDefinition = "TINYINT")
+  private int diffMask;
 
-  /** 해당 Attempt의 attempted_at과 동일한 최종 접수 시각 (ERD 5.2절). */
   @Column(name = "responded_at", nullable = false)
   private LocalDateTime respondedAt;
 
   public AttemptCell(
-      ProblemAttempt attempt, int cellIndex, CellSubmission submission, LocalDateTime now) {
+      ProblemAttempt attempt,
+      int cellIndex,
+      int expectedPattern,
+      int inputPattern,
+      LocalDateTime respondedAt) {
     if (attempt == null) {
-      throw new IllegalArgumentException("풀이는 필수입니다.");
+      throw new IllegalArgumentException("풀이 시도는 필수입니다.");
     }
     if (cellIndex < 1) {
-      throw new IllegalArgumentException("Cell 순번은 1 이상이어야 합니다: " + cellIndex);
+      throw new IllegalArgumentException("셀 순서는 1 이상이어야 합니다: " + cellIndex);
     }
+    validatePattern(expectedPattern);
+    validatePattern(inputPattern);
+    if (respondedAt == null) {
+      throw new IllegalArgumentException("응답 시각은 필수입니다.");
+    }
+
     this.attempt = attempt;
     this.cellIndex = cellIndex;
-    this.expectedPattern = submission.expectedPattern();
-    this.inputPattern = submission.inputPattern();
-    this.diffMask = submission.expectedPattern().diff(submission.inputPattern());
-    this.respondedAt = now;
+    this.expectedPattern = expectedPattern;
+    this.inputPattern = inputPattern;
+    this.diffMask = expectedPattern ^ inputPattern;
+    this.respondedAt = respondedAt;
   }
 
   public boolean isCorrect() {
-    return diffMask.isEmpty();
+    return diffMask == 0;
   }
 
-  /** 정답에는 있지만 입력에는 없는 점 위치의 마스크. 원본 두 점형에서 계산하므로 별도 컬럼으로 저장하지 않는다. */
-  public BraillePattern getMissingMask() {
-    return expectedPattern.missingIn(inputPattern);
-  }
-
-  /** 입력에는 있지만 정답에는 없는 점 위치의 마스크. 원본 두 점형에서 계산하므로 별도 컬럼으로 저장하지 않는다. */
-  public BraillePattern getExtraMask() {
-    return expectedPattern.extraIn(inputPattern);
+  private static void validatePattern(int pattern) {
+    if (pattern < 0 || pattern > MAX_PATTERN) {
+      throw new IllegalArgumentException("점자 패턴은 0부터 63 사이여야 합니다: " + pattern);
+    }
   }
 }

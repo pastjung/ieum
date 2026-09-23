@@ -10,6 +10,8 @@ import static org.mockito.Mockito.verify;
 import com.itda.curriculum.domain.CurriculumStage;
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
+import com.itda.learning.domain.AttemptCell;
+import com.itda.learning.domain.AttemptCellRepository;
 import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.LearningSessionRepository;
 import com.itda.learning.domain.ProblemAttempt;
@@ -48,11 +50,13 @@ class LearningSessionCompletionServiceTest {
   @Mock private ProblemSessionRepository problemSessionRepository;
   @Mock private ProblemCellRepository problemCellRepository;
   @Mock private ProblemAttemptRepository problemAttemptRepository;
+  @Mock private AttemptCellRepository attemptCellRepository;
 
   private LearningSessionCompletionService service;
   private LearningSession session;
   private ProblemSession problemSession;
   private AtomicReference<List<ProblemAttempt>> savedAttempts;
+  private AtomicReference<List<AttemptCell>> savedAttemptCells;
 
   @BeforeEach
   void setUp() {
@@ -61,7 +65,8 @@ class LearningSessionCompletionServiceTest {
             learningSessionRepository,
             problemSessionRepository,
             problemCellRepository,
-            problemAttemptRepository);
+            problemAttemptRepository,
+            attemptCellRepository);
 
     CurriculumStage curriculumStage = org.mockito.Mockito.mock(CurriculumStage.class);
     given(curriculumStage.getId()).willReturn(5L);
@@ -90,6 +95,14 @@ class LearningSessionCompletionServiceTest {
               }
               savedAttempts.set(attempts);
               return attempts;
+            });
+    savedAttemptCells = new AtomicReference<>();
+    given(attemptCellRepository.saveAllAndFlush(org.mockito.ArgumentMatchers.anyList()))
+        .willAnswer(
+            invocation -> {
+              List<AttemptCell> cells = invocation.getArgument(0);
+              savedAttemptCells.set(cells);
+              return cells;
             });
     given(learningSessionRepository.saveAndFlush(session)).willReturn(session);
   }
@@ -121,11 +134,15 @@ class LearningSessionCompletionServiceTest {
     CompletionResult first = service.complete(USER_ID, SESSION_ID, command);
     given(problemAttemptRepository.findAllByLearningSessionIdOrderBySessionItemNoAsc(SESSION_ID))
         .willReturn(savedAttempts.get());
+    given(attemptCellRepository.findAllByAttemptIds(List.of(100L)))
+        .willReturn(savedAttemptCells.get());
 
     CompletionResult retried = service.complete(USER_ID, SESSION_ID, command);
 
     assertThat(retried).isEqualTo(first);
     verify(problemAttemptRepository, times(1))
+        .saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
+    verify(attemptCellRepository, times(1))
         .saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
   }
 
@@ -134,6 +151,8 @@ class LearningSessionCompletionServiceTest {
     CompletionResult first = service.complete(USER_ID, SESSION_ID, command(0b001011));
     given(problemAttemptRepository.findAllByLearningSessionIdOrderBySessionItemNoAsc(SESSION_ID))
         .willReturn(savedAttempts.get());
+    given(attemptCellRepository.findAllByAttemptIds(List.of(100L)))
+        .willReturn(savedAttemptCells.get());
 
     CompletionResult retried = service.complete(USER_ID, SESSION_ID, command(0b000000));
 

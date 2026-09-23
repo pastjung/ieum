@@ -2,7 +2,6 @@ package com.itda.problem.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.itda.global.braille.BraillePattern;
 import java.util.List;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
@@ -27,7 +26,7 @@ class ProblemCellTest {
   }
 
   @ParameterizedTest
-  @ValueSource(ints = {0, 1, 62, BraillePattern.MAX_VALUE})
+  @ValueSource(ints = {0, 1, 62, 63})
   void 정답_패턴은_6비트_정수를_그대로_담는다(int pattern) {
     Problem problem = new Problem(Level.VOWEL, "ㅏ");
 

@@ -1,10 +1,9 @@
 package com.itda.learning.service;
 
-import com.itda.global.braille.BraillePattern;
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
 import com.itda.learning.domain.AttemptCell;
-import com.itda.learning.domain.CellSubmission;
+import com.itda.learning.domain.AttemptCellRepository;
 import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.LearningSessionRepository;
 import com.itda.learning.domain.ProblemAttempt;
@@ -31,10 +30,14 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class LearningSessionCompletionService {
 
+  private static final int MAX_PATTERN = 0b111111;
+  private static final int DOTS_PER_CELL = 6;
+
   private final LearningSessionRepository learningSessionRepository;
   private final ProblemSessionRepository problemSessionRepository;
   private final ProblemCellRepository problemCellRepository;
   private final ProblemAttemptRepository problemAttemptRepository;
+  private final AttemptCellRepository attemptCellRepository;
 
   @Transactional
   public CompletionResult complete(long userId, long sessionId, CompletionCommand command) {
@@ -62,13 +65,15 @@ public class LearningSessionCompletionService {
     LocalDateTime completedAt = LocalDateTime.now(ZoneOffset.UTC);
 
     List<ProblemAttempt> attempts = new ArrayList<>();
+    List<AttemptCell> attemptCells = new ArrayList<>();
     for (int index = 0; index < assignedProblems.size(); index++) {
       ProblemSession assigned = assignedProblems.get(index);
       AttemptCommand attemptCommand = commandsByProblemSession.get(assigned.getId());
       List<ProblemCell> expectedCells =
           problemCellRepository.findByProblemIdOrderByCellIndexAsc(assigned.getProblem().getId());
-      List<CellSubmission> submissions = submissions(expectedCells, attemptCommand.inputPatterns());
+      validateCellInputs(expectedCells, attemptCommand.inputPatterns());
 
+      boolean correct = isCorrect(expectedCells, attemptCommand.inputPatterns());
       ProblemAttempt attempt =
           ProblemAttempt.forFreeSession(
               userId,
@@ -76,31 +81,40 @@ public class LearningSessionCompletionService {
               sessionId,
               index + 1,
               curriculumStageId,
-              submissions,
+              correct,
               completedAt);
       attempts.add(attempt);
+      attemptCells.addAll(createAttemptCells(attempt, expectedCells, attemptCommand, completedAt));
       assigned.complete();
     }
 
     List<ProblemAttempt> savedAttempts = problemAttemptRepository.saveAllAndFlush(attempts);
+    List<AttemptCell> savedAttemptCells = attemptCellRepository.saveAllAndFlush(attemptCells);
     session.complete(completedAt);
     learningSessionRepository.saveAndFlush(session);
 
-    return toResult(session, assignedProblems, savedAttempts);
+    return toResult(session, assignedProblems, savedAttempts, savedAttemptCells);
   }
 
   private CompletionResult handleCompletedSession(
       LearningSession session, List<ProblemSession> assignedProblems, long sessionId) {
     List<ProblemAttempt> storedAttempts =
         problemAttemptRepository.findAllByLearningSessionIdOrderBySessionItemNoAsc(sessionId);
+    List<AttemptCell> storedAttemptCells = findAttemptCells(storedAttempts);
 
-    return toResult(session, assignedProblems, storedAttempts);
+    return toResult(session, assignedProblems, storedAttempts, storedAttemptCells);
+  }
+
+  private List<AttemptCell> findAttemptCells(List<ProblemAttempt> attempts) {
+    List<Long> attemptIds = attempts.stream().map(ProblemAttempt::getId).toList();
+    if (attemptIds.isEmpty()) {
+      return List.of();
+    }
+    return attemptCellRepository.findAllByAttemptIds(attemptIds);
   }
 
   private static void validateCommand(CompletionCommand command) {
-    if (command == null
-        || command.attempts() == null
-        || command.attempts().isEmpty()) {
+    if (command == null || command.attempts() == null || command.attempts().isEmpty()) {
       throw new BusinessException(ErrorCode.INVALID_COMPLETION_REQUEST);
     }
     for (AttemptCommand attempt : command.attempts()) {
@@ -113,8 +127,7 @@ public class LearningSessionCompletionService {
       }
       boolean invalidPattern =
           attempt.inputPatterns().stream()
-              .anyMatch(
-                  pattern -> pattern == null || pattern < 0 || pattern > BraillePattern.MAX_VALUE);
+              .anyMatch(pattern -> pattern == null || pattern < 0 || pattern > MAX_PATTERN);
       if (invalidPattern) {
         throw new BusinessException(ErrorCode.INVALID_COMPLETION_REQUEST);
       }
@@ -144,22 +157,44 @@ public class LearningSessionCompletionService {
     return indexed;
   }
 
-  private static List<CellSubmission> submissions(
+  private static void validateCellInputs(
       List<ProblemCell> expectedCells, List<Integer> inputPatterns) {
     if (expectedCells.isEmpty() || expectedCells.size() != inputPatterns.size()) {
       throw new BusinessException(ErrorCode.INVALID_COMPLETION_REQUEST);
     }
-
-    List<CellSubmission> submissions = new ArrayList<>(expectedCells.size());
     for (int index = 0; index < expectedCells.size(); index++) {
-      ProblemCell expectedCell = expectedCells.get(index);
-      if (expectedCell.getCellIndex() != index + 1) {
-        throw new IllegalStateException("문제의 Cell 순서가 연속적이지 않습니다.");
+      if (expectedCells.get(index).getCellIndex() != index + 1) {
+        throw new IllegalStateException("문제의 셀 순서가 연속적이지 않습니다.");
       }
-      submissions.add(
-          CellSubmission.of(expectedCell.getExpectedPattern(), inputPatterns.get(index)));
     }
-    return submissions;
+  }
+
+  private static boolean isCorrect(
+      List<ProblemCell> expectedCells, List<Integer> inputPatterns) {
+    for (int index = 0; index < expectedCells.size(); index++) {
+      if (expectedCells.get(index).getExpectedPattern() != inputPatterns.get(index)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static List<AttemptCell> createAttemptCells(
+      ProblemAttempt attempt,
+      List<ProblemCell> expectedCells,
+      AttemptCommand attemptCommand,
+      LocalDateTime respondedAt) {
+    List<AttemptCell> cells = new ArrayList<>(expectedCells.size());
+    for (int index = 0; index < expectedCells.size(); index++) {
+      cells.add(
+          new AttemptCell(
+              attempt,
+              index + 1,
+              expectedCells.get(index).getExpectedPattern(),
+              attemptCommand.inputPatterns().get(index),
+              respondedAt));
+    }
+    return cells;
   }
 
   private static Long curriculumStageId(LearningSession session) {
@@ -176,24 +211,31 @@ public class LearningSessionCompletionService {
   private static CompletionResult toResult(
       LearningSession session,
       List<ProblemSession> assignedProblems,
-      List<ProblemAttempt> attempts) {
+      List<ProblemAttempt> attempts,
+      List<AttemptCell> attemptCells) {
     Map<Long, ProblemAttempt> attemptsByProblemId =
         attempts.stream()
             .collect(
                 Collectors.toMap(
                     ProblemAttempt::getProblemId, Function.identity(), (first, second) -> first));
+    Map<Long, List<AttemptCell>> cellsByAttemptId =
+        attemptCells.stream().collect(Collectors.groupingBy(cell -> cell.getAttempt().getId()));
 
     if (attemptsByProblemId.size() != assignedProblems.size()) {
-      throw new IllegalStateException("저장된 풀이와 배정 문제의 개수가 일치하지 않습니다.");
+      throw new IllegalStateException("저장된 시도와 배정 문제의 개수가 일치하지 않습니다.");
     }
 
     List<ProblemResult> problemResults = new ArrayList<>();
     for (ProblemSession assigned : assignedProblems) {
       ProblemAttempt attempt = attemptsByProblemId.get(assigned.getProblem().getId());
       if (attempt == null) {
-        throw new IllegalStateException("배정 문제에 대응하는 풀이가 없습니다.");
+        throw new IllegalStateException("배정 문제에 대응하는 저장된 시도가 없습니다.");
       }
-      problemResults.add(toProblemResult(assigned, attempt));
+      List<AttemptCell> cells = cellsByAttemptId.getOrDefault(attempt.getId(), List.of());
+      if (cells.isEmpty()) {
+        throw new IllegalStateException("저장된 시도에 셀 결과가 없습니다.");
+      }
+      problemResults.add(toProblemResult(assigned, attempt, cells));
     }
 
     int correctProblemCount = (int) problemResults.stream().filter(ProblemResult::correct).count();
@@ -207,9 +249,10 @@ public class LearningSessionCompletionService {
         problemResults);
   }
 
-  private static ProblemResult toProblemResult(ProblemSession assigned, ProblemAttempt attempt) {
+  private static ProblemResult toProblemResult(
+      ProblemSession assigned, ProblemAttempt attempt, List<AttemptCell> attemptCells) {
     List<CellResult> cells =
-        attempt.getCells().stream().map(LearningSessionCompletionService::toCellResult).toList();
+        attemptCells.stream().map(LearningSessionCompletionService::toCellResult).toList();
     return new ProblemResult(
         assigned.getId(),
         assigned.getProblem().getId(),
@@ -219,13 +262,15 @@ public class LearningSessionCompletionService {
   }
 
   private static CellResult toCellResult(AttemptCell cell) {
-    int missingMask = cell.getMissingMask().getValue();
-    int extraMask = cell.getExtraMask().getValue();
+    int expectedPattern = cell.getExpectedPattern();
+    int inputPattern = cell.getInputPattern();
+    int missingMask = expectedPattern & ~inputPattern & MAX_PATTERN;
+    int extraMask = inputPattern & ~expectedPattern & MAX_PATTERN;
     return new CellResult(
         cell.getCellIndex(),
-        cell.getExpectedPattern().getValue(),
-        cell.getInputPattern().getValue(),
-        cell.getDiffMask().getValue(),
+        expectedPattern,
+        inputPattern,
+        cell.getDiffMask(),
         missingMask,
         extraMask,
         dotNumbers(missingMask),
@@ -234,7 +279,7 @@ public class LearningSessionCompletionService {
 
   private static List<Integer> dotNumbers(int mask) {
     List<Integer> dots = new ArrayList<>();
-    for (int dot = 1; dot <= BraillePattern.DOTS_PER_CELL; dot++) {
+    for (int dot = 1; dot <= DOTS_PER_CELL; dot++) {
       if ((mask & (1 << (dot - 1))) != 0) {
         dots.add(dot);
       }

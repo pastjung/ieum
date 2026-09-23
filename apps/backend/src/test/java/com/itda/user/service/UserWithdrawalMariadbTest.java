@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
-import com.itda.learning.domain.CellSubmission;
 import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.ProblemAttempt;
 import com.itda.lecture.domain.Lecture;
@@ -783,7 +782,7 @@ class UserWithdrawalMariadbTest {
                   sessionId,
                   1,
                   1L,
-                  List.of(CellSubmission.of(0b000111, 0b000111)),
+                  true,
                   NOW));
           return null;
         });
