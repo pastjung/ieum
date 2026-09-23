@@ -5,6 +5,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { signUpSchema, type SignUpInput } from "@ieum/contracts";
+import { ApiError } from "@ieum/api-client";
 import { ScreenShell } from "@/components/ScreenShell";
 import { BackHeader } from "@/components/BackHeader";
 import { BigInput } from "@/components/BigInput";
@@ -27,7 +28,12 @@ function VoiceSignUp() {
   const router = useRouter();
   const theme = useTheme();
   const [step, setStep] = useState(0);
-  const { control, trigger, getValues, formState } = useForm<SignUpInput>({
+  /**
+   * 단계를 되돌리며 함께 읽어 줄 문장. 단계 이동은 아래 effect가 낭독하므로,
+   * catch에서 바로 announce하면 그 낭독이 곧장 덮어써 버린다 — 상태로 넘겨 한 번만 읽는다
+   */
+  const [notice, setNotice] = useState<string | null>(null);
+  const { control, trigger, getValues, setValue, formState } = useForm<SignUpInput>({
     resolver: zodResolver(signUpSchema),
     defaultValues: { username: "", password: "", email: "" },
     mode: "onSubmit",
@@ -36,8 +42,8 @@ function VoiceSignUp() {
   const current = steps[step]!;
 
   useEffect(() => {
-    announce(current.announceText);
-  }, [current]);
+    announce(notice ?? current.announceText);
+  }, [current, notice]);
 
   const nextStep = async () => {
     const valid = await trigger(current.key);
@@ -48,6 +54,7 @@ function VoiceSignUp() {
       return;
     }
     if (step < steps.length - 1) {
+      setNotice(null);
       setStep(step + 1);
       return;
     }
@@ -57,6 +64,15 @@ function VoiceSignUp() {
       router.replace({ pathname: "/auth/verify-email", params: { email: values.email } });
     } catch (error) {
       void hapticError();
+      // 음성 가입은 한 화면에 한 입력이라 단계를 되돌릴 UI가 없다. 안내만 하고 3단계에
+      // 머물면 사용자는 아이디를 바꿀 방법이 없다. 백엔드가 아이디·이메일 충돌을 한 code로
+      // 합쳤으므로(열거 방지) 첫 입력인 아이디 단계로 보내는 것이 안전한 일반화다
+      if (error instanceof ApiError && error.code === "ACCOUNT_IDENTIFIER_UNAVAILABLE") {
+        setValue("username", "");
+        setStep(0);
+        setNotice(`${describeAuthError(error)} 1단계로 돌아왔어요. 아이디를 다시 입력하세요.`);
+        return;
+      }
       announce(describeAuthError(error));
     }
   };
