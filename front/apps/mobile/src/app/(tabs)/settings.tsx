@@ -9,6 +9,26 @@ import { authService } from "@/services/authService";
 import { announce, hapticError, hapticSelect, speakAsync } from "@/a11y";
 import { controlHeight, radius, useFontScale, useTheme } from "@/theme";
 
+/** 낭독이 무응답이어도 화면 전환을 막지 않을 상한 */
+const SPEAK_WAIT_MS = 3000;
+
+/**
+ * 문장을 끝까지 읽어 준 뒤 화면을 넘기되, **그 기다림에 갇히지 않는다.**
+ *
+ * `speakAsync`의 TTS 경로는 expo-speech의 onDone·onStopped·onError에만 의존한다.
+ * 셋 중 무엇도 불리지 않으면 promise가 영영 settle되지 않고, `Speech.speak`가 던지면 reject된다.
+ * 어느 쪽이든 호출처의 화면 전환이 통째로 건너뛰어져 "버튼을 눌렀는데 아무 일도 안 일어남"이 된다 —
+ * 실패를 들려주려고 넣은 낭독이 그 실패를 다시 침묵시키는 셈이다.
+ * 거부는 흡수하고, 무응답은 상한에서 끊는다.
+ */
+async function speakBeforeLeaving(text: string): Promise<void> {
+  try {
+    await Promise.race([speakAsync(text), new Promise<void>((resolve) => setTimeout(resolve, SPEAK_WAIT_MS))]);
+  } catch {
+    // 낭독이 실패한 것은 화면 전환을 막을 이유가 되지 않는다
+  }
+}
+
 /** V27 설정 */
 export default function Settings() {
   const router = useRouter();
@@ -32,7 +52,7 @@ export default function Settings() {
       // announce()는 다음 화면의 진입 안내가 Speech.stop()으로 즉시 잘라내므로
       // 이 문장만큼은 낭독이 끝날 때까지 기다렸다가 이동한다
       void hapticError();
-      await speakAsync("기기에서는 로그아웃했어요. 다만 저장된 로그인 정보를 지우지 못했어요.");
+      await speakBeforeLeaving("기기에서는 로그아웃했어요. 다만 저장된 로그인 정보를 지우지 못했어요.");
     }
     // QueryClient는 앱 프로세스 수명 동안 하나다. 캐시를 남기면 같은 기기에서 다른 계정으로
     // 로그인했을 때 홈이 이전 사용자의 이름·단계를 낭독한다 — 타인의 정보이자 거짓이다.
