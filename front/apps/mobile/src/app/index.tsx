@@ -24,9 +24,9 @@ export default function Splash() {
         router.replace("/onboarding/mode");
         return;
       }
-      const token = await authService.getToken();
+      const restored = await authService.restore();
       if (cancelled) return;
-      router.replace(token ? "/(tabs)" : "/auth/sign-in");
+      router.replace(restored ? "/(tabs)" : "/auth/sign-in");
     });
     return () => {
       cancelled = true;
