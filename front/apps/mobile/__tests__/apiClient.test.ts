@@ -143,12 +143,11 @@ describe("api-client 요청 조립", () => {
   });
 });
 
-// 아래 토큰 값은 테스트 픽스처이며 실제 비밀값이 아니다 (gitleaks 오탐 방지)
 const SESSION = {
-  accessToken: "access-2", // gitleaks:allow
+  accessToken: "test-access-2",
   tokenType: "Bearer",
   accessTokenExpiresAt: "2026-09-23T00:10:00.000Z",
-  refreshToken: "refresh-2", // gitleaks:allow
+  refreshToken: "test-refresh-2",
   refreshTokenExpiresAt: "2026-10-23T00:00:00.000Z",
   user: { userId: "1", username: "hana" },
 };
@@ -174,8 +173,8 @@ describe("api-client 401 자동 갱신", () => {
 
     expect(fetchFn).toHaveBeenCalledTimes(3);
     expect(fetchFn.mock.calls[1][0]).toBe("http://localhost:8080/api/v1/access-tokens");
-    expect(state.access).toBe("access-2");
-    expect(state.refresh).toBe("refresh-2");
+    expect(state.access).toBe("test-access-2");
+    expect(state.refresh).toBe("test-refresh-2");
     expect(onSessionExpired).not.toHaveBeenCalled();
   });
 
@@ -272,7 +271,7 @@ describe("api-client 401 자동 갱신", () => {
     });
 
     await expect(
-      api.post("/access-tokens", { refreshToken: "refresh-1" }, { auth: false }), // gitleaks:allow (테스트 픽스처)
+      api.post("/access-tokens", { refreshToken: "test-refresh-1" }, { auth: false }),
     ).rejects.toMatchObject({ code: "INVALID_REFRESH_TOKEN" });
 
     expect(fetchFn).toHaveBeenCalledTimes(1);
