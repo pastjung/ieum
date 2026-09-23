@@ -1,6 +1,7 @@
 import { AccessibilityInfo } from "react-native";
 import * as Speech from "expo-speech";
-import { useSettingsStore, speechRateValue } from "@/stores/settingsStore";
+import { useSettingsStore, speechRateValue, type SpeechRate } from "@/stores/settingsStore";
+import { canUseClonedVoice, speakWithClonedVoice, stopClonedVoice } from "./clonedVoice";
 
 let screenReaderOn = false;
 AccessibilityInfo.isScreenReaderEnabled().then((v) => {
@@ -29,8 +30,70 @@ export function speak(text: string, opts?: { force?: boolean }): void {
     AccessibilityInfo.announceForAccessibility(text);
     return;
   }
+  systemSpeak(text, speechRate);
+}
+
+/** 시스템 TTS로 읽는다 — 복제 목소리가 없거나 실패했을 때의 경로. */
+function systemSpeak(text: string, speechRate: SpeechRate): void {
   Speech.stop();
   Speech.speak(text, { language: "ko-KR", rate: speechRateValue(speechRate) });
+}
+
+/** 같은 낭독이되, 끝나면 resolve된다. TTS가 없거나 실패해도 반드시 풀린다. */
+function systemSpeakAsync(text: string, speechRate: SpeechRate): Promise<void> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(guard);
+      resolve();
+    };
+    // TTS 엔진이 아직 붙지 않았으면 콜백이 아예 오지 않는다. 그때도 흐름이 멈추면 안 된다.
+    const guard = setTimeout(finish, estimateMs(text, speechRateValue(speechRate)) + 1_500);
+
+    Speech.stop();
+    Speech.speak(text, {
+      language: "ko-KR",
+      rate: speechRateValue(speechRate),
+      onDone: finish,
+      onStopped: finish,
+      onError: finish,
+    });
+  });
+}
+
+/**
+ * 잇다 응답처럼 **복제한 내 목소리로** 읽어야 하는 안내.
+ *
+ * 합성은 네트워크를 타므로 비동기다. 실패하면 시스템 TTS로 넘어간다 —
+ * 어떤 경로로든 안내는 반드시 나가야 한다.
+ */
+export function speakAsItda(text: string): void {
+  void speakAsItdaAsync(text);
+}
+
+/**
+ * 잇다 응답을 읽고, **말이 실제로 끝나면** resolve된다.
+ *
+ * 잇다는 말을 마친 뒤에 마이크를 여는데, 길이를 글자 수로 어림잡으면 너무 늦게 열려
+ * 사용자의 명령 앞부분을 통째로 놓친다. 그래서 낭독 완료 신호를 그대로 쓴다.
+ */
+export async function speakAsItdaAsync(text: string): Promise<void> {
+  const { voiceEnabled, speechRate } = useSettingsStore.getState();
+  if (!voiceEnabled) return;
+  lastText = text;
+  lastAt = Date.now();
+
+  if (screenReaderOn) {
+    AccessibilityInfo.announceForAccessibility(text);
+    await new Promise((resolve) => setTimeout(resolve, estimateMs(text, speechRateValue(speechRate))));
+    return;
+  }
+
+  Speech.stop();
+  if (canUseClonedVoice() && (await speakWithClonedVoice(text))) return;
+  await systemSpeakAsync(text, speechRate);
 }
 
 /** 화면 진입·상태 변화 알림 — 스크린리더와 TTS 모두 커버 */
@@ -40,6 +103,7 @@ export function announce(text: string): void {
 
 export function stopSpeaking(): void {
   Speech.stop();
+  stopClonedVoice();
 }
 
 /** 글자 수 기반 낭독 시간 추정 (스크린리더 위임 시 완료 콜백이 없어서 사용) */

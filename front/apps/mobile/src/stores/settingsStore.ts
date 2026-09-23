@@ -7,6 +7,12 @@ export type UsageMode = "voice" | "screen";
 export type SpeechRate = "slow" | "normal" | "fast";
 export type FontScale = "normal" | "large";
 
+/** 복제한 내 목소리. 샘플은 올린 뒤 지우고 id만 남긴다. */
+export interface ClonedVoice {
+  id: string;
+  name: string;
+}
+
 interface SettingsState {
   /** 사용 방식 (최초 1회 선택, null이면 미선택) */
   mode: UsageMode | null;
@@ -17,6 +23,10 @@ interface SettingsState {
   theme: ThemeName;
   /** 접근성 설정·사용 안내까지 마쳤는지 */
   onboarded: boolean;
+  /** 음성 비서 '잇다' 사용 여부 — 끄면 호출어를 듣지 않는다 */
+  itdaEnabled: boolean;
+  /** 복제한 목소리. null이면 시스템 TTS로 안내한다 */
+  clonedVoice: ClonedVoice | null;
   setMode: (mode: UsageMode) => void;
   setVoiceEnabled: (v: boolean) => void;
   setSpeechRate: (v: SpeechRate) => void;
@@ -24,6 +34,8 @@ interface SettingsState {
   setFontScale: (v: FontScale) => void;
   setTheme: (v: ThemeName) => void;
   setOnboarded: (v: boolean) => void;
+  setItdaEnabled: (v: boolean) => void;
+  setClonedVoice: (v: ClonedVoice | null) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -36,6 +48,8 @@ export const useSettingsStore = create<SettingsState>()(
       fontScale: "normal",
       theme: "dark",
       onboarded: false,
+      itdaEnabled: false,
+      clonedVoice: null,
       setMode: (mode) => set({ mode }),
       setVoiceEnabled: (voiceEnabled) => set({ voiceEnabled }),
       setSpeechRate: (speechRate) => set({ speechRate }),
@@ -43,6 +57,8 @@ export const useSettingsStore = create<SettingsState>()(
       setFontScale: (fontScale) => set({ fontScale }),
       setTheme: (theme) => set({ theme }),
       setOnboarded: (onboarded) => set({ onboarded }),
+      setItdaEnabled: (itdaEnabled) => set({ itdaEnabled }),
+      setClonedVoice: (clonedVoice) => set({ clonedVoice }),
     }),
     {
       name: "ieum-settings",
