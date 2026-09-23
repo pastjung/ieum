@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -10,7 +10,7 @@ import { authService } from "@/services/authService";
 import { learningService } from "@/services/learningService";
 import { todayReview } from "@/services/mockData";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { announce, hapticTap } from "@/a11y";
+import { announce, hapticError, hapticTap } from "@/a11y";
 import { fontSize, radius, useFontScale, useTheme } from "@/theme";
 
 /** level은 단계 번호가 아니라 학습 범주라 "3단계" 같은 문구를 만들 수 없다 */
@@ -23,6 +23,51 @@ const LEVEL_LABEL: Record<string, string> = {
   CONTRACTION_WORD: "약어",
 };
 
+const LOAD_FAILED_TEXT = "사용자 정보를 불러오지 못했어요.";
+
+/**
+ * 두 홈 변형이 공유하는 `GET /users/me` 조회.
+ *
+ * 실패를 화면 문구로만 남기면 음성으로만 앱을 쓰는 사용자에게는 "홈에 도착했는데 아무 말도 없음"이 되고,
+ * 그건 앱이 죽은 것과 구분되지 않는다. 그래서 실패도 반드시 낭독·진동으로 알리고 재시도 수단을 함께 준다.
+ * (401은 클라이언트가 자동 갱신 → 만료 화면으로 처리하므로 여기 오지 않는다)
+ */
+function useMeQuery() {
+  const { data, isError, refetch } = useQuery({ queryKey: ["me"], queryFn: authService.getMe });
+  // 같은 실패를 두 번 낭독하지 않기 위해 이미 알렸는지 기억한다.
+  // 성공으로 돌아오면 되돌려서, 다음 실패는 다시 들릴 수 있게 한다
+  const notifiedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isError) {
+      notifiedRef.current = false;
+      return;
+    }
+    if (notifiedRef.current) return;
+    notifiedRef.current = true;
+    void hapticError();
+    // 이름·단계를 몰라도 "홈에 도착했다"는 사실은 들려야 한다
+    announce(`홈이에요. ${LOAD_FAILED_TEXT} 다시 시도를 누르면 다시 불러와요.`);
+  }, [isError]);
+
+  const retry = () => {
+    announce("다시 불러올게요.");
+    // 재시도가 또 실패하면 isError가 true 그대로라 위 effect가 다시 돌지 않는다 —
+    // 재시도의 결과는 여기서 직접 알려야 조용한 실패가 되지 않는다
+    const announceRetryFailure = () => {
+      notifiedRef.current = true;
+      void hapticError();
+      announce(`아직 ${LOAD_FAILED_TEXT} 잠시 후 다시 시도해 주세요.`);
+    };
+    void refetch().then((result) => {
+      // 성공은 각 변형의 낭독이 맡는다
+      if (result.isError) announceRetryFailure();
+    }, announceRetryFailure);
+  };
+
+  return { data, isError, retry };
+}
+
 /** V10·V11 홈 (음성 중심) — 큰 버튼 중심 */
 function VoiceHome() {
   const router = useRouter();
@@ -30,7 +75,7 @@ function VoiceHome() {
   const fontScale = useFontScale();
   // inProgress·deviceConnected는 학습 세션 API와 BLE가 있어야 해서 목을 그대로 쓴다
   const { data: homeSummary } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
-  const { data } = useQuery({ queryKey: ["me"], queryFn: authService.getMe });
+  const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
   const stepLabel = data?.level ? LEVEL_LABEL[data.level] : "자가 진단 전";
 
@@ -86,14 +131,24 @@ function VoiceHome() {
           홈
         </Text>
         <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, marginTop: 4 }}>
-          {homeSummary && data
-            ? homeSummary.inProgress
-              ? `${userName}님, ${stepLabel}를 배우는 중이에요.`
-              : "진행 중인 학습이 없어요."
-            : "불러오는 중이에요…"}
+          {isError
+            ? LOAD_FAILED_TEXT
+            : homeSummary && data
+              ? homeSummary.inProgress
+                ? `${userName}님, ${stepLabel}를 배우는 중이에요.`
+                : "진행 중인 학습이 없어요."
+              : "불러오는 중이에요…"}
         </Text>
       </View>
       <View style={{ flex: 1, gap: 14, paddingBottom: 14 }}>
+        {isError && (
+          <AppButton
+            label="다시 시도"
+            variant="secondary"
+            accessibilityHint="사용자 정보를 다시 불러와요"
+            onPress={retry}
+          />
+        )}
         {homeSummary?.inProgress ? (
           <>
             {bigButton("이어서 학습", `${homeSummary.inProgress.title} · ${homeSummary.inProgress.progressLabel}`, true, goSession, 1.4)}
@@ -124,7 +179,7 @@ function ScreenHome() {
   const fontScale = useFontScale();
   // inProgress·deviceConnected는 학습 세션 API와 BLE가 있어야 해서 목을 그대로 쓴다
   const { data: homeSummary } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
-  const { data } = useQuery({ queryKey: ["me"], queryFn: authService.getMe });
+  const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
   const stepLabel = data?.level ? LEVEL_LABEL[data.level] : "자가 진단 전";
 
@@ -137,11 +192,20 @@ function ScreenHome() {
               안녕하세요, {userName || "학습자"}님
             </Text>
             <Text style={{ fontSize: 16 * fontScale, color: theme.color.textMuted, marginTop: 4 }}>
-              {data ? `${stepLabel}를 배우는 중이에요` : "불러오는 중이에요…"}
+              {isError ? LOAD_FAILED_TEXT : data ? `${stepLabel}를 배우는 중이에요` : "불러오는 중이에요…"}
             </Text>
           </View>
           <IeumFace size={56} />
         </View>
+
+        {isError && (
+          <AppButton
+            label="다시 시도"
+            variant="secondary"
+            accessibilityHint="사용자 정보를 다시 불러와요"
+            onPress={retry}
+          />
+        )}
 
         {homeSummary?.inProgress && (
           <View
