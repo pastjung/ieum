@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@ieum/api-client": "workspace:*",
     "@ieum/contracts": "workspace:*",
     "@ieum/design-tokens": "workspace:*",
     "@ieum/domain": "workspace:*",
