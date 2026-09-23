@@ -1,4 +1,4 @@
-import { ApiError, NETWORK_UNAVAILABLE } from "./errors";
+import { ApiError, INVALID_RESPONSE, NETWORK_UNAVAILABLE } from "./errors";
 import type { ApiClient, ApiClientConfig, RequestOptions } from "./types";
 
 export function createClient(config: ApiClientConfig): ApiClient {
@@ -35,8 +35,14 @@ export function createClient(config: ApiClientConfig): ApiClient {
     }
 
     // 204와, 오류 상태에서 body를 생략한 응답을 같은 경로로 처리한다
-    const text = await response.text();
-    const payload: unknown = text === "" ? undefined : JSON.parse(text);
+    let payload: unknown;
+    try {
+      const text = await response.text();
+      payload = text === "" ? undefined : JSON.parse(text);
+    } catch {
+      // nginx 등 중간 프록시가 502/503에 HTML 오류 페이지를 끼워 넣을 수 있다 — status는 호출자에게 의미가 있으니 살려서 넘긴다
+      throw new ApiError(response.status, INVALID_RESPONSE, "서버 응답을 해석하지 못했어요.");
+    }
 
     if (!response.ok) {
       const body = (payload ?? {}) as { code?: string; message?: string };

@@ -1,6 +1,9 @@
 /** 네트워크 자체가 실패해 HTTP 상태가 없을 때 쓰는 code. 백엔드 code와 겹치지 않는다 */
 export const NETWORK_UNAVAILABLE = "NETWORK_UNAVAILABLE";
 
+/** 응답 본문이 JSON이 아닐 때. 프록시가 끼워 넣은 HTML 에러 페이지 등 */
+export const INVALID_RESPONSE = "INVALID_RESPONSE";
+
 /**
  * 백엔드 공통 오류 계약 `{code, message}`를 옮긴 예외.
  *

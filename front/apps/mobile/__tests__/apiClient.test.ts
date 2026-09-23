@@ -119,4 +119,26 @@ describe("api-client 요청 조립", () => {
       status: 0,
     });
   });
+
+  it("본문이 JSON이 아니면 INVALID_RESPONSE로 바꾼다 (프록시가 끼워 넣은 HTML 오류 페이지 등)", async () => {
+    // fakeResponse는 body를 JSON.stringify하므로 비-JSON 본문은 인라인으로 직접 만든다
+    const fetchFn = jest.fn(async () => ({
+      ok: false,
+      status: 502,
+      text: async () => "<html>502 Bad Gateway</html>",
+    }) as unknown as Response);
+    const { store } = memoryTokenStore(null, null);
+    const api = createClient({
+      baseUrl: "http://localhost:8080/api/v1",
+      platform: "MOBILE",
+      tokens: store,
+      onSessionExpired: () => {},
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    await expect(api.get("/users/me", { auth: false })).rejects.toMatchObject({
+      code: "INVALID_RESPONSE",
+      status: 502,
+    });
+  });
 });

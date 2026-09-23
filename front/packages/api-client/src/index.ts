@@ -1,4 +1,4 @@
-export { ApiError, NETWORK_UNAVAILABLE } from "./errors";
+export { ApiError, INVALID_RESPONSE, NETWORK_UNAVAILABLE } from "./errors";
 export { createClient } from "./client";
 export type {
   ApiClient,
