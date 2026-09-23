@@ -66,7 +66,11 @@ public enum ErrorCode {
   PASSWORD_POLICY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."),
 
   // braille
-  PATTERN_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "패턴 값이 허용 범위(0~63)를 벗어났습니다.");
+  PATTERN_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "패턴 값이 허용 범위(0~63)를 벗어났습니다."),
+
+  // learning completion
+  LEARNING_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "학습 세션을 찾을 수 없습니다."),
+  INVALID_COMPLETION_REQUEST(HttpStatus.UNPROCESSABLE_CONTENT, "학습 완료 요청을 확인해 주세요.");
 
   private final HttpStatus status;
   private final String message;
