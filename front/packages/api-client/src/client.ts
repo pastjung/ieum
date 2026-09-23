@@ -21,7 +21,7 @@ export function createClient(config: ApiClientConfig): ApiClient {
     return headers;
   }
 
-  async function send<T>(method: string, path: string, options: RequestOptions): Promise<T> {
+  async function sendOnce<T>(method: string, path: string, options: RequestOptions): Promise<T> {
     let response: Response;
     try {
       response = await fetchFn(`${config.baseUrl}${path}`, {
@@ -53,6 +53,63 @@ export function createClient(config: ApiClientConfig): ApiClient {
       );
     }
     return payload as T;
+  }
+
+  /**
+   * 진행 중인 갱신. 동시에 401을 받은 요청들이 같은 Promise를 기다린다.
+   * 요청 수만큼 갱신하면 Refresh Token 회전이 서로를 무효화한다.
+   */
+  let refreshInFlight: Promise<boolean> | null = null;
+
+  async function doRefresh(): Promise<boolean> {
+    const refreshToken = await config.tokens.getRefresh();
+    if (refreshToken) {
+      try {
+        const session = await sendOnce<{ accessToken?: unknown; refreshToken?: unknown }>(
+          "POST",
+          "/access-tokens",
+          { body: { refreshToken }, auth: false },
+        );
+        if (typeof session.accessToken === "string" && typeof session.refreshToken === "string") {
+          await config.tokens.save({
+            accessToken: session.accessToken,
+            refreshToken: session.refreshToken,
+          });
+          return true;
+        }
+      } catch {
+        // 아래 공통 실패 경로로 내려간다
+      }
+    }
+    // single-flight라 이 정리는 갱신 1회당 한 번만 일어난다
+    await config.tokens.clear();
+    config.onSessionExpired();
+    return false;
+  }
+
+  function refreshOnce(): Promise<boolean> {
+    if (!refreshInFlight) {
+      refreshInFlight = doRefresh().finally(() => {
+        refreshInFlight = null;
+      });
+    }
+    return refreshInFlight;
+  }
+
+  async function send<T>(method: string, path: string, options: RequestOptions): Promise<T> {
+    try {
+      return await sendOnce<T>(method, path, options);
+    } catch (error) {
+      const retriable =
+        error instanceof ApiError && error.status === 401 && options.auth !== false;
+      if (!retriable) throw error;
+
+      const refreshed = await refreshOnce();
+      if (!refreshed) throw error;
+
+      // 재시도는 한 번뿐이다. 또 401이면 갱신으로 풀 수 있는 상황이 아니다
+      return await sendOnce<T>(method, path, options);
+    }
   }
 
   return {

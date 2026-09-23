@@ -142,3 +142,139 @@ describe("api-client 요청 조립", () => {
     });
   });
 });
+
+// 아래 토큰 값은 테스트 픽스처이며 실제 비밀값이 아니다 (gitleaks 오탐 방지)
+const SESSION = {
+  accessToken: "access-2", // gitleaks:allow
+  tokenType: "Bearer",
+  accessTokenExpiresAt: "2026-09-23T00:10:00.000Z",
+  refreshToken: "refresh-2", // gitleaks:allow
+  refreshTokenExpiresAt: "2026-10-23T00:00:00.000Z",
+  user: { userId: "1", username: "hana" },
+};
+
+describe("api-client 401 자동 갱신", () => {
+  it("401을 받으면 갱신하고 원요청을 한 번 재시도한다", async () => {
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValueOnce(fakeResponse(401, { code: "UNAUTHORIZED", message: "인증이 필요합니다." }))
+      .mockResolvedValueOnce(fakeResponse(201, SESSION))
+      .mockResolvedValueOnce(fakeResponse(200, { username: "hana" }));
+    const { store, state } = memoryTokenStore("stale", "refresh-1");
+    const onSessionExpired = jest.fn();
+    const api = createClient({
+      baseUrl: "http://localhost:8080/api/v1",
+      platform: "MOBILE",
+      tokens: store,
+      onSessionExpired,
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    await expect(api.get("/users/me")).resolves.toEqual({ username: "hana" });
+
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+    expect(fetchFn.mock.calls[1][0]).toBe("http://localhost:8080/api/v1/access-tokens");
+    expect(state.access).toBe("access-2");
+    expect(state.refresh).toBe("refresh-2");
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it("갱신이 실패하면 토큰을 지우고 만료를 알린 뒤 원래 401을 던진다", async () => {
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValueOnce(fakeResponse(401, { code: "UNAUTHORIZED", message: "인증이 필요합니다." }))
+      .mockResolvedValueOnce(
+        fakeResponse(401, { code: "INVALID_REFRESH_TOKEN", message: "다시 로그인해 주세요." }),
+      );
+    const { store, state } = memoryTokenStore("stale", "refresh-1");
+    const onSessionExpired = jest.fn();
+    const api = createClient({
+      baseUrl: "http://localhost:8080/api/v1",
+      platform: "MOBILE",
+      tokens: store,
+      onSessionExpired,
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    await expect(api.get("/users/me")).rejects.toMatchObject({ status: 401, code: "UNAUTHORIZED" });
+
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(state.access).toBeNull();
+    expect(state.refresh).toBeNull();
+    expect(onSessionExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it("Refresh Token이 없으면 갱신을 시도하지 않는다", async () => {
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValueOnce(fakeResponse(401, { code: "UNAUTHORIZED", message: "인증이 필요합니다." }));
+    const { store } = memoryTokenStore("stale", null);
+    const onSessionExpired = jest.fn();
+    const api = createClient({
+      baseUrl: "http://localhost:8080/api/v1",
+      platform: "MOBILE",
+      tokens: store,
+      onSessionExpired,
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    await expect(api.get("/users/me")).rejects.toMatchObject({ status: 401 });
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(onSessionExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it("동시에 401을 받은 요청 셋이 갱신을 한 번만 호출한다", async () => {
+    // 갱신 전에는 401, 갱신 뒤에는 200을 주는 fetch. 재시도가 성공해야 단일 비행을 셀 수 있다
+    let refreshed = false;
+    const smartFetch = jest.fn(async (url: string) => {
+      if (url.endsWith("/access-tokens")) {
+        refreshed = true;
+        return fakeResponse(201, SESSION);
+      }
+      return refreshed
+        ? fakeResponse(200, { username: "hana" })
+        : fakeResponse(401, { code: "UNAUTHORIZED", message: "인증이 필요합니다." });
+    });
+    const { store } = memoryTokenStore("stale", "refresh-1");
+    const api = createClient({
+      baseUrl: "http://localhost:8080/api/v1",
+      platform: "MOBILE",
+      tokens: store,
+      onSessionExpired: () => {},
+      fetchFn: smartFetch as unknown as typeof fetch,
+    });
+
+    const results = await Promise.all([
+      api.get("/users/me"),
+      api.get("/users/me"),
+      api.get("/users/me"),
+    ]);
+
+    expect(results).toEqual([{ username: "hana" }, { username: "hana" }, { username: "hana" }]);
+    const refreshCalls = smartFetch.mock.calls.filter(([url]) => String(url).endsWith("/access-tokens"));
+    expect(refreshCalls).toHaveLength(1);
+  });
+
+  it("갱신 요청 자신은 401이어도 다시 갱신하지 않는다", async () => {
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValueOnce(
+        fakeResponse(401, { code: "INVALID_REFRESH_TOKEN", message: "다시 로그인해 주세요." }),
+      );
+    const { store } = memoryTokenStore(null, "refresh-1");
+    const api = createClient({
+      baseUrl: "http://localhost:8080/api/v1",
+      platform: "MOBILE",
+      tokens: store,
+      onSessionExpired: () => {},
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    await expect(
+      api.post("/access-tokens", { refreshToken: "refresh-1" }, { auth: false }), // gitleaks:allow (테스트 픽스처)
+    ).rejects.toMatchObject({ code: "INVALID_REFRESH_TOKEN" });
+
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+});
