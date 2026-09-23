@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { ScreenShell } from "@/components/ScreenShell";
 import { BackHeader } from "@/components/BackHeader";
 import { BigInput } from "@/components/BigInput";
@@ -16,6 +17,7 @@ export default function Withdraw() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const [password, setPassword] = useState("");
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     announce("회원 탈퇴예요. 정말 떠나시겠어요? 탈퇴하면 되돌릴 수 없어요. 확인을 위해 비밀번호를 입력하세요.");
@@ -30,6 +32,8 @@ export default function Withdraw() {
     try {
       await authService.withdraw(password);
       announce("탈퇴가 완료됐어요. 그동안 함께해서 고마웠어요.");
+      // 캐시를 남기면 새 계정으로 가입·로그인해도 홈이 삭제된 계정의 이름을 낭독한다
+      queryClient.clear();
       router.replace("/auth/sign-in");
     } catch (error) {
       // 비밀번호 불일치는 403 CURRENT_PASSWORD_MISMATCH다. 화면에 머물러 다시 입력받는다

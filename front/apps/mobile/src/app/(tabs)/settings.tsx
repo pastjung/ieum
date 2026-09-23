@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { ScreenShell } from "@/components/ScreenShell";
 import { ListRow } from "@/components/ListRow";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -14,6 +15,7 @@ export default function Settings() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const s = useSettingsStore();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     announce("설정이에요.");
@@ -32,6 +34,10 @@ export default function Settings() {
       void hapticError();
       await speakAsync("기기에서는 로그아웃했어요. 다만 저장된 로그인 정보를 지우지 못했어요.");
     }
+    // QueryClient는 앱 프로세스 수명 동안 하나다. 캐시를 남기면 같은 기기에서 다른 계정으로
+    // 로그인했을 때 홈이 이전 사용자의 이름·단계를 낭독한다 — 타인의 정보이자 거짓이다.
+    // 화면 전환 직전에 비워, 아직 붙어 있는 홈 화면이 재조회를 일으키지 않게 한다
+    queryClient.clear();
     router.replace("/auth/sign-in");
   };
 
