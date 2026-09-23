@@ -69,6 +69,10 @@ public class User {
   @Column(name = "level", length = 20)
   private Level level;
 
+
+  @Column(name = "exp", nullable = false)
+  private Long exp=0L;
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
 
