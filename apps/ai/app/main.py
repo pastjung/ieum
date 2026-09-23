@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.presentation.api.backend import router as backend_router
 from app.presentation.api.v1 import convert_router
 
 
@@ -23,6 +24,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(convert_router.router, prefix=settings.api_prefix)
+    # 백엔드 FastApiClient 는 baseUrl 바로 아래 /analyze, /reviewAnalyze 를 부른다 (접두어·래퍼 없음)
+    app.include_router(backend_router.router)
 
     @app.get(f"{settings.api_prefix}/health", tags=["health"])
     def health() -> dict:
