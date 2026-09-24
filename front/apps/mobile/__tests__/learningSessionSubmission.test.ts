@@ -3,6 +3,7 @@ import {
   submitSessionResults,
   createSubmissionDeduper,
   buildRetryFailureMessage,
+  ANALYZING_WAITING_COPY,
 } from "../src/services/learningSessionSubmission";
 
 /**
@@ -186,5 +187,27 @@ describe("buildRetryFailureMessage", () => {
 
   it("매핑에 없는 큰 시도 횟수도 숫자로 문구를 만든다", () => {
     expect(buildRetryFailureMessage(9, "원인")).toBe("원인 9번째 시도에도 안 됐어요. 다시 보내기를 눌러 주세요.");
+  });
+});
+
+describe("분석 중 대기 화면 문구", () => {
+  const visibleLines = [
+    ...ANALYZING_WAITING_COPY.headline.split("\n"),
+    ...ANALYZING_WAITING_COPY.detail.split("\n"),
+  ];
+
+  it("화면에 보이는 모든 줄이 낭독 문구에도 들어 있다", () => {
+    // 화면과 낭독이 갈라지면 사용자는 어느 쪽을 믿어야 할지 알 수 없다 (설계 8절).
+    // 문장 끝 문장부호만 낭독 쪽에서 다듬는다
+    for (const line of visibleLines) {
+      expect(ANALYZING_WAITING_COPY.speech).toContain(line.replace(/[.!?]$/, ""));
+    }
+  });
+
+  it("앱을 닫으면 답안이 사라진다는 사실을 낭독한다", () => {
+    // 이어하기가 없어(설계 9절) 여기서 앱을 닫으면 12문항이 전부 사라진다.
+    // 행동을 바꿔야 하는 정보라 화면에만 두면 안 된다 — 이 앱은 낭독이 주 출력이다
+    expect(ANALYZING_WAITING_COPY.speech).toContain("앱을 닫으면 처음부터 다시 풀어야 해요");
+    expect(ANALYZING_WAITING_COPY.detail).toContain("앱을 닫으면 처음부터 다시 풀어야 해요");
   });
 });

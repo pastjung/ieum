@@ -6,7 +6,11 @@ import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { useSessionStore } from "@/stores/sessionStore";
 import { learningService } from "@/services/learningService";
-import { createSubmissionDeduper, buildRetryFailureMessage } from "@/services/learningSessionSubmission";
+import {
+  createSubmissionDeduper,
+  buildRetryFailureMessage,
+  ANALYZING_WAITING_COPY,
+} from "@/services/learningSessionSubmission";
 import { describeAuthError } from "@/services/authErrors";
 import { announce, hapticError, speakAsync } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
@@ -49,7 +53,9 @@ export default function Analyzing() {
     attemptRef.current += 1;
     const attempt = attemptRef.current;
     // 낭독은 제출과 나란히 간다. 낭독이 늦어도(또는 목 세션이라 제출이 없어도) 화면 전환을 막지 않는다
-    void speakAsync("학습 완료! 결과를 분석 중이에요. 잠시만 기다려 주세요.");
+    // 화면에 띄우는 말과 같은 문장을 읽는다. "앱을 닫으면 처음부터"는 행동을 바꿔야 하는
+    // 정보라 화면에만 두면 음성으로만 쓰는 사용자에게 전달되지 않는다
+    void speakAsync(ANALYZING_WAITING_COPY.speech);
     const outcome = await dedupedSubmit({
       serverSessionId,
       attempts: buildAttempts(),
@@ -110,12 +116,12 @@ export default function Analyzing() {
     <ScreenShell style={styles.center}>
       <IeumFace size={130} expression="worried" accessibilityLabel="분석 중 캐릭터" />
       <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
-        학습 완료!{"\n"}결과를 분석 중이에요
+        {ANALYZING_WAITING_COPY.headline}
       </Text>
       {/* 이어하기가 없다(설계 9절) — `sessionId`를 기기에 저장하지 않고 답안은 스토어
           메모리에만 있다. "앱을 닫아도 괜찮다"고 안내하면 12문항이 전부 사라진다 */}
       <Text style={{ fontSize: 16 * fontScale, color: theme.color.textMuted, lineHeight: 27, textAlign: "center" }}>
-        결과를 보내는 중이에요.{"\n"}앱을 닫으면 처음부터 다시 풀어야 해요.
+        {ANALYZING_WAITING_COPY.detail}
       </Text>
     </ScreenShell>
   );

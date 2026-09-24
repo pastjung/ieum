@@ -102,3 +102,19 @@ export function buildRetryFailureMessage(attempt: number, cause: string): string
   const ordinal = RETRY_ORDINAL_KO[attempt] ?? `${attempt}번째`;
   return `${cause} ${ordinal} 시도에도 안 됐어요. 다시 보내기를 눌러 주세요.`;
 }
+
+/**
+ * `analyzing.tsx`의 대기 화면 문구. 화면과 낭독이 같은 말을 하도록 한 곳에 둔다
+ * (`buildRetryFailureMessage`와 같은 이유).
+ *
+ * **"앱을 닫으면 처음부터 다시 풀어야 한다"가 핵심이다.** 이어하기가 없고(설계 9절) 답안은
+ * 스토어 메모리에만 있어, 여기서 앱을 닫으면 12문항이 전부 사라진다. 행동을 바꿔야 하는
+ * 정보이므로 화면에만 두면 안 된다 — 이 앱은 낭독이 주 출력이다.
+ *
+ * `speech`는 `headline`과 `detail`을 그대로 이은 문장이다. 줄바꿈만 빠진다.
+ */
+export const ANALYZING_WAITING_COPY = {
+  headline: "학습 완료!\n결과를 분석 중이에요",
+  detail: "잠시만 기다려 주세요.\n앱을 닫으면 처음부터 다시 풀어야 해요.",
+  speech: "학습 완료! 결과를 분석 중이에요. 잠시만 기다려 주세요. 앱을 닫으면 처음부터 다시 풀어야 해요.",
+} as const;

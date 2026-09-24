@@ -10,7 +10,7 @@ import { useSessionStore } from "@/stores/sessionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { describeTooManyCells } from "@/services/answerLengthGuard";
 import { announce, hapticError, hapticTap, speak } from "@/a11y";
-import { useFontScale, useTheme } from "@/theme";
+import { radius, useFontScale, useTheme } from "@/theme";
 
 /** V14 문제 풀이 · 세로 V패드 / V14b 가로 두 손 입력 (기기를 돌리면 전환) */
 export default function SessionPlay() {
@@ -25,14 +25,22 @@ export default function SessionPlay() {
   const problem = useSessionStore((s) => s.current)();
   const isScreenMode = useSettingsStore((s) => s.mode) === "screen";
   const [cells, setCells] = useState<Cell[]>([]);
+  // 제출이 막힌 이유. 낭독만으로는 전달되지 않는다 — 음성·진동은 설정에서 끌 수 있고
+  // (`onboarding/accessibility.tsx`), 꺼져 있으면 `announce`도 `hapticError`도 아무 일을 하지
+  // 않는다. 그러면 길게 눌러도 화면이 그대로여서 왜 제출이 안 되는지 알 방법이 없다.
+  // 이 브랜치의 다른 실패 경로(`intro.tsx`·`analyzing.tsx`)와 같은 규칙으로 화면에도 띄운다.
+  const [blockedReason, setBlockedReason] = useState<string | null>(null);
 
   useEffect(() => {
     setCells([]);
+    setBlockedReason(null);
     if (problem) announce(`${index + 1}번 문제. ${problem.prompt}`);
   }, [problem, index]);
 
   const commit = useCallback((cell: Cell) => {
     setCells((prev) => [...prev, cell]);
+    // 입력이 달라졌으니 막힌 이유도 더 이상 사실이 아니다
+    setBlockedReason(null);
     void hapticTap();
   }, []);
 
@@ -69,14 +77,18 @@ export default function SessionPlay() {
     const tooMany = describeTooManyCells(cells.length, problem.expectedCells.length);
     if (tooMany) {
       void hapticError();
+      // 화면 문구와 낭독 문구는 같은 문자열이다 (설계 8절)
+      setBlockedReason(tooMany);
       announce(tooMany);
       return;
     }
+    setBlockedReason(null);
     submit(cells);
     router.replace("/session/grade");
   };
 
-  const eraseLast = () =>
+  const eraseLast = () => {
+    setBlockedReason(null);
     setCells((prev) => {
       if (prev.length === 0) {
         announce("지울 칸이 없어요.");
@@ -85,6 +97,7 @@ export default function SessionPlay() {
       announce("한 칸 지웠어요.");
       return prev.slice(0, -1);
     });
+  };
 
   // V14b 가로 두 손 입력 — 왼손 3·2·1, 오른손 6·5·4
   if (isLandscape) {
@@ -118,6 +131,25 @@ export default function SessionPlay() {
             </>
           }
         />
+        {blockedReason !== null && (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{
+              fontSize: 15 * fontScale,
+              lineHeight: 22,
+              color: theme.color.text,
+              backgroundColor: theme.color.surface,
+              borderWidth: 2,
+              borderColor: theme.color.primary,
+              borderRadius: radius.card,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              textAlign: "center",
+            }}
+          >
+            {blockedReason}
+          </Text>
+        )}
         <Text style={{ fontSize: 13, color: theme.color.textMuted, textAlign: "center" }}>
           양손 파지 — 왼손 3·2·1, 오른손 6·5·4
         </Text>
@@ -162,6 +194,24 @@ export default function SessionPlay() {
             {cells.length > 0 ? cellsToUnicode(cells) : "⠀"}
           </Text>
         </View>
+      )}
+      {blockedReason !== null && (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={{
+            fontSize: 17 * fontScale,
+            lineHeight: 26,
+            color: theme.color.text,
+            backgroundColor: theme.color.surface,
+            borderWidth: 2,
+            borderColor: theme.color.primary,
+            borderRadius: radius.card,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+          }}
+        >
+          {blockedReason}
+        </Text>
       )}
       <View style={{ flexDirection: "row", gap: 10 }}>
         <View style={{ flex: 1 }}>
