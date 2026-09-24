@@ -51,4 +51,17 @@ describe("세션 스토어의 완료 페이로드", () => {
     expect(useSessionStore.getState().buildAttempts()).toEqual([]);
     expect(useSessionStore.getState().serverSessionId).toBeNull();
   });
+
+  it("같은 문항을 다시 풀면 마지막 답만 보낸다", () => {
+    // 백엔드는 중복 problemSessionId가 하나라도 있으면 세션 전체를 거부한다
+    // (LearningSessionCompletionService.validateAndIndexAttempts)
+    const store = useSessionStore.getState();
+    store.start(session, "free", meta);
+    useSessionStore.getState().submit([1]);
+    useSessionStore.getState().submit([3]); // 같은 문항 재제출
+
+    const attempts = useSessionStore.getState().buildAttempts();
+
+    expect(attempts).toEqual([{ problemSessionId: 101, inputPatterns: [3] }]);
+  });
 });

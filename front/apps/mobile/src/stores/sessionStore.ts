@@ -70,8 +70,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     return session?.problems[index] ?? null;
   },
   submit: (cells) => {
-    const { index, problemSessionIds } = get();
-    const problem = get().current();
+    const { index, problemSessionIds, current } = get();
+    const problem = current();
     if (!problem) throw new Error("진행 중인 문제가 없어요");
     const result = gradeAnswer(problem.expectedCells, cells);
     set((s) => ({
@@ -79,7 +79,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         ...s.answers,
         {
           problemId: problem.id,
-          // 문항 순서로 찾는다. problemId로 찾으면 같은 문제가 두 번 배정된 세션에서 어긋난다
+          // 문항 순서(index)로 찾는다. 앱은 problemId → problemSessionId 대응을 모른다(서버만
+          // 안다) — 서버가 준 배열의 순서가 유일한 단서다. 순서가 어긋나면 답이 다른 문항에
+          // 기록되고, 화면에는 이상이 없이 점수만 틀린다
           problemSessionId: problemSessionIds[index] ?? null,
           cells,
           result,
@@ -98,12 +100,19 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   },
   correctCount: () => get().answers.filter((a) => a.result.correct).length,
   markDisconnectShown: () => set({ disconnectShown: true }),
-  buildAttempts: () =>
-    get()
-      .answers.filter((a): a is AnswerRecord & { problemSessionId: number } =>
-        a.problemSessionId !== null,
-      )
-      .map((a) => ({ problemSessionId: a.problemSessionId, inputPatterns: a.cells })),
+  buildAttempts: () => {
+    // 백엔드는 같은 problemSessionId가 두 번 있으면 제출 전체를 거부한다
+    // (LearningSessionCompletionService.validateAndIndexAttempts) — 재제출 시 마지막 답만 남긴다
+    const latestByProblemSessionId = new Map<number, Cell[]>();
+    for (const a of get().answers) {
+      if (a.problemSessionId === null) continue;
+      latestByProblemSessionId.set(a.problemSessionId, a.cells);
+    }
+    return Array.from(latestByProblemSessionId, ([problemSessionId, inputPatterns]) => ({
+      problemSessionId,
+      inputPatterns,
+    }));
+  },
   setServerResult: (result) => set({ serverResult: result }),
   reset: () =>
     set({
