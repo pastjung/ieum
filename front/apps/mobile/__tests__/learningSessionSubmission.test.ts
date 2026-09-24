@@ -120,6 +120,43 @@ describe("createSubmissionDeduper", () => {
     await forSession1;
     await forSession2;
   });
+
+  /**
+   * 리뷰 P1 재검증 — 정리하는 쪽이 "자기 entry"인지 확인하지 않으면, 먼저 시작한
+   * 세션(A)의 뒤늦은 응답이 나중에 시작한 세션(B)의 진행 중 표시를 지워 버린다. 그러면
+   * B가 아직 응답을 못 받았는데도 B로 재진입 시 completeSession이 다시 나간다 — 이
+   * 함수가 애초에 막으려던 중복 제출이 세션을 가로질러 되살아난다.
+   */
+  it("먼저 시작한 세션(A)의 응답이 늦게 도착해도, 아직 진행 중인 다른 세션(B)의 표시를 지우지 않는다", async () => {
+    const dedupedSubmit = createSubmissionDeduper();
+    const resolvers = new Map<number, (r: CompletionResponse) => void>();
+    const completeSession = jest.fn(
+      (sessionId: number) =>
+        new Promise<CompletionResponse>((resolve) => {
+          resolvers.set(sessionId, resolve);
+        }),
+    );
+
+    const forSession1 = dedupedSubmit({ serverSessionId: 1, attempts: [], completeSession }); // A 시작
+    const forSession2 = dedupedSubmit({ serverSessionId: 2, attempts: [], completeSession }); // A 진행 중에 B 시작
+    expect(completeSession).toHaveBeenCalledTimes(2);
+
+    // A의 응답이 뒤늦게 도착한다 — 이때 B의 진행 중 표시가 잘못 지워지면 안 된다.
+    // `forSession1`을 끝까지 기다려야(단순히 마이크로태스크 한 틱을 주는 것으로는
+    // 부족하다 — `submitSessionResults`의 await·반환과 `.finally` 콜백까지 여러 틱이
+    // 걸린다) A 쪽 `finally` 콜백이 실제로 실행된 뒤 상태를 확인할 수 있다.
+    resolvers.get(1)!(completionOf(1));
+    await forSession1;
+
+    // B는 아직 응답 전이다. 이 시점에 B로 다시 들어와도(예: 화면 재진입) 새 요청이
+    // 나가면 안 된다 — 나가면 세 번째 호출이 찍힌다
+    const forSession2Again = dedupedSubmit({ serverSessionId: 2, attempts: [], completeSession });
+    expect(completeSession).toHaveBeenCalledTimes(2);
+
+    resolvers.get(2)!(completionOf(1));
+    await forSession2;
+    await forSession2Again;
+  });
 });
 
 /**

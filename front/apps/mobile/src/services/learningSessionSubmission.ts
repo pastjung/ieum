@@ -48,17 +48,31 @@ type SubmitParams = Parameters<typeof submitSessionResults>[0];
  * 막는다 — 컴포넌트의 `useRef`는 인스턴스에 묶여 재마운트되면 초기화되므로 두 인스턴스에
  * 걸친 "같은 제출이 아직 진행 중"이라는 사실을 표현할 수 없다.
  */
+interface InFlightEntry {
+  serverSessionId: number | null;
+  promise: Promise<SessionSubmissionOutcome>;
+}
+
 export function createSubmissionDeduper(): (params: SubmitParams) => Promise<SessionSubmissionOutcome> {
-  let inFlight: { serverSessionId: number | null; promise: Promise<SessionSubmissionOutcome> } | null = null;
+  let inFlight: InFlightEntry | null = null;
 
   return (params) => {
-    if (inFlight === null || inFlight.serverSessionId !== params.serverSessionId) {
-      const promise = submitSessionResults(params).finally(() => {
-        inFlight = null;
-      });
-      inFlight = { serverSessionId: params.serverSessionId, promise };
+    if (inFlight !== null && inFlight.serverSessionId === params.serverSessionId) {
+      return inFlight.promise;
     }
-    return inFlight.promise;
+    // `entry`를 먼저 만들고 그 참조를 클로저로 캡처한다 — `finally`는 자신이 넣은 entry일
+    // 때만 지워야 한다. 그냥 `inFlight = null`로 지우면: 세션 A가 진행 중일 때 세션 B로
+    // 넘어가 `inFlight`가 B로 바뀐 뒤, 뒤늦게 도착한 A의 응답이 B의 entry를 지워 버린다.
+    // 그러면 B가 아직 진행 중인데도 가드가 비어, B를 다시 제출하면 completeSession이
+    // 두 번 나간다 — 이 함수가 애초에 막으려던 버그가 세션을 가로질러 되살아난다.
+    const entry: InFlightEntry = {
+      serverSessionId: params.serverSessionId,
+      promise: submitSessionResults(params).finally(() => {
+        if (inFlight === entry) inFlight = null;
+      }),
+    };
+    inFlight = entry;
+    return entry.promise;
   };
 }
 
