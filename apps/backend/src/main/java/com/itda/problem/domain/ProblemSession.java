@@ -40,4 +40,8 @@ public class ProblemSession {
     this.session = session;
     this.sequence = sequence;
   }
+
+  public void complete() {
+    this.completed = true;
+  }
 }

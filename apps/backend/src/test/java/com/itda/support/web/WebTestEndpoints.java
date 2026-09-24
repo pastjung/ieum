@@ -1,6 +1,6 @@
 package com.itda.support.web;
 
-import com.itda.global.braille.BraillePattern;
+import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
 import com.itda.global.error.ErrorCodeAttribute;
 import jakarta.servlet.Filter;
@@ -166,7 +166,7 @@ public class WebTestEndpoints {
 
     @GetMapping("/braille-pattern")
     Map<String, Object> braillePattern() {
-      return Map.of("value", BraillePattern.of(BraillePattern.MAX_VALUE + 1).getValue());
+      throw new BusinessException(ErrorCode.PATTERN_OUT_OF_RANGE);
     }
 
     @GetMapping("/send-error/{status}")

@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ScreenShell } from "@/components/ScreenShell";
 import { ListRow } from "@/components/ListRow";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { tactileStatusLabel, useTactileStore } from "@/stores/tactileStore";
 import { authService } from "@/services/authService";
 import { announce, hapticError, hapticSelect, speakAsync } from "@/a11y";
 import { controlHeight, radius, useFontScale, useTheme } from "@/theme";
@@ -36,6 +37,7 @@ export default function Settings() {
   const fontScale = useFontScale();
   const s = useSettingsStore();
   const queryClient = useQueryClient();
+  const tactile = useTactileStore();
 
   useEffect(() => {
     announce("설정이에요.");
@@ -61,6 +63,13 @@ export default function Settings() {
     router.replace("/auth/sign-in");
   };
 
+  /** 스위치만 바꾼다. 실제 시작·중지는 루트 레이아웃이 이 값을 보고 한다. */
+  const toggleItda = () => {
+    const next = !s.itdaEnabled;
+    s.setItdaEnabled(next);
+    announce(next ? '잇다를 켰어요. "하이 잇다"라고 불러 보세요.' : "잇다를 껐어요.");
+  };
+
   const setTheme = (name: "dark" | "green") => {
     void hapticSelect();
     s.setTheme(name);
@@ -84,7 +93,30 @@ export default function Settings() {
             announce(next === "voice" ? "음성 중심으로 바꿨어요" : "화면 중심으로 바꿨어요");
           }}
         />
-        <ListRow label="점자 장치 · 연결 안 됨" chevron accessibilityHint="장치 연결 상태를 확인해요" onPress={() => router.push("/device-error")} />
+        <ListRow
+          label="잇다 음성 비서"
+          description={s.itdaEnabled ? '"하이 잇다"라고 부르면 대답해요' : "켜면 호출어를 듣기 시작해요"}
+          value={s.itdaEnabled ? "켜짐" : "꺼짐"}
+          emphasizeValue={s.itdaEnabled}
+          accessibilityHint="누르면 잇다를 켜고 꺼요"
+          onPress={toggleItda}
+        />
+        <ListRow
+          label="내 목소리로 답하기"
+          description="녹음한 내 목소리로 잇다가 말해요"
+          value={s.clonedVoice ? "설정됨" : "없음"}
+          chevron
+          accessibilityHint="목소리를 녹음하고 복제하는 화면으로 가요"
+          onPress={() => router.push("/voice-clone")}
+        />
+        <ListRow
+          label="점자 장치"
+          value={tactileStatusLabel(tactile.connected, tactile.name)}
+          emphasizeValue={tactile.connected}
+          chevron
+          accessibilityHint="장치 연결 상태를 확인해요"
+          onPress={() => router.push("/device-error")}
+        />
         <ListRow label="손 캘리브레이션" chevron accessibilityHint="여섯 점 위치를 다시 익혀요" onPress={() => router.push("/calibration")} />
         <View
           style={[styles.themeRow, { borderColor: theme.color.border, minHeight: controlHeight.row, borderRadius: radius.control }]}
