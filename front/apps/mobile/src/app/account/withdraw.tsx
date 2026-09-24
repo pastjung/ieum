@@ -24,9 +24,12 @@ export default function Withdraw() {
   }, []);
 
   const withdraw = async () => {
-    if (password.length < 8) {
+    // 여기는 이미 쓰고 있는 비밀번호를 확인하는 자리다. 생성 정책(길이)을 다시 들이대면
+    // 정책이 바뀔 때 기존 사용자가 탈퇴조차 못 하고, 틀린 자릿수를 안내하게 된다.
+    // 맞는지 아닌지는 서버만 알고, 틀리면 403 CURRENT_PASSWORD_MISMATCH로 돌아온다
+    if (password.length === 0) {
       void hapticError();
-      announce("비밀번호를 확인해 주세요. 8자 이상이에요.");
+      announce("비밀번호를 입력해 주세요.");
       return;
     }
     try {

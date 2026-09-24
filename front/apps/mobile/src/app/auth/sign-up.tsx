@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { signUpSchema, type SignUpInput } from "@ieum/contracts";
+import { signUpSchema, PASSWORD_POLICY_TEXT } from "@ieum/contracts";
 import { ApiError } from "@ieum/api-client";
 import { ScreenShell } from "@/components/ScreenShell";
 import { BackHeader } from "@/components/BackHeader";
@@ -16,12 +16,51 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { announce, hapticError } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
-/* ─── 음성 중심: 한 화면에 한 입력, 3단계 (V01) ─── */
+/**
+ * 가입 폼 스키마 — 음성·화면 두 모드가 함께 쓴다.
+ *
+ * 비밀번호 확인은 서버가 받지 않는 입력이라 계약(`signUpSchema`)이 아니라 여기에 둔다.
+ * 두 모드가 같은 규칙을 쓰도록 한 곳에서만 정의한다.
+ */
+const signUpFormSchema = signUpSchema
+  .extend({ passwordConfirm: z.string() })
+  .refine((v) => v.password === v.passwordConfirm, {
+    path: ["passwordConfirm"],
+    message: "비밀번호가 서로 달라요",
+  });
+type SignUpFormInput = z.infer<typeof signUpFormSchema>;
+
+/* ─── 음성 중심: 한 화면에 한 입력, 4단계 (V01) ─── */
 
 const steps = [
-  { key: "username", title: "아이디를\n입력하세요", label: "아이디", announceText: "회원가입 1단계. 아이디를 입력하세요." },
-  { key: "password", title: "비밀번호를\n입력하세요", label: "비밀번호", announceText: "2단계. 비밀번호를 입력하세요. 8자 이상이에요." },
-  { key: "email", title: "이메일을\n입력하세요", label: "이메일", announceText: "마지막 3단계. 이메일을 입력하세요." },
+  {
+    key: "username",
+    title: "아이디를\n입력하세요",
+    label: "아이디",
+    hint: "영문, 숫자, 밑줄 4자 이상",
+    announceText: "회원가입 1단계. 아이디를 입력하세요. 영문, 숫자, 밑줄 4자 이상이에요.",
+  },
+  {
+    key: "password",
+    title: "비밀번호를\n입력하세요",
+    label: "비밀번호",
+    hint: PASSWORD_POLICY_TEXT,
+    announceText: `2단계. 비밀번호를 입력하세요. ${PASSWORD_POLICY_TEXT}여야 해요.`,
+  },
+  {
+    key: "passwordConfirm",
+    title: "비밀번호를\n다시 입력하세요",
+    label: "비밀번호 확인",
+    hint: "같은 비밀번호를 한 번 더 입력해요",
+    announceText: "3단계. 확인을 위해 같은 비밀번호를 한 번 더 입력하세요.",
+  },
+  {
+    key: "email",
+    title: "이메일을\n입력하세요",
+    label: "이메일",
+    hint: "인증 메일을 받을 주소예요",
+    announceText: "마지막 4단계. 이메일을 입력하세요. 인증 메일을 받을 주소예요.",
+  },
 ] as const;
 
 function VoiceSignUp() {
@@ -33,9 +72,9 @@ function VoiceSignUp() {
    * catch에서 바로 announce하면 그 낭독이 곧장 덮어써 버린다 — 상태로 넘겨 한 번만 읽는다
    */
   const [notice, setNotice] = useState<string | null>(null);
-  const { control, trigger, getValues, setValue, formState } = useForm<SignUpInput>({
-    resolver: zodResolver(signUpSchema),
-    defaultValues: { username: "", password: "", email: "" },
+  const { control, trigger, getValues, setValue, formState } = useForm<SignUpFormInput>({
+    resolver: zodResolver(signUpFormSchema),
+    defaultValues: { username: "", password: "", passwordConfirm: "", email: "" },
     mode: "onSubmit",
   });
 
@@ -58,10 +97,11 @@ function VoiceSignUp() {
       setStep(step + 1);
       return;
     }
-    const values = getValues();
+    // passwordConfirm은 서버가 받지 않는다. 비밀번호 원문을 필요 없이 한 번 더 실어 보내지 않는다
+    const { username, password, email } = getValues();
     try {
-      await authService.signUp(values);
-      router.replace({ pathname: "/auth/verify-email", params: { email: values.email } });
+      await authService.signUp({ username, password, email });
+      router.replace({ pathname: "/auth/verify-email", params: { email } });
     } catch (error) {
       void hapticError();
       // 음성 가입은 한 화면에 한 입력이라 단계를 되돌릴 UI가 없다. 안내만 하고 3단계에
@@ -79,7 +119,19 @@ function VoiceSignUp() {
 
   return (
     <ScreenShell>
-      <BackHeader title={`회원가입 · ${step + 1} / ${steps.length}`} />
+      <BackHeader
+        title={`회원가입 · ${step + 1} / ${steps.length}`}
+        onBack={() => {
+          // 1단계에서만 화면을 떠난다. 그 위에서는 이전 입력으로 돌아가야 한다 —
+          // 기본 동작(router.back)은 여기서 입력을 전부 버리는 것과 같다
+          if (step === 0) {
+            router.back();
+            return;
+          }
+          setNotice(null);
+          setStep(step - 1);
+        }}
+      />
       <Text accessibilityRole="header" style={{ fontSize: 28, fontWeight: "900", lineHeight: 40, color: theme.color.text }}>
         {current.title}
       </Text>
@@ -90,9 +142,10 @@ function VoiceSignUp() {
         render={({ field, fieldState }) => (
           <BigInput
             accessibilityLabel={current.label}
+            hint={current.hint}
             value={field.value}
             onChangeText={field.onChange}
-            secureTextEntry={current.key === "password"}
+            secureTextEntry={current.key === "password" || current.key === "passwordConfirm"}
             keyboardType={current.key === "email" ? "email-address" : "default"}
             autoCapitalize="none"
             autoFocus
@@ -110,25 +163,17 @@ function VoiceSignUp() {
 
 /* ─── 화면 중심: 단일 폼 (L01) ─── */
 
-const screenSchema = signUpSchema
-  .extend({ passwordConfirm: z.string() })
-  .refine((v) => v.password === v.passwordConfirm, {
-    path: ["passwordConfirm"],
-    message: "비밀번호가 서로 달라요",
-  });
-type ScreenInput = z.infer<typeof screenSchema>;
-
 function ScreenSignUp() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  const { control, handleSubmit } = useForm<ScreenInput>({
-    resolver: zodResolver(screenSchema),
+  const { control, handleSubmit } = useForm<SignUpFormInput>({
+    resolver: zodResolver(signUpFormSchema),
     defaultValues: { username: "", email: "", password: "", passwordConfirm: "" },
   });
 
   useEffect(() => {
-    announce("이음 계정 만들기예요. 아이디, 이메일, 비밀번호를 입력하세요.");
+    announce(`이음 계정 만들기예요. 아이디, 이메일, 비밀번호를 입력하세요. 비밀번호는 ${PASSWORD_POLICY_TEXT}여야 해요.`);
   }, []);
 
   const onSubmit = handleSubmit(
@@ -174,7 +219,7 @@ function ScreenSignUp() {
           control={control}
           name="password"
           render={({ field, fieldState }) => (
-            <BigInput label="비밀번호 · 8자 이상" accessibilityLabel="비밀번호" value={field.value} onChangeText={field.onChange} secureTextEntry errorMessage={fieldState.error?.message} />
+            <BigInput label="비밀번호" accessibilityLabel="비밀번호" hint={PASSWORD_POLICY_TEXT} value={field.value} onChangeText={field.onChange} secureTextEntry errorMessage={fieldState.error?.message} />
           )}
         />
         <Controller

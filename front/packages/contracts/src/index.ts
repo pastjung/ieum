@@ -3,18 +3,40 @@ import { z } from "zod";
 /** 점자 셀: 6비트 정수 (0~63) */
 export const cellSchema = z.number().int().min(0).max(63);
 
+/**
+ * 비밀번호 정책 — 백엔드 `PasswordPolicy`와 같은 값이어야 한다 (API 명세 3.4.2절).
+ *
+ * 명세가 "프론트 검증은 안내용이며 동일 규칙을 백엔드가 다시 적용한다"고 정했다.
+ * 숫자를 여기 한 곳에만 두는 이유는 앞뒤가 갈라지는 것을 막기 위해서다 — 실제로
+ * 프론트가 8자, 백엔드가 15자였던 적이 있고, 그때 사용자는 가입 버튼을 누른 뒤에야
+ * "비밀번호 정책을 확인해 주세요"라는 문구를 받았다. 무엇을 고쳐야 하는지는 알 수 없었다.
+ */
+export const PASSWORD_MIN_LENGTH = 15;
+export const PASSWORD_MAX_LENGTH = 64;
+
+/** 입력창 아래에 보여 주고 낭독할 안내. 사용자가 읽고 바로 행동할 수 있어야 한다 */
+export const PASSWORD_POLICY_TEXT = `${PASSWORD_MIN_LENGTH}자 이상 ${PASSWORD_MAX_LENGTH}자 이하, 흔하거나 유출된 적 없는 비밀번호`;
+
 export const signInSchema = z.object({
   username: z
     .string()
     .min(4, "아이디는 4자 이상이에요")
     .regex(/^[a-z0-9_]+$/i, "영문, 숫자, 밑줄만 쓸 수 있어요"),
-  password: z.string().min(8, "비밀번호는 8자 이상이에요"),
+  /**
+   * 로그인은 생성 정책을 다시 판정하지 않는다. 이미 만들어진 계정의 비밀번호를 프론트가
+   * 막을 이유가 없고, 정책이 바뀌면 기존 사용자가 로그인조차 못 하게 된다.
+   * 맞는지 아닌지는 서버만 안다.
+   */
+  password: z.string().min(1, "비밀번호를 입력해 주세요"),
 });
 export type SignInInput = z.infer<typeof signInSchema>;
 
 export const signUpSchema = z.object({
   username: signInSchema.shape.username,
-  password: signInSchema.shape.password,
+  password: z
+    .string()
+    .min(PASSWORD_MIN_LENGTH, `비밀번호는 ${PASSWORD_MIN_LENGTH}자 이상이어야 해요`)
+    .max(PASSWORD_MAX_LENGTH, `비밀번호는 ${PASSWORD_MAX_LENGTH}자를 넘을 수 없어요`),
   email: z.string().email("이메일 형식을 확인해 주세요"),
 });
 export type SignUpInput = z.infer<typeof signUpSchema>;
