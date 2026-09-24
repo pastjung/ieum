@@ -112,3 +112,68 @@ def test_session_summary_is_read_only_and_ranks_weak_skills():
     assert (
         client.post("/session-summary", json=req).json() == body
     )  # 두 번 불러도 같다(상태 변화 없음)
+
+
+def test_rule_error_does_not_leave_cell_skill_wrong_without_error():
+    """'마음'을 약자 '마'로 써서 ㅏ 칸이 빠짐 → 오류는 규칙(약자 미사용, 77)에만. ㅏ(43)는 틀림으로 세지 않는다."""
+    body = _attempt("마음", [17, 35, 42, 34], [17, 42, 34], []).json()
+    by = {r["learningSkillId"]: r for r in body["skillResults"]}
+    assert by[43] == {"learningSkillId": 43, "correct": True, "errorCounts": {}}
+    assert by[77]["correct"] is False and by[77]["errorCounts"] == {"abbr_overused": 1}
+
+
+def test_transposition_marks_both_cells():
+    body = _attempt("가방", [43, 24, 54], [43, 54, 24], []).json()
+    by = {r["learningSkillId"]: r for r in body["skillResults"]}
+    assert by[70]["errorCounts"] == {"transposition": 1} and by[23]["errorCounts"] == {
+        "transposition": 1
+    }
+    assert by[66]["correct"] is True
+
+
+def test_invariant_correct_iff_no_errors_on_random_inputs():
+    """임의 입력 1,500개: 모든 요소에서 correct == (errorCounts 비어 있음), 상태 갱신과 정오가 일치."""
+    import random
+
+    from app.infrastructure.braille_core import kbraille as kb
+
+    words = [
+        "마음",
+        "나이",
+        "가방",
+        "학교",
+        "음식",
+        "사과",
+        "하늘",
+        "까치",
+        "그래서",
+        "아이",
+        "것이",
+        "얼음",
+        "값",
+        "예의",
+    ]
+    rng = random.Random(7)
+    for _ in range(1500):
+        w = rng.choice(words)
+        exp = [c.value for c in kb.convert(w)]
+        inp = list(exp)
+        op = rng.random()
+        if op < 0.3:
+            i = rng.randrange(len(inp))
+            inp[i] ^= 1 << rng.randrange(6)
+        elif op < 0.5 and len(inp) > 1:
+            del inp[rng.randrange(len(inp))]
+        elif op < 0.7:
+            inp.insert(rng.randrange(len(inp) + 1), rng.randrange(64))
+        elif len(inp) > 1:
+            i = rng.randrange(len(inp) - 1)
+            inp[i], inp[i + 1] = inp[i + 1], inp[i]
+        body = _attempt(w, exp, inp, []).json()
+        results = {r["learningSkillId"]: r for r in body["skillResults"]}
+        assert len(results) == len(body["skillResults"])  # 요소 중복 없음
+        for r in body["skillResults"]:
+            assert r["correct"] == (not r["errorCounts"]), (w, inp, r)
+            assert all(v >= 1 for v in r["errorCounts"].values())
+        for u in body["updatedSkillStates"]:
+            assert u["nCorrect"] == int(results[u["learningSkillId"]]["correct"])
