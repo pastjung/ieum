@@ -1,6 +1,5 @@
 import { useSessionStore } from "@/stores/sessionStore";
 import { completionRequestSchema } from "@ieum/contracts";
-import { gradeAnswer } from "@ieum/domain";
 
 const session = {
   id: "12",
@@ -67,61 +66,68 @@ describe("세션 스토어의 완료 페이로드", () => {
   });
 });
 
-// 백엔드는 문항 하나라도 칸 수가 어긋나면 세션 전체를 롤백한다
-// (LearningSessionCompletionService.validateCellInputs + @Transactional). 그런데 칸 수가
-// 모자란 답은 초보 학습자의 가장 흔한 오답이고 앱은 그것을 정상적인 오답으로 채점한다 —
-// 정규화가 없으면 오답 하나가 세션 전체를 영구 실패시킨다.
-describe("칸 수가 다른 답안의 정규화", () => {
+// 칸 수가 기대와 달라도 서버는 요청을 거부하지 않는다 — 모자란 답도 넘친 답도 정상적인
+// 오답으로 채점한다(LearningSessionCompletionService.isCorrect). 그래서 앱은 입력한 칸을
+// 그대로 보낸다. 길이를 맞춰 채우거나 자르면 사용자가 입력하지 않은 답을 보내는 셈이 되고,
+// 화면에서 들은 판정과 서버가 저장하는 판정이 갈라진다.
+describe("칸 수가 기대와 다른 답안", () => {
   const multiCell = {
     id: "13",
     title: "단어",
     problems: [
-      { id: "21", prompt: "'가방'을 점자로 입력하세요", target: "가방", expectedCells: [1, 32] },
+      { id: "21", prompt: "'가방'을 점자로 입력하세요", target: "가방", expectedCells: [11, 1] },
     ],
   };
   const multiCellMeta = { serverSessionId: 13, problemSessionIds: [201] };
 
   beforeEach(() => useSessionStore.getState().reset());
 
-  it("모자란 칸은 빈 셀로 채워 기대 칸 수를 맞춘다", () => {
+  it("모자란 답을 빈 칸으로 채우지 않고 입력한 그대로 보낸다", () => {
     useSessionStore.getState().start(multiCell, "free", multiCellMeta);
-    useSessionStore.getState().submit([1]); // 두 칸짜리 문항에 한 칸만 입력
+    useSessionStore.getState().submit([11]); // 두 칸짜리 문항에 한 칸만 입력
 
-    const attempts = useSessionStore.getState().buildAttempts();
-
-    expect(attempts).toEqual([{ problemSessionId: 201, inputPatterns: [1, 0] }]);
-    expect(attempts[0]!.inputPatterns).toHaveLength(2);
+    expect(useSessionStore.getState().buildAttempts()).toEqual([
+      { problemSessionId: 201, inputPatterns: [11] },
+    ]);
   });
 
-  it("넘치는 칸은 기대 칸 수까지 자른다 (방어선 — play.tsx가 먼저 막는다)", () => {
-    // 넘치는 입력은 `play.tsx`의 제출 가드(describeTooManyCells)가 막으므로 여기 오지 않아야
-    // 한다. 우회 경로가 생겼을 때 세션 12문항을 통째로 잃지 않기 위한 마지막 방어선이다
+  it("넘치는 답을 자르지 않고 입력한 그대로 보낸다", () => {
     useSessionStore.getState().start(multiCell, "free", multiCellMeta);
-    useSessionStore.getState().submit([1, 32, 5]);
+    useSessionStore.getState().submit([11, 1, 4]); // 두 칸짜리 문항에 세 칸 입력
 
-    const attempts = useSessionStore.getState().buildAttempts();
-
-    expect(attempts).toEqual([{ problemSessionId: 201, inputPatterns: [1, 32] }]);
+    expect(useSessionStore.getState().buildAttempts()).toEqual([
+      { problemSessionId: 201, inputPatterns: [11, 1, 4] },
+    ]);
   });
 
-  it("정규화한 답안의 채점 결과가 사용자가 들은 로컬 채점과 같다", () => {
-    // gradeAnswer가 모자란 칸을 EMPTY_CELL로 읽는 것과 같은 규칙으로 채우기 때문이다.
-    // 규칙이 다르면 화면에서 들은 결과와 서버가 저장하는 결과가 갈라진다.
+  it("칸 수가 다른 답안의 페이로드도 백엔드 검증을 통과하는 모양이다", () => {
     useSessionStore.getState().start(multiCell, "free", multiCellMeta);
-    const local = useSessionStore.getState().submit([1]);
-
-    const [attempt] = useSessionStore.getState().buildAttempts();
-
-    expect(gradeAnswer(multiCell.problems[0]!.expectedCells, attempt!.inputPatterns)).toEqual(local);
-    expect(local.correct).toBe(false);
-  });
-
-  it("정규화한 페이로드가 백엔드 검증을 통과하는 모양이다", () => {
-    useSessionStore.getState().start(multiCell, "free", multiCellMeta);
-    useSessionStore.getState().submit([1]);
+    useSessionStore.getState().submit([11, 1, 4]);
 
     expect(() =>
       completionRequestSchema.parse({ attempts: useSessionStore.getState().buildAttempts() }),
     ).not.toThrow();
+  });
+
+  // 서버 채점(LearningSessionCompletionService.isCorrect)과 짝을 이루는 테스트다. 같은 문항
+  // (기대 2칸 [11, 1])·같은 입력 세 가지에 대해 백엔드
+  // `LearningSessionCompletionServiceTest.칸_수가_부족_정확_초과인_세_경우의_판정이_로컬_채점과_같다`
+  // 가 같은 판정을 단언한다. 두 채점이 갈라지면 사용자는 문항마다 들은 결과와 결과 화면의
+  // 점수가 다른 것을 보게 된다.
+  it.each([
+    ["칸이 모자라면 오답", [11], false],
+    ["칸 수와 값이 모두 맞으면 정답", [11, 1], true],
+    ["칸이 넘치면 오답", [11, 1, 4], false],
+  ] as const)("로컬 채점: %s", (_label, input, expected) => {
+    useSessionStore.getState().reset();
+    useSessionStore.getState().start(multiCell, "free", multiCellMeta);
+
+    const local = useSessionStore.getState().submit([...input]);
+
+    expect(local.correct).toBe(expected);
+    // 서버는 이 배열을 그대로 받아 같은 규칙으로 채점한다
+    expect(useSessionStore.getState().buildAttempts()).toEqual([
+      { problemSessionId: 201, inputPatterns: [...input] },
+    ]);
   });
 });
