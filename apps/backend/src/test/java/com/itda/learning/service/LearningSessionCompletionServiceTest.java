@@ -4,10 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import com.itda.curriculum.domain.CurriculumStage;
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
 import com.itda.learning.domain.AttemptCell;
@@ -16,9 +14,10 @@ import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.LearningSessionRepository;
 import com.itda.learning.domain.ProblemAttempt;
 import com.itda.learning.domain.ProblemAttemptRepository;
+import com.itda.learning.service.LearningSessionAnalysisService.AnalysisAttempt;
+import com.itda.learning.service.LearningSessionAnalysisService.SessionSummaryResult;
 import com.itda.learning.service.LearningSessionCompletionService.AttemptCommand;
 import com.itda.learning.service.LearningSessionCompletionService.CompletionCommand;
-import com.itda.learning.service.LearningSessionCompletionService.CompletionResult;
 import com.itda.problem.domain.Level;
 import com.itda.problem.domain.Problem;
 import com.itda.problem.domain.ProblemCell;
@@ -29,13 +28,14 @@ import com.itda.problem.repository.ProblemSessionRepository;
 import com.itda.problem.repository.UserWrongProblemRepository;
 import com.itda.user.domain.User;
 import com.itda.user.repository.UserJpaRepository;
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -50,6 +50,7 @@ class LearningSessionCompletionServiceTest {
   private static final long SESSION_ID = 10L;
   private static final long PROBLEM_ID = 20L;
   private static final long PROBLEM_SESSION_ID = 30L;
+
   @Mock private LearningSessionRepository learningSessionRepository;
   @Mock private ProblemSessionRepository problemSessionRepository;
   @Mock private ProblemCellRepository problemCellRepository;
@@ -57,14 +58,12 @@ class LearningSessionCompletionServiceTest {
   @Mock private AttemptCellRepository attemptCellRepository;
   @Mock private UserWrongProblemRepository userWrongProblemRepository;
   @Mock private UserJpaRepository userJpaRepository;
+  @Mock private LearningSessionAnalysisService analysisService;
 
   private LearningSessionCompletionService service;
   private LearningSession session;
   private ProblemSession problemSession;
-  private User user;
-  private AtomicReference<List<ProblemAttempt>> savedAttempts;
-  private AtomicReference<List<AttemptCell>> savedAttemptCells;
-  private AtomicReference<List<UserWrongProblem>> savedWrongProblems;
+  private ProblemAttempt storedAttempt;
 
   @BeforeEach
   void setUp() {
@@ -76,221 +75,139 @@ class LearningSessionCompletionServiceTest {
             problemAttemptRepository,
             attemptCellRepository,
             userWrongProblemRepository,
-            userJpaRepository);
+            userJpaRepository,
+            analysisService);
 
-    CurriculumStage curriculumStage = org.mockito.Mockito.mock(CurriculumStage.class);
-    given(curriculumStage.getId()).willReturn(5L);
-    session = new LearningSession(USER_ID, curriculumStage);
+    session = new LearningSession(USER_ID, null);
     ReflectionTestUtils.setField(session, "id", SESSION_ID);
-
     Problem problem = new Problem(Level.WORD, "가방");
     ReflectionTestUtils.setField(problem, "id", PROBLEM_ID);
-    problemSession = new ProblemSession(problem, session);
+    problemSession = new ProblemSession(problem, session, 1L);
     ReflectionTestUtils.setField(problemSession, "id", PROBLEM_SESSION_ID);
-    user = org.mockito.Mockito.mock(User.class);
+    problemSession.complete();
+
+    storedAttempt =
+        ProblemAttempt.forFreeSession(
+            USER_ID,
+            PROBLEM_ID,
+            SESSION_ID,
+            1,
+            null,
+            false,
+            LocalDateTime.of(2026, 9, 25, 10, 0));
+    ReflectionTestUtils.setField(storedAttempt, "id", 100L);
+    AttemptCell storedCell =
+        new AttemptCell(
+            storedAttempt, 1, 43, 32, LocalDateTime.of(2026, 9, 25, 10, 0));
 
     given(learningSessionRepository.findByIdForCompletion(SESSION_ID))
         .willReturn(Optional.of(session));
     given(problemSessionRepository.findAllForCompletion(SESSION_ID))
         .willReturn(List.of(problemSession));
+    given(problemAttemptRepository.findAllByLearningSessionIdOrderBySessionItemNoAsc(SESSION_ID))
+        .willReturn(List.of(storedAttempt));
+    given(attemptCellRepository.findAllByAttemptIds(List.of(100L)))
+        .willReturn(List.of(storedCell));
     given(problemCellRepository.findByProblemIdOrderByCellIndexAsc(PROBLEM_ID))
-        .willReturn(List.of(new ProblemCell(problem, 1, 0b001011)));
-    given(
-            userWrongProblemRepository.findAllByUser_IdAndProblem_IdIn(
-                USER_ID, List.of(PROBLEM_ID)))
+        .willReturn(List.of(new ProblemCell(problem, 1, 43)));
+    given(userWrongProblemRepository.findAllByUser_IdAndProblem_IdIn(
+            USER_ID, List.of(PROBLEM_ID)))
         .willReturn(List.of());
-    given(userJpaRepository.getReferenceById(USER_ID)).willReturn(user);
-
-    savedAttempts = new AtomicReference<>();
-    given(problemAttemptRepository.saveAllAndFlush(org.mockito.ArgumentMatchers.anyList()))
-        .willAnswer(
-            invocation -> {
-              List<ProblemAttempt> attempts = invocation.getArgument(0);
-              for (int index = 0; index < attempts.size(); index++) {
-                ReflectionTestUtils.setField(attempts.get(index), "id", 100L + index);
-              }
-              savedAttempts.set(attempts);
-              return attempts;
-            });
-    savedAttemptCells = new AtomicReference<>();
-    given(attemptCellRepository.saveAllAndFlush(org.mockito.ArgumentMatchers.anyList()))
-        .willAnswer(
-            invocation -> {
-              List<AttemptCell> cells = invocation.getArgument(0);
-              savedAttemptCells.set(cells);
-              return cells;
-            });
-    savedWrongProblems = new AtomicReference<>();
-    given(userWrongProblemRepository.saveAll(org.mockito.ArgumentMatchers.anyList()))
-        .willAnswer(
-            invocation -> {
-              List<UserWrongProblem> wrongProblems = invocation.getArgument(0);
-              savedWrongProblems.set(wrongProblems);
-              return wrongProblems;
-            });
-    given(learningSessionRepository.saveAndFlush(session)).willReturn(session);
+    given(userJpaRepository.getReferenceById(USER_ID))
+        .willReturn(org.mockito.Mockito.mock(User.class));
+    given(analysisService.summarizeSession(
+            org.mockito.ArgumentMatchers.eq(USER_ID),
+            org.mockito.ArgumentMatchers.anyList()))
+        .willReturn(
+            new SessionSummaryResult(
+                "받침을 연습해 보세요.",
+                "받침을 다시 연습해 보세요.",
+                Map.of("dot_missing", 1L),
+                List.of()));
   }
 
   @Test
-  void 전체_답안을_서버에서_채점하고_누락점과_추가점을_반환한다() {
-    Instant startedAt = Instant.now();
-    CompletionResult result = service.complete(USER_ID, SESSION_ID, command(0b010101));
+  void 저장된_문제_풀이로_전체_요약을_요청하고_세션을_완료한다() {
+    LearningSessionCompletionService.CompletionResult result =
+        service.complete(USER_ID, SESSION_ID, command(List.of(32)));
 
     assertThat(result.totalProblemCount()).isEqualTo(1);
     assertThat(result.correctProblemCount()).isZero();
-    assertThat(result.completedAt()).isBetween(startedAt, Instant.now());
-    assertThat(result.problemResults().getFirst().problemSessionId()).isEqualTo(PROBLEM_SESSION_ID);
-    assertThat(result.problemResults().getFirst().attemptId()).isEqualTo(100L);
-    assertThat(result.problemResults().getFirst().cells().getFirst().missingMask())
-        .isEqualTo(0b001010);
-    assertThat(result.problemResults().getFirst().cells().getFirst().extraMask())
-        .isEqualTo(0b010100);
-    assertThat(result.problemResults().getFirst().cells().getFirst().missingDots())
-        .containsExactly(2, 4);
-    assertThat(result.problemResults().getFirst().cells().getFirst().extraDots())
-        .containsExactly(3, 5);
-    assertThat(problemSession.isCompleted()).isTrue();
-    assertThat(savedWrongProblems.get())
-        .singleElement()
+    assertThat(result.summary().errorTypeCounts()).containsEntry("dot_missing", 1L);
+    assertThat(session.getCompletedAt()).isNotNull();
+    verify(problemAttemptRepository, never()).saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
+    verify(attemptCellRepository, never()).saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
+
+    ArgumentCaptor<List<AnalysisAttempt>> attemptsCaptor = ArgumentCaptor.forClass(List.class);
+    verify(analysisService).summarizeSession(
+        org.mockito.ArgumentMatchers.eq(USER_ID), attemptsCaptor.capture());
+    assertThat(attemptsCaptor.getValue()).singleElement()
+        .satisfies(
+            attempt -> {
+              assertThat(attempt.targetText()).isEqualTo("가방");
+              assertThat(attempt.expectedPatterns()).containsExactly(43);
+              assertThat(attempt.inputPatterns()).containsExactly(32);
+            });
+  }
+
+  @Test
+  void 오답_문제는_세션_완료_시점에_오답_목록에_추가한다() {
+    service.complete(USER_ID, SESSION_ID, command(List.of(32)));
+
+    ArgumentCaptor<List<UserWrongProblem>> wrongProblemCaptor =
+        ArgumentCaptor.forClass(List.class);
+    verify(userWrongProblemRepository).saveAll(wrongProblemCaptor.capture());
+    assertThat(wrongProblemCaptor.getValue()).singleElement()
         .satisfies(
             wrongProblem -> {
-              assertThat(wrongProblem.getUser()).isSameAs(user);
-              assertThat(wrongProblem.getProblem()).isSameAs(problemSession.getProblem());
+              assertThat(wrongProblem.getProblem().getId()).isEqualTo(PROBLEM_ID);
               assertThat(wrongProblem.isCompleted()).isFalse();
             });
   }
 
   @Test
-  void 처음부터_맞힌_문제는_오답_목록에_추가하지_않는다() {
-    service.complete(USER_ID, SESSION_ID, command(0b001011));
-
-    verify(userWrongProblemRepository, never())
-        .saveAll(org.mockito.ArgumentMatchers.anyList());
-  }
-
-  @Test
-  void 기존_오답_문제를_다시_틀리면_새로_추가하지_않는다() {
-    UserWrongProblem existingWrongProblem =
-        new UserWrongProblem(
-            user, problemSession.getProblem(), problemSession.getProblem().getLevel());
-    given(
-            userWrongProblemRepository.findAllByUser_IdAndProblem_IdIn(
-                USER_ID, List.of(PROBLEM_ID)))
-        .willReturn(List.of(existingWrongProblem));
-
-    service.complete(USER_ID, SESSION_ID, command(0b010101));
-
-    assertThat(existingWrongProblem.isCompleted()).isFalse();
-    verify(userWrongProblemRepository, never())
-        .saveAll(org.mockito.ArgumentMatchers.anyList());
-  }
-
-  @Test
-  void 기존_오답_문제를_맞히면_완료_상태로_변경한다() {
-    UserWrongProblem existingWrongProblem =
-        new UserWrongProblem(
-            user, problemSession.getProblem(), problemSession.getProblem().getLevel());
-    given(
-            userWrongProblemRepository.findAllByUser_IdAndProblem_IdIn(
-                USER_ID, List.of(PROBLEM_ID)))
-        .willReturn(List.of(existingWrongProblem));
-
-    service.complete(USER_ID, SESSION_ID, command(0b001011));
-
-    assertThat(existingWrongProblem.isCompleted()).isTrue();
-    verify(userWrongProblemRepository, never())
-        .saveAll(org.mockito.ArgumentMatchers.anyList());
-  }
-
-  @Test
-  void 완료된_세션을_재전송하면_기존_풀이를_반환한다() {
-    CompletionCommand command = command(0b001011);
-    CompletionResult first = service.complete(USER_ID, SESSION_ID, command);
-    given(problemAttemptRepository.findAllByLearningSessionIdOrderBySessionItemNoAsc(SESSION_ID))
-        .willReturn(savedAttempts.get());
-    given(attemptCellRepository.findAllByAttemptIds(List.of(100L)))
-        .willReturn(savedAttemptCells.get());
-
-    CompletionResult retried = service.complete(USER_ID, SESSION_ID, command);
-
-    assertThat(retried).isEqualTo(first);
-    verify(problemAttemptRepository, times(1))
-        .saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
-    verify(attemptCellRepository, times(1))
-        .saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
-  }
-
-  @Test
-  void 완료된_세션에_다른_답안을_보내도_최초_저장_결과를_반환한다() {
-    CompletionResult first = service.complete(USER_ID, SESSION_ID, command(0b001011));
-    given(problemAttemptRepository.findAllByLearningSessionIdOrderBySessionItemNoAsc(SESSION_ID))
-        .willReturn(savedAttempts.get());
-    given(attemptCellRepository.findAllByAttemptIds(List.of(100L)))
-        .willReturn(savedAttemptCells.get());
-
-    CompletionResult retried = service.complete(USER_ID, SESSION_ID, command(0b000000));
-
-    assertThat(retried).isEqualTo(first);
-    verify(problemAttemptRepository, times(1))
-        .saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
-  }
-
-  @Test
-  void 커리큘럼_단계가_없는_복습_세션도_완료할_수_있다() {
-    LearningSession reviewSession = new LearningSession(USER_ID, null);
-    ReflectionTestUtils.setField(reviewSession, "id", SESSION_ID);
+  void 분석되지_않은_문제가_있으면_세션을_완료하지_않는다() {
+    LearningSession incompleteSession = new LearningSession(USER_ID, null);
+    ReflectionTestUtils.setField(incompleteSession, "id", SESSION_ID);
+    ProblemSession incompleteProblem =
+        new ProblemSession(problemSession.getProblem(), incompleteSession, 1L);
+    ReflectionTestUtils.setField(incompleteProblem, "id", PROBLEM_SESSION_ID);
     given(learningSessionRepository.findByIdForCompletion(SESSION_ID))
-        .willReturn(Optional.of(reviewSession));
-    given(learningSessionRepository.saveAndFlush(reviewSession)).willReturn(reviewSession);
+        .willReturn(Optional.of(incompleteSession));
+    given(problemSessionRepository.findAllForCompletion(SESSION_ID))
+        .willReturn(List.of(incompleteProblem));
 
-    service.complete(USER_ID, SESSION_ID, command(0b001011));
-
-    assertThat(savedAttempts.get()).singleElement()
-        .satisfies(attempt -> assertThat(attempt.getCurriculumStageId()).isNull());
-  }
-
-  @Test
-  void 다른_사용자의_세션은_존재하지_않는_것처럼_응답한다() {
-    assertThatThrownBy(() -> service.complete(USER_ID + 1, SESSION_ID, command(0)))
-        .isInstanceOfSatisfying(
-            BusinessException.class,
-            exception ->
-                assertThat(exception.getErrorCode())
-                    .isEqualTo(ErrorCode.LEARNING_SESSION_NOT_FOUND));
-
-    verify(problemAttemptRepository, never())
-        .saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
-  }
-
-  @Test
-  void 배정되지_않은_problemSessionId는_거부한다() {
-    CompletionCommand command =
-        new CompletionCommand(List.of(new AttemptCommand(999L, List.of(0))));
-
-    assertThatThrownBy(() -> service.complete(USER_ID, SESSION_ID, command))
+    assertThatThrownBy(() -> service.complete(USER_ID, SESSION_ID, command(List.of(32))))
         .isInstanceOfSatisfying(
             BusinessException.class,
             exception ->
                 assertThat(exception.getErrorCode())
                     .isEqualTo(ErrorCode.INVALID_COMPLETION_REQUEST));
+
+    verify(analysisService, never())
+        .summarizeSession(
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.anyList());
   }
 
   @Test
-  void 정답_Cell_개수와_입력_개수가_다르면_거부한다() {
-    CompletionCommand command =
-        new CompletionCommand(
-            List.of(new AttemptCommand(PROBLEM_SESSION_ID, List.of(1, 2))));
+  void 전체_요약이_실패하면_세션과_오답_목록을_변경하지_않는다() {
+    given(analysisService.summarizeSession(
+            org.mockito.ArgumentMatchers.eq(USER_ID),
+            org.mockito.ArgumentMatchers.anyList()))
+        .willThrow(new BusinessException(ErrorCode.LEARNING_ANALYSIS_UNAVAILABLE));
 
-    assertThatThrownBy(() -> service.complete(USER_ID, SESSION_ID, command))
-        .isInstanceOfSatisfying(
-            BusinessException.class,
-            exception ->
-                assertThat(exception.getErrorCode())
-                    .isEqualTo(ErrorCode.INVALID_COMPLETION_REQUEST));
+    assertThatThrownBy(() -> service.complete(USER_ID, SESSION_ID, command(List.of(32))))
+        .isInstanceOf(BusinessException.class);
+
+    assertThat(session.getCompletedAt()).isNull();
+    verify(userWrongProblemRepository, never())
+        .saveAll(org.mockito.ArgumentMatchers.anyList());
+    verify(learningSessionRepository, never()).saveAndFlush(session);
   }
 
-  private static CompletionCommand command(int inputPattern) {
+  private static CompletionCommand command(List<Integer> inputPatterns) {
     return new CompletionCommand(
-        List.of(new AttemptCommand(PROBLEM_SESSION_ID, List.of(inputPattern))));
+        List.of(new AttemptCommand(PROBLEM_SESSION_ID, inputPatterns)));
   }
 }
