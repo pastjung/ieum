@@ -8,7 +8,7 @@ import { BackHeader } from "@/components/BackHeader";
 import { AppButton } from "@/components/AppButton";
 import { learningService } from "@/services/learningService";
 import { useSessionStore } from "@/stores/sessionStore";
-import { announce } from "@/a11y";
+import { announce, hapticError } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
 import type { LearningThemeId } from "@/services/mockData";
 
@@ -27,13 +27,19 @@ export default function SessionIntro() {
   const fontScale = useFontScale();
   const { theme: themeId } = useLocalSearchParams<{ theme?: LearningThemeId }>();
   const start = useSessionStore((s) => s.start);
-  const { data: session, isError, refetch } = useQuery({
-    queryKey: ["freeSession", themeId ?? "default"],
-    queryFn: () => learningService.getFreeSession(themeId),
+  const { data, isError, refetch } = useQuery({
+    queryKey: ["learningSession", themeId ?? "default"],
+    queryFn: () => learningService.startSession(themeId),
+    // 세션 생성은 서버에 행을 만든다. 화면에 다시 들어올 때마다 새 세션이 생기면 안 된다
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
   });
+  const session = data?.session;
 
   useEffect(() => {
     if (isError) {
+      void hapticError();
       announce("학습 준비가 안 됐어요. 잠시 후 다시 해 보세요.");
       return;
     }
@@ -80,8 +86,8 @@ export default function SessionIntro() {
           label="시작하기"
           disabled={!session}
           onPress={() => {
-            if (!session) return;
-            start(session);
+            if (!data) return;
+            start(data.session, "free", data.meta);
             router.replace("/session/play");
           }}
         />
