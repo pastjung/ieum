@@ -169,6 +169,9 @@ export type AuthSessionResponse = z.infer<typeof authSessionSchema>;
  */
 const identifierSchema = z.number().int().nonnegative();
 
+/** 요청으로 보내는 식별자. 백엔드가 @Positive(1 이상)로 검증한다 */
+const requestIdentifierSchema = z.number().int().positive();
+
 export const problemDetailSchema = z.object({
   /** 이 문항 "배정"의 식별자. 완료 제출이 요구한다 — problemId로는 대신할 수 없다 */
   problemSessionId: identifierSchema,
@@ -188,7 +191,7 @@ export type ProblemsResponse = z.infer<typeof problemsResponseSchema>;
 
 /** 일괄 제출. 백엔드가 @NotEmpty @Size(max=100) @Min(0) @Max(63)으로 검증한다 */
 export const attemptInputSchema = z.object({
-  problemSessionId: identifierSchema,
+  problemSessionId: requestIdentifierSchema,
   inputPatterns: z.array(cellSchema).min(1).max(100),
 });
 export type AttemptInput = z.infer<typeof attemptInputSchema>;

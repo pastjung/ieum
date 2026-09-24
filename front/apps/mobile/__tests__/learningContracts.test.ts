@@ -64,6 +64,15 @@ describe("완료 제출 계약", () => {
     ).not.toThrow();
   });
 
+  it("요청 식별자로 0을 거부한다", () => {
+    // 백엔드가 @Positive로 막는다. 여기서 통과시키면 사용자는 이유를 알 수 없는 422를 본다
+    expect(() =>
+      completionRequestSchema.parse({
+        attempts: [{ problemSessionId: 0, inputPatterns: [1] }],
+      }),
+    ).toThrow();
+  });
+
   it("완료 응답의 셀 진단을 읽는다", () => {
     const parsed = completionResponseSchema.parse({
       sessionId: 12,
