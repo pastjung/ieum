@@ -48,7 +48,7 @@ public class LearningSessionCompletionService {
             .findByIdForCompletion(sessionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.LEARNING_SESSION_NOT_FOUND));
 
-    if (!session.getUserId().equals(userId)) {
+    if (!session.getUser().getId().equals(userId)) {
       throw new BusinessException(ErrorCode.LEARNING_SESSION_NOT_FOUND);
     }
 

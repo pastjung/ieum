@@ -1,6 +1,7 @@
 package com.itda.learning.domain;
 
 import com.itda.curriculum.domain.CurriculumStage;
+import com.itda.user.domain.User;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
@@ -18,8 +19,9 @@ public class LearningSession {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(name = "user_id", nullable = false)
-  private Long userId;
+  @ManyToOne
+  @JoinColumn(name = "user_id", nullable = false)
+  private User user;
 
   @ManyToOne
   @JoinColumn(name = "curriculum_stage_id")
@@ -32,8 +34,8 @@ public class LearningSession {
   @Column(name = "completed_at")
   private LocalDateTime completedAt;
 
-  public LearningSession(Long userId, CurriculumStage curriculumStage) {
-    this.userId = userId;
+  public LearningSession(User user, CurriculumStage curriculumStage) {
+    this.user = user;
     this.curriculumStage = curriculumStage;
   }
 
@@ -46,4 +48,5 @@ public class LearningSession {
     }
     this.completedAt = completedAt;
   }
+
 }

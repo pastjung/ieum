@@ -17,6 +17,8 @@ import com.itda.problem.repository.*;
 import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
 import com.itda.user.repository.UserJpaRepository;
+
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
@@ -239,7 +241,7 @@ public class ProblemService {
         learningSessionRepository
             .findById(sessionId)
             .orElseThrow(() -> new RuntimeException("학습 세션이 없습니다."));
-    if (!ls.getUserId().equals(user.userId())) {
+    if (!ls.getUser().getId().equals(user.userId())) {
       throw new RuntimeException("해당 세션의 소유자가 아닙니다.");
     }
   }
@@ -341,7 +343,18 @@ public class ProblemService {
   }
 
   private LearningSession createSession(Long userId, CurriculumStage curriculum) {
-    LearningSession learningSession = new LearningSession(userId, curriculum);
+      User user = userJpaRepository.findById(userId).
+          orElseThrow(()-> new RuntimeException(""));
+      if(curriculum == null){
+          learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user)
+              .forEach(ls->ls.complete(LocalDateTime.now()));
+      }
+      if(curriculum != null){
+          learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(user)
+              .forEach(ls->ls.complete(LocalDateTime.now()));
+      }
+
+      LearningSession learningSession = new LearningSession(user, curriculum);
     learningSessionRepository.save(learningSession);
     return learningSession;
   }
