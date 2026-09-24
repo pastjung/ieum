@@ -117,21 +117,55 @@ class SessionService:
         return result
 
     def _skill_results(self, graded: dict[str, Any]) -> list[SkillResult]:
-        by: dict[str, SkillResult] = {}
-        for o in graded["kc_outcomes"]:
-            kc = o["kc"]
-            prev = by.get(kc)
-            correct = (prev.correct if prev else True) and bool(o["correct"])
-            by[kc] = SkillResult(
-                self.catalog.by_kc(kc).id, correct, dict(prev.error_counts) if prev else {}
-            )
+        """문항의 요소별 정오. 불변식: correct == (errorCounts 가 비어 있음).
+
+        칸 정오(정렬 결과)와 오류 귀속이 어긋나는 두 경우를 여기서 맞춘다.
+          · 규칙 오류로 귀속된 칸 — 예: '마음'을 약자 '마'로 써서 ㅏ 칸이 빠짐 → 오류는 '규칙:약자미사용'.
+            빠진 ㅏ 칸은 규칙 오류의 결과일 뿐 ㅏ 를 모른 게 아니므로 ㅏ 요소는 틀림으로 세지 않는다.
+          · 순서 바뀜(transposition) — 오류는 앞 칸에만 붙으므로 뒤 칸 요소에도 같은 유형을 붙인다.
+        그래도 틀렸는데 설명할 오류가 없는 요소가 남으면 포괄 유형 dot_mixed 로 채운다.
+        """
+        cell_kcs: list[str] = list(graded["kc"])
+        counts: dict[str, Counter[str]] = {}
+        excused: set[int] = set()
         for e in graded["errors"]:
-            kc = e.get("kc")
-            if kc in by:
-                counts = dict(by[kc].error_counts)
-                counts[e["type"]] = counts.get(e["type"], 0) + 1
-                by[kc] = SkillResult(by[kc].learning_skill_id, False, counts)
-        return list(by.values())
+            etype: str = e["type"]
+            kc: str | None = e.get("kc")
+            cell = e.get("cell")
+            targets: set[str] = {kc} if kc else set()
+            if isinstance(cell, int) and 0 <= cell < len(cell_kcs):
+                if kc and kc.startswith("규칙:") and cell_kcs[cell] != kc:
+                    excused.add(cell)
+                if etype == "transposition" and cell + 1 < len(cell_kcs):
+                    targets.add(cell_kcs[cell + 1])
+            for t in targets:
+                counts.setdefault(t, Counter())[etype] += 1
+
+        order: list[str] = []
+        observed_ok: dict[str, bool] = {}
+        for o in graded["kc_outcomes"]:
+            okc: str = o["kc"]
+            if okc not in observed_ok:
+                order.append(okc)
+                observed_ok[okc] = True
+            ok = bool(o["correct"]) or (isinstance(o.get("cell"), int) and o["cell"] in excused)
+            observed_ok[okc] = observed_ok[okc] and ok
+        known = self._known_kcs()
+        for ekc in counts:  # 오류는 있는데 결과 목록에 없던 요소(드묾)
+            if ekc not in observed_ok and ekc in known:
+                order.append(ekc)
+                observed_ok[ekc] = False
+
+        results: list[SkillResult] = []
+        for rkc in order:
+            c = counts.get(rkc, Counter())
+            if not observed_ok[rkc] and not c:
+                c = Counter({"dot_mixed": 1})  # 틀렸지만 설명할 유형이 없을 때의 포괄 유형
+            results.append(SkillResult(self.catalog.by_kc(rkc).id, not c, dict(c)))
+        return results
+
+    def _known_kcs(self) -> set[str]:
+        return {s.kc for s in self.catalog.all()}
 
     # ── ① 문항 하나 ────────────────────────────────────────────────────────
     def analyze_attempt(
