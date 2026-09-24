@@ -57,4 +57,19 @@ class LearningSessionApiIntegrationTest {
 
     assertThat(response.statusCode()).isEqualTo(401);
   }
+
+  @Test
+  void 완료_경로가_context_path를_두_번_붙이지_않는다() {
+    // context-path(/api/v1)와 클래스 @RequestMapping이 겹쳐 /api/v1/api/v1/... 에 붙어 있었다.
+    // 그 경로는 존재하지 않아야 한다 — 남아 있으면 문서와 다른 경로가 계속 살아 있다는 뜻이다.
+    HttpResponse<String> response =
+        this.client.send(
+            "POST",
+            "/api/v1/api/v1/learning-sessions/1/completion",
+            "{\"attempts\":[]}",
+            "Content-Type",
+            "application/json");
+
+    assertThat(response.statusCode()).isEqualTo(404);
+  }
 }

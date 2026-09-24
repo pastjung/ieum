@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/learning-sessions")
+@RequestMapping("/learning-sessions")
 public class LearningSessionCompletionController {
 
   private final LearningSessionCompletionService completionService;
