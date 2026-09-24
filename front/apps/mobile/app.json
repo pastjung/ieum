@@ -25,6 +25,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "./plugins/withCmakeNinja.js",
       [
         "expo-audio",
         {

@@ -10,6 +10,7 @@ import { authService } from "@/services/authService";
 import { learningService } from "@/services/learningService";
 import { todayReview } from "@/services/mockData";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useTactileStore } from "@/stores/tactileStore";
 import { announce, hapticError, hapticTap } from "@/a11y";
 import { fontSize, radius, useFontScale, useTheme } from "@/theme";
 
@@ -73,11 +74,13 @@ function VoiceHome() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  // inProgress·deviceConnected는 학습 세션 API와 BLE가 있어야 해서 목을 그대로 쓴다
+  // inProgress는 학습 세션 API가 있어야 해서 목을 그대로 쓴다
   const { data: homeSummary } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
   const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
   const stepLabel = data?.level ? LEVEL_LABEL[data.level] : "자가 진단 전";
+  // 장치 연결은 서버 요약이 아니라 실제 블루투스 상태에서 읽는다.
+  const deviceConnected = useTactileStore((s) => s.connected);
 
   useEffect(() => {
     // homeSummary(목)가 data(실제 사용자 정보)보다 먼저 도착하는 경우가 대부분이다.
@@ -155,7 +158,7 @@ function VoiceHome() {
             {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
             <ListRow
               label="점자 장치"
-              value={homeSummary.deviceConnected ? "연결됨" : "연결 안 됨"}
+              value={deviceConnected ? "연결됨" : "연결 안 됨"}
               accessibilityHint="장치 연결 상태를 확인해요"
               onPress={() => router.push("/device-error")}
             />
@@ -177,11 +180,13 @@ function ScreenHome() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  // inProgress·deviceConnected는 학습 세션 API와 BLE가 있어야 해서 목을 그대로 쓴다
+  // inProgress는 학습 세션 API가 있어야 해서 목을 그대로 쓴다
   const { data: homeSummary } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
   const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
   const stepLabel = data?.level ? LEVEL_LABEL[data.level] : "자가 진단 전";
+  // 장치 연결은 서버 요약이 아니라 실제 블루투스 상태에서 읽는다.
+  const deviceConnected = useTactileStore((s) => s.connected);
 
   return (
     <ScreenShell noBottomPadding>
@@ -272,7 +277,7 @@ function ScreenHome() {
         />
         <ListRow
           label="점자 장치"
-          value={homeSummary?.deviceConnected ? "연결됨" : "연결 안 됨"}
+          value={deviceConnected ? "연결됨" : "연결 안 됨"}
           accessibilityHint="장치 연결 상태를 확인해요"
           onPress={() => router.push("/device-error")}
         />

@@ -132,8 +132,9 @@ class ItdaAssistant implements ItdaVoiceListener {
       if (router.canGoBack()) router.back();
       return;
     }
-    // 잇다가 만든 경로만 넘기므로 타입 단언이 안전하다(DESTINATIONS에 적힌 값).
-    router.push(navigation.route as Parameters<typeof router.push>[0]);
+    // 탭 화면은 push 하면 같은 탭 위에 겹쳐 쌓이거나(학습·설정), 홈 `/(tabs)`처럼 아예 움직이지 않는다.
+    // 이미 있는 화면으로 "옮겨 가는" navigate 를 쓴다. 잇다가 만든 경로만 넘기므로 타입 단언이 안전하다.
+    router.navigate(navigation.route as Parameters<typeof router.navigate>[0]);
   }
 
   /**

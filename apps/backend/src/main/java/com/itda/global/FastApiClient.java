@@ -5,6 +5,7 @@ import com.itda.problem.dto.RegisterProblemRequest;
 import com.itda.problem.dto.ReviewAnalyzeRequest;
 import com.itda.problem.dto.ReviewAnalyzeResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -18,6 +19,7 @@ public class FastApiClient {
     return restClient
         .post()
         .uri("/analyze")
+        .contentType(MediaType.APPLICATION_JSON)
         .body(request)
         .retrieve()
         .body(ProblemAnalyzeResponse.class);
@@ -27,6 +29,7 @@ public class FastApiClient {
     return restClient
         .post()
         .uri("/reviewAnalyze")
+        .contentType(MediaType.APPLICATION_JSON)
         .body(request)
         .retrieve()
         .body(ReviewAnalyzeResponse.class);

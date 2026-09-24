@@ -14,10 +14,13 @@ import com.itda.lecture.repository.LectureRepository;
 import com.itda.problem.domain.*;
 import com.itda.problem.dto.*;
 import com.itda.problem.repository.*;
+import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
+
+import com.itda.user.repository.UserJpaRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -41,8 +44,9 @@ public class ProblemService {
   private final UserSkillMemoryRepository userSkillMemoryRepository;
   private final UserSkillErrorCountRepository userSkillErrorCountRepository;
   private final FastApiClient fastApiClient;
+    private final UserJpaRepository userJpaRepository;
 
-  @Transactional
+    @Transactional
   public void registerProblem(
       AuthenticatedUser user, Long lectureId, RegisterProblemRequest registerProblemRequest) {
     Lecture lecture = validateInstructor(user, lectureId);
@@ -129,7 +133,7 @@ public class ProblemService {
     Level level = curriculumStage.getLevel();
 
     List<UserWrongProblem> wrongProblems =
-        userWrongProblemRepository.findAllByUser_IdAndLevel(user.userId(), level);
+        userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedIsNull(user.userId(), level);
     int wrongCnt = Math.min(wrongProblems.size(), 4);
     Collections.shuffle(wrongProblems);
     List<Long> wrongProblemIds =
@@ -279,24 +283,23 @@ public class ProblemService {
     ReviewAnalyzeRequest reviewAnalyzeRequest = new ReviewAnalyzeRequest(skillStates);
     ReviewAnalyzeResponse response = fastApiClient.reviewAnalyze(reviewAnalyzeRequest);
 
-    Level level = response.level();
+    User curUser = userJpaRepository.findById(user.userId()).orElseThrow(()-> new RuntimeException("유저를 찾을 수 없습니다."));
+
+    Level level = curUser.getLevel();
     List<Long> learningSkillIds = response.learningSkillIds();
 
-    List<Problem> problems =
-        problemRepository.findAllByLevelAndLearningSkillIds(level, learningSkillIds);
+      Set<Long> selectedProblemIds = new HashSet<>();
+      ThreadLocalRandom random = ThreadLocalRandom.current();
 
-    if (problems.size() < 12) {
-      throw new RuntimeException("출제 가능한 문제가 부족합니다.");
+    for(int i=1;i<=3;i++){
+        List<Problem> problem = problemRepository.findAllByLevelAndLearningSkillId(level, learningSkillIds.get(i-1));
+        while (selectedProblemIds.size() < i*4) {
+            selectedProblemIds.add(problem.get(random.nextInt(problem.size())).getId());
+        }
     }
 
-    Set<Integer> selectedIndexes = new HashSet<>();
-    ThreadLocalRandom random = ThreadLocalRandom.current();
-
-    while (selectedIndexes.size() < 12) {
-      selectedIndexes.add(random.nextInt(problems.size()));
-    }
-
-    List<Problem> randomProblems = selectedIndexes.stream().map(problems::get).toList();
+    List<Problem> randomProblems = problemRepository.findAllById(selectedProblemIds);
+    Collections.shuffle(randomProblems);
 
     List<ProblemSession> problemSessions = new ArrayList<>();
 
