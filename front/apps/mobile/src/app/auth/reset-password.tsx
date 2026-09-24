@@ -63,7 +63,6 @@ export default function ResetPassword() {
             onChangeText={field.onChange}
             keyboardType="email-address"
             autoCapitalize="none"
-            focused
             errorMessage={fieldState.error?.message}
           />
         )}

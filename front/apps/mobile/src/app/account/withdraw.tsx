@@ -58,7 +58,6 @@ export default function Withdraw() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        focused
       />
       <View style={{ marginTop: "auto", gap: 12 }}>
         <AppButton label="탈퇴하기" variant="secondary" onPress={() => void withdraw()} accessibilityHint="계정을 삭제해요. 되돌릴 수 없어요" />

@@ -75,7 +75,6 @@ export default function SignIn() {
             value={field.value}
             onChangeText={field.onChange}
             secureTextEntry
-            focused
             errorMessage={fieldState.error?.message}
           />
         )}

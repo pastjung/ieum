@@ -72,6 +72,8 @@ function VoiceSignUp() {
    * catch에서 바로 announce하면 그 낭독이 곧장 덮어써 버린다 — 상태로 넘겨 한 번만 읽는다
    */
   const [notice, setNotice] = useState<string | null>(null);
+  /** 중복 확인 결과. 아이디가 바뀌면 반드시 지운다 — A로 확인하고 B로 가입하는 구멍을 막는다 */
+  const [usernameCheck, setUsernameCheck] = useState<string | null>(null);
   const { control, trigger, getValues, setValue, formState } = useForm<SignUpFormInput>({
     resolver: zodResolver(signUpFormSchema),
     defaultValues: { username: "", password: "", passwordConfirm: "", email: "" },
@@ -83,6 +85,29 @@ function VoiceSignUp() {
   useEffect(() => {
     announce(notice ?? current.announceText);
   }, [current, notice]);
+
+  /**
+   * 아이디 중복 확인.
+   *
+   * 백엔드에 조회 엔드포인트가 아직 없다. 형식만 먼저 봐 주고, 실제 중복 여부는 가입 시점에
+   * `409 ACCOUNT_IDENTIFIER_UNAVAILABLE`로 판정된다는 사실을 그대로 말한다 — "사용 가능한
+   * 아이디예요"라고 단정하면 확인하지 않은 것을 확인했다고 말하는 것이 된다.
+   *
+   * TODO(username-availability): `GET /api/v1/username-availability` 연결 지점.
+   */
+  const checkUsername = async () => {
+    const valid = await trigger("username");
+    if (!valid) {
+      void hapticError();
+      setUsernameCheck(null);
+      const message = formState.errors.username?.message;
+      if (message) announce(message);
+      return;
+    }
+    const message = "아이디 형식은 괜찮아요. 이미 쓰는 아이디인지는 가입할 때 확인돼요.";
+    setUsernameCheck(message);
+    announce(message);
+  };
 
   const nextStep = async () => {
     const valid = await trigger(current.key);
@@ -144,16 +169,37 @@ function VoiceSignUp() {
             accessibilityLabel={current.label}
             hint={current.hint}
             value={field.value}
-            onChangeText={field.onChange}
+            onChangeText={(text) => {
+              field.onChange(text);
+              // 확인했던 아이디가 아니게 됐다. 결과를 남겨 두면 거짓이 된다
+              if (current.key === "username") setUsernameCheck(null);
+            }}
             secureTextEntry={current.key === "password" || current.key === "passwordConfirm"}
             keyboardType={current.key === "email" ? "email-address" : "default"}
             autoCapitalize="none"
             autoFocus
-            focused
             errorMessage={fieldState.error?.message}
           />
         )}
       />
+      {current.key === "username" && (
+        <View style={{ alignItems: "flex-end", gap: 8 }}>
+          <AppButton
+            label="중복 확인"
+            variant="compact"
+            accessibilityHint="이 아이디를 쓸 수 있는지 확인해요"
+            onPress={() => void checkUsername()}
+          />
+          {usernameCheck != null && (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{ fontSize: 15, fontWeight: "700", color: theme.color.primary, textAlign: "right" }}
+            >
+              {usernameCheck}
+            </Text>
+          )}
+        </View>
+      )}
       <View style={{ marginTop: "auto", gap: 12 }}>
         <AppButton label={step < steps.length - 1 ? "다음" : "가입하기"} onPress={() => void nextStep()} />
       </View>
@@ -167,10 +213,26 @@ function ScreenSignUp() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  const { control, handleSubmit } = useForm<SignUpFormInput>({
+  const [usernameCheck, setUsernameCheck] = useState<string | null>(null);
+  const { control, handleSubmit, trigger, formState } = useForm<SignUpFormInput>({
     resolver: zodResolver(signUpFormSchema),
     defaultValues: { username: "", email: "", password: "", passwordConfirm: "" },
   });
+
+  /** 음성 모드와 같은 동작. 근거는 VoiceSignUp의 checkUsername 주석 참고 */
+  const checkUsername = async () => {
+    const valid = await trigger("username");
+    if (!valid) {
+      void hapticError();
+      setUsernameCheck(null);
+      const message = formState.errors.username?.message;
+      if (message) announce(message);
+      return;
+    }
+    const message = "아이디 형식은 괜찮아요. 이미 쓰는 아이디인지는 가입할 때 확인돼요.";
+    setUsernameCheck(message);
+    announce(message);
+  };
 
   useEffect(() => {
     announce(`이음 계정 만들기예요. 아이디, 이메일, 비밀번호를 입력하세요. 비밀번호는 ${PASSWORD_POLICY_TEXT}여야 해요.`);
@@ -205,9 +267,36 @@ function ScreenSignUp() {
           control={control}
           name="username"
           render={({ field, fieldState }) => (
-            <BigInput label="아이디" accessibilityLabel="아이디" value={field.value} onChangeText={field.onChange} autoCapitalize="none" errorMessage={fieldState.error?.message} />
+            <BigInput
+              label="아이디"
+              accessibilityLabel="아이디"
+              value={field.value}
+              onChangeText={(text) => {
+                field.onChange(text);
+                // 확인했던 아이디가 아니게 됐다. 결과를 남겨 두면 거짓이 된다
+                setUsernameCheck(null);
+              }}
+              autoCapitalize="none"
+              errorMessage={fieldState.error?.message}
+            />
           )}
         />
+        <View style={{ alignItems: "flex-end", gap: 8, marginTop: -6 }}>
+          <AppButton
+            label="중복 확인"
+            variant="compact"
+            accessibilityHint="이 아이디를 쓸 수 있는지 확인해요"
+            onPress={() => void checkUsername()}
+          />
+          {usernameCheck != null && (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{ fontSize: 14 * fontScale, fontWeight: "700", color: theme.color.primary, textAlign: "right" }}
+            >
+              {usernameCheck}
+            </Text>
+          )}
+        </View>
         <Controller
           control={control}
           name="email"
