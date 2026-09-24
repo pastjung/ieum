@@ -25,6 +25,7 @@ import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSession;
 import com.itda.problem.repository.ProblemCellRepository;
 import com.itda.problem.repository.ProblemSessionRepository;
+import com.itda.user.domain.User;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -70,7 +71,9 @@ class LearningSessionCompletionServiceTest {
 
     CurriculumStage curriculumStage = org.mockito.Mockito.mock(CurriculumStage.class);
     given(curriculumStage.getId()).willReturn(5L);
-    session = new LearningSession(USER_ID, curriculumStage);
+    User user = org.mockito.Mockito.mock(User.class);
+    given(user.getId()).willReturn(USER_ID);
+    session = new LearningSession(user, curriculumStage);
     ReflectionTestUtils.setField(session, "id", SESSION_ID);
 
     Problem problem = new Problem(Level.WORD, "가방");
@@ -162,7 +165,9 @@ class LearningSessionCompletionServiceTest {
 
   @Test
   void 커리큘럼_단계가_없는_복습_세션도_완료할_수_있다() {
-    LearningSession reviewSession = new LearningSession(USER_ID, null);
+    User user = org.mockito.Mockito.mock(User.class);
+    given(user.getId()).willReturn(USER_ID);
+    LearningSession reviewSession = new LearningSession(user, null);
     ReflectionTestUtils.setField(reviewSession, "id", SESSION_ID);
     given(learningSessionRepository.findByIdForCompletion(SESSION_ID))
         .willReturn(Optional.of(reviewSession));

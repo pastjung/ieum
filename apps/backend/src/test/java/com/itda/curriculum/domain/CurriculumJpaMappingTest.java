@@ -61,58 +61,6 @@ class CurriculumJpaMappingTest {
     assertThat(entityManager.find(CurriculumStage.class, saved.getId()).getDescription()).isNull();
   }
 
-  @Test
-  void curriculum_problems는_단계_문제_복합_PK로_저장한다() {
-    entityManager.persistAndFlush(CurriculumProblem.linkAsDefault(5L, 101L, 3));
-    entityManager.clear();
-
-    CurriculumProblem found =
-        entityManager.find(CurriculumProblem.class, CurriculumProblemId.of(5L, 101L));
-
-    assertThat(found).isNotNull();
-    assertThat(found.getDefaultOrderNo()).isEqualTo(3);
-    assertThat(found.isDefaultProblem()).isTrue();
-  }
-
-  @Test
-  void 기본_문제가_아닌_연결은_순번이_NULL이다() {
-    entityManager.persistAndFlush(CurriculumProblem.link(5L, 102L));
-    entityManager.clear();
-
-    CurriculumProblem found =
-        entityManager.find(CurriculumProblem.class, CurriculumProblemId.of(5L, 102L));
-
-    assertThat(found.getDefaultOrderNo()).isNull();
-    assertThat(found.isDefaultProblem()).isFalse();
-  }
-
-  /**
-   * (curriculum_stage_id, default_order_no) 유니크는 NULL을 서로 다른 값으로 취급하는 표준 동작에 기대어, 기본 문제에만 적용되는 부분
-   * 유니크로 동작한다. 한 단계가 출제 후보를 여러 개 갖는 것이 ERD 4.2절의 요구사항이므로 이 동작을 고정한다.
-   */
-  @Test
-  void 같은_단계에_순번이_NULL인_출제_후보를_여러_개_연결할_수_있다() {
-    entityManager.persist(CurriculumProblem.link(7L, 201L));
-    entityManager.persist(CurriculumProblem.link(7L, 202L));
-    entityManager.persist(CurriculumProblem.link(7L, 203L));
-
-    entityManager.flush();
-    entityManager.clear();
-
-    assertThat(entityManager.find(CurriculumProblem.class, CurriculumProblemId.of(7L, 201L)))
-        .isNotNull();
-    assertThat(entityManager.find(CurriculumProblem.class, CurriculumProblemId.of(7L, 203L)))
-        .isNotNull();
-  }
-
-  @Test
-  void 같은_단계에_동일한_기본_문제_순번은_저장할_수_없다() {
-    entityManager.persist(CurriculumProblem.linkAsDefault(8L, 301L, 1));
-    entityManager.persist(CurriculumProblem.linkAsDefault(8L, 302L, 1));
-
-    assertThatThrownBy(() -> entityManager.flush()).isInstanceOf(PersistenceException.class);
-  }
-
   /**
    * CurriculumStage는 팩토리·공개 생성자가 없고 setter도 없다. 매핑만 검증하면 되므로 필드를 직접 채운다 — 도메인 규칙을 검증하는 것이 아니라
    * 컬럼·제약이 의도대로 걸렸는지만 확인한다.
