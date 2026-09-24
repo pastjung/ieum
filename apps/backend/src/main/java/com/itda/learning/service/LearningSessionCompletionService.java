@@ -169,8 +169,7 @@ public class LearningSessionCompletionService {
     }
   }
 
-  private static boolean isCorrect(
-      List<ProblemCell> expectedCells, List<Integer> inputPatterns) {
+  private static boolean isCorrect(List<ProblemCell> expectedCells, List<Integer> inputPatterns) {
     for (int index = 0; index < expectedCells.size(); index++) {
       if (expectedCells.get(index).getExpectedPattern() != inputPatterns.get(index)) {
         return false;
@@ -242,11 +241,7 @@ public class LearningSessionCompletionService {
     Instant completedAt = session.getCompletedAt().toInstant(ZoneOffset.UTC);
 
     return new CompletionResult(
-        session.getId(),
-        completedAt,
-        problemResults.size(),
-        correctProblemCount,
-        problemResults);
+        session.getId(), completedAt, problemResults.size(), correctProblemCount, problemResults);
   }
 
   private static ProblemResult toProblemResult(

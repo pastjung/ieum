@@ -776,14 +776,7 @@ class UserWithdrawalMariadbTest {
               this.entityManager.persistAndGetId(
                   new LearningSession(this.userId, null), Long.class);
           this.entityManager.persist(
-              ProblemAttempt.forFreeSession(
-                  this.userId,
-                  1L,
-                  sessionId,
-                  1,
-                  1L,
-                  true,
-                  NOW));
+              ProblemAttempt.forFreeSession(this.userId, 1L, sessionId, 1, 1L, true, NOW));
           return null;
         });
   }

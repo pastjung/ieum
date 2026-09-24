@@ -2,8 +2,14 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { fontSize, useFontScale, useTheme } from "@/theme";
 
-/** 뒤로가기 + 화면 제목 헤더 */
-export function BackHeader({ title }: { title: string }) {
+/**
+ * 뒤로가기 + 화면 제목 헤더.
+ *
+ * `onBack`을 주면 화면을 떠나는 대신 그 동작을 한다. 여러 단계를 한 화면에서 처리하는
+ * 흐름(회원가입)에서 필요하다 — 기본 동작은 화면을 통째로 나가므로, 2단계에서 뒤로를
+ * 누른 사용자가 1단계로 가는 대신 입력을 전부 잃는다.
+ */
+export function BackHeader({ title, onBack }: { title: string; onBack?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
   const fontScale = useFontScale();
@@ -12,7 +18,7 @@ export function BackHeader({ title }: { title: string }) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="뒤로 가기"
-        onPress={() => router.back()}
+        onPress={onBack ?? (() => router.back())}
         style={({ pressed }) => [
           styles.back,
           { borderColor: theme.color.border },

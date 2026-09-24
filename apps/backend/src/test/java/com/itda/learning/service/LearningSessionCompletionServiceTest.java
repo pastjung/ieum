@@ -75,7 +75,7 @@ class LearningSessionCompletionServiceTest {
 
     Problem problem = new Problem(Level.WORD, "가방");
     ReflectionTestUtils.setField(problem, "id", PROBLEM_ID);
-    problemSession = new ProblemSession(problem, session);
+    problemSession = new ProblemSession(problem, session, 1L);
     ReflectionTestUtils.setField(problemSession, "id", PROBLEM_SESSION_ID);
 
     given(learningSessionRepository.findByIdForCompletion(SESSION_ID))
@@ -142,8 +142,7 @@ class LearningSessionCompletionServiceTest {
     assertThat(retried).isEqualTo(first);
     verify(problemAttemptRepository, times(1))
         .saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
-    verify(attemptCellRepository, times(1))
-        .saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
+    verify(attemptCellRepository, times(1)).saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
   }
 
   @Test
@@ -171,7 +170,8 @@ class LearningSessionCompletionServiceTest {
 
     service.complete(USER_ID, SESSION_ID, command(0b001011));
 
-    assertThat(savedAttempts.get()).singleElement()
+    assertThat(savedAttempts.get())
+        .singleElement()
         .satisfies(attempt -> assertThat(attempt.getCurriculumStageId()).isNull());
   }
 
@@ -204,8 +204,7 @@ class LearningSessionCompletionServiceTest {
   @Test
   void 정답_Cell_개수와_입력_개수가_다르면_거부한다() {
     CompletionCommand command =
-        new CompletionCommand(
-            List.of(new AttemptCommand(PROBLEM_SESSION_ID, List.of(1, 2))));
+        new CompletionCommand(List.of(new AttemptCommand(PROBLEM_SESSION_ID, List.of(1, 2))));
 
     assertThatThrownBy(() -> service.complete(USER_ID, SESSION_ID, command))
         .isInstanceOfSatisfying(

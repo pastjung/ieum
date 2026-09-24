@@ -8,6 +8,8 @@ import { ScreenShell } from "@/components/ScreenShell";
 import { BackHeader } from "@/components/BackHeader";
 import { BigInput } from "@/components/BigInput";
 import { AppButton } from "@/components/AppButton";
+import { authService } from "@/services/authService";
+import { describeAuthError } from "@/services/authErrors";
 import { announce, hapticError } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
@@ -29,9 +31,15 @@ export default function ResetPassword() {
   }, []);
 
   const onSubmit = handleSubmit(
-    ({ email }) => {
-      announce(`${email}로 재설정 링크를 보냈어요. 메일함을 확인해 주세요.`);
-      router.back();
+    async ({ email }) => {
+      try {
+        await authService.requestPasswordReset(email);
+        announce(`${email}로 재설정 링크를 보냈어요. 메일함을 확인해 주세요.`);
+        router.back();
+      } catch (error) {
+        void hapticError();
+        announce(describeAuthError(error));
+      }
     },
     (errors) => {
       void hapticError();
@@ -55,7 +63,6 @@ export default function ResetPassword() {
             onChangeText={field.onChange}
             keyboardType="email-address"
             autoCapitalize="none"
-            focused
             errorMessage={fieldState.error?.message}
           />
         )}
