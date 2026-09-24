@@ -62,6 +62,18 @@ public class SecurityConfig {
   private static final String WITHDRAWALS_PATH = "/users/me/withdrawals";
 
   /**
+   * 학습 세션 경로. 모두 본인 세션만 다루므로 인증이 필요하다.
+   *
+   * <p>{@code context-path}가 {@code /api/v1}을 붙이므로 여기에는 그 뒤만 적는다.
+   */
+  private static final String LEARNING_SESSIONS_PATH = "/learning-sessions";
+
+  private static final String LEARNING_SESSION_PATH = "/learning-sessions/{sessionId}";
+
+  private static final String LEARNING_SESSION_COMPLETION_PATH =
+      "/learning-sessions/{sessionId}/completion";
+
+  /**
    * CORS 설정 원본인 MVC 설정을 읽는 bean. Spring Security의 {@code http.cors()}도 MVC가 있으면 이 이름의 bean을 {@link
    * CorsConfigurationSource}로 찾는다.
    *
@@ -92,7 +104,11 @@ public class SecurityConfig {
         .securityMatcher(
             new OrRequestMatcher(
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, ME_PATH),
-                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, WITHDRAWALS_PATH)))
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, WITHDRAWALS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LEARNING_SESSIONS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LEARNING_SESSION_PATH),
+                PathPatternRequestMatcher.pathPattern(
+                    HttpMethod.POST, LEARNING_SESSION_COMPLETION_PATH)))
         .addFilterBefore(
             new AccessTokenAuthenticationFilter(accessAuthenticationService),
             AuthorizationFilter.class)
