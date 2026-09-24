@@ -13,7 +13,7 @@ public interface ProblemSessionRepository extends JpaRepository<ProblemSession, 
   @Query(
       "select problemSession from ProblemSession problemSession "
           + "join fetch problemSession.problem "
-          + "where problemSession.session.id = :sessionId order by problemSession.id")
+          + "where problemSession.session.id = :sessionId order by problemSession.sequence")
   List<ProblemSession> findAllForCompletion(@Param("sessionId") Long sessionId);
 
   List<ProblemSession> findAllBySession_IdOrderBySequence(Long sessionId);

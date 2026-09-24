@@ -1,5 +1,9 @@
 package com.itda.global;
 
+import com.itda.learning.dto.LearningAttemptAnalysisFastApiRequest;
+import com.itda.learning.dto.LearningAttemptAnalysisFastApiResponse;
+import com.itda.learning.dto.LearningSessionSummaryFastApiRequest;
+import com.itda.learning.dto.LearningSessionSummaryFastApiResponse;
 import com.itda.problem.dto.ProblemAnalyzeResponse;
 import com.itda.problem.dto.RegisterProblemRequest;
 import com.itda.problem.dto.ReviewAnalyzeRequest;
@@ -33,5 +37,25 @@ public class FastApiClient {
         .body(request)
         .retrieve()
         .body(ReviewAnalyzeResponse.class);
+  }
+
+  public LearningAttemptAnalysisFastApiResponse analyzeLearningAttempt(
+      LearningAttemptAnalysisFastApiRequest request) {
+    return restClient
+        .post()
+        .uri("/attempt-analyze")
+        .body(request)
+        .retrieve()
+        .body(LearningAttemptAnalysisFastApiResponse.class);
+  }
+
+  public LearningSessionSummaryFastApiResponse summarizeLearningSession(
+      LearningSessionSummaryFastApiRequest request) {
+    return restClient
+        .post()
+        .uri("/session-summary")
+        .body(request)
+        .retrieve()
+        .body(LearningSessionSummaryFastApiResponse.class);
   }
 }

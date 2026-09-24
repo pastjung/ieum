@@ -78,9 +78,17 @@ public enum ErrorCode {
 
   // learning completion
   LEARNING_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "학습 세션을 찾을 수 없습니다."),
+
+  INVALID_ATTEMPT_ANALYSIS_REQUEST(
+      HttpStatus.UNPROCESSABLE_CONTENT, "문제 풀이 분석 요청을 확인해 주세요."),
+  LEARNING_PROBLEM_ALREADY_ANALYZED(
+      HttpStatus.CONFLICT, "이미 분석이 완료된 문제입니다."),
+  INVALID_COMPLETION_REQUEST(HttpStatus.UNPROCESSABLE_CONTENT, "학습 완료 요청을 확인해 주세요."),
+  LEARNING_ANALYSIS_UNAVAILABLE(
+      HttpStatus.SERVICE_UNAVAILABLE, "학습 결과를 분석할 수 없습니다. 잠시 후 다시 시도해 주세요."),
   LEARNING_SESSION_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 종료된 학습 세션입니다."),
   INVALID_LEARNING_SESSION_INPUT(HttpStatus.UNPROCESSABLE_CONTENT, "학습 세션 요청을 확인해 주세요."),
-  INVALID_COMPLETION_REQUEST(HttpStatus.UNPROCESSABLE_CONTENT, "학습 완료 요청을 확인해 주세요."),
+
   LEARNING_CONTENT_NOT_READY(HttpStatus.SERVICE_UNAVAILABLE, "학습 콘텐츠가 아직 준비되지 않았습니다."),
 
   // problem

@@ -1,17 +1,23 @@
 package com.itda.learning.dto;
 
+import com.itda.learning.service.LearningSessionAnalysisService.WeakSkillResult;
 import com.itda.learning.service.LearningSessionCompletionService.CellResult;
 import com.itda.learning.service.LearningSessionCompletionService.CompletionResult;
 import com.itda.learning.service.LearningSessionCompletionService.ProblemResult;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public record LearningSessionCompletionResponse(
     Long sessionId,
     Instant completedAt,
     int totalProblemCount,
     int correctProblemCount,
-    List<ProblemCompletionResponse> problemResults) {
+    List<ProblemCompletionResponse> problemResults,
+    String summary,
+    String ttsText,
+    Map<String, Long> errorTypeCounts,
+    List<WeakSkillResponse> weakSkills) {
 
   public static LearningSessionCompletionResponse from(CompletionResult result) {
     return new LearningSessionCompletionResponse(
@@ -19,7 +25,28 @@ public record LearningSessionCompletionResponse(
         result.completedAt(),
         result.totalProblemCount(),
         result.correctProblemCount(),
-        result.problemResults().stream().map(ProblemCompletionResponse::from).toList());
+        result.problemResults().stream().map(ProblemCompletionResponse::from).toList(),
+        result.summary().summary(),
+        result.summary().ttsText(),
+        result.summary().errorTypeCounts(),
+        result.summary().weakSkills().stream().map(WeakSkillResponse::from).toList());
+  }
+
+  public record WeakSkillResponse(
+      Long learningSkillId,
+      Double masteryProb,
+      String label,
+      String dominantErrorType,
+      String explanation) {
+
+    static WeakSkillResponse from(WeakSkillResult result) {
+      return new WeakSkillResponse(
+          result.learningSkillId(),
+          result.masteryProb(),
+          result.label(),
+          result.dominantErrorType(),
+          result.explanation());
+    }
   }
 
   public record ProblemCompletionResponse(

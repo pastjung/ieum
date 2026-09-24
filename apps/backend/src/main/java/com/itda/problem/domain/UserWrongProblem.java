@@ -30,7 +30,7 @@ public class UserWrongProblem {
   private Problem problem;
 
   @Enumerated(EnumType.STRING)
-  @JoinColumn(name = "level", nullable = false)
+  @Column(name = "level", nullable = false)
   private Level level;
 
   @Column(name = "is_completed")
@@ -40,5 +40,9 @@ public class UserWrongProblem {
     this.user = user;
     this.problem = problem;
     this.level = level;
+  }
+
+  public void complete() {
+    this.isCompleted = true;
   }
 }

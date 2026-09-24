@@ -9,5 +9,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface UserWrongProblemRepository extends JpaRepository<UserWrongProblem, Long> {
 
+  List<UserWrongProblem> findAllByUser_IdAndLevel(Long userId, Level level);
+
+  List<UserWrongProblem> findAllByUser_IdAndProblem_IdIn(Long userId, List<Long> problemIds);
+
   List<UserWrongProblem> findAllByUser_IdAndLevelAndIsCompletedIsNull(Long userId, Level level);
+
 }
