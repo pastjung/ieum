@@ -38,6 +38,30 @@ const THEME_LABEL: Record<LearningThemeId, string> = {
 };
 
 /**
+ * 마지막 글자의 받침 유무로 "을"/"를"을 고른다.
+ *
+ * 이 앱은 낭독이 주 출력이다 — "'ㅏ'을 점자로 입력하세요"처럼 조사가 틀리면 그대로
+ * 들린다. `mockData.ts`의 목 데이터는 이미 "ㅏ를"·"ㅓ를"처럼 구분해 왔으므로 실제
+ * 응답을 옮기는 이 함수만 "을"로 고정하면 안 된다. 한글 완성형(U+AC00~U+D7A3) 범위는
+ * `(code - 0xAC00) % 28` 이 0이면 받침이 없다(를), 아니면 있다(을). 한글 완성형이
+ * 아닌 글자로 끝나는 문항이 실제로 있는지는 확인되지 않았다 — 그 경우는 "을"로 둔다.
+ */
+export function particleFor(text: string): "을" | "를" {
+  const last = text.charCodeAt(text.length - 1);
+  if (last < 0xac00 || last > 0xd7a3) return "을";
+  return (last - 0xac00) % 28 !== 0 ? "을" : "를";
+}
+
+/**
+ * `intro.tsx`의 세션 조회 쿼리 키. 화면과 캐시 제거 쪽이 같은 키를 쓰도록 여기 한 곳에
+ * 둔다 — 어긋나면 "시작하기"에서 지운 캐시와 다음 조회가 쓰는 캐시가 달라져 [1]의 버그가
+ * (완료된 세션 재사용 → 서버가 재제출을 거부) 그대로 되살아난다.
+ */
+export function learningSessionQueryKey(themeId: LearningThemeId | undefined) {
+  return ["learningSession", themeId ?? "default"] as const;
+}
+
+/**
  * 서버 응답을 화면이 쓰는 모양으로 옮긴다.
  *
  * 서버는 지시문(prompt)과 제목(title)을 주지 않는다. 화면이 낭독할 문장이 필요하므로
@@ -53,7 +77,7 @@ function toSession(
       title: theme ? THEME_LABEL[theme] : "학습",
       problems: response.problems.map((p) => ({
         id: String(p.problemId),
-        prompt: `'${p.targetText}'을 점자로 입력하세요`,
+        prompt: `'${p.targetText}'${particleFor(p.targetText)} 점자로 입력하세요`,
         target: p.targetText,
         expectedCells: p.expectedPatterns,
       })),
@@ -66,7 +90,18 @@ function toSession(
 }
 
 export const learningService = {
-  /** 새 학습 세션을 만든다. 서버가 문항을 배정해 함께 돌려준다 */
+  /**
+   * 새 학습 세션을 만든다. 서버가 문항을 배정해 함께 돌려준다.
+   *
+   * `theme` 없이 이 화면(`/session/intro`)으로 오는 진입점이 넷 있다 —
+   * `(tabs)/index.tsx`("이어서 풀기"·"복습 시작"), `(tabs)/learn.tsx`의 테마 없는
+   * 버튼, `class/review.tsx`, `tools/skills.tsx`("약한 것부터 복습"). 지금은 이 네
+   * 곳 전부 `theme ?? "consonant"`로 인해 조용히 **자음** 세션이 된다 — "복습 시작"을
+   * 눌러도 실제로는 자음 학습이 시작된다. 목 시절에도 이 진입점들은 구분되지 않았으니
+   * 이번 변경이 새로 만든 문제는 아니지만, 실제 API를 붙인 지금도 그대로 남아 있다.
+   * 제대로 고치려면 복습 API(`/review-sessions`) 연동이 필요하고, 그건 이번 작업
+   * 범위 밖이라 다음 작업으로 미뤄져 있다. 그 작업이 끝나면 이 fallback을 지운다.
+   */
   async startSession(theme?: LearningThemeId) {
     const curriculumId = CURRICULUM_ID_BY_THEME[theme ?? "consonant"];
     const response = problemsResponseSchema.parse(

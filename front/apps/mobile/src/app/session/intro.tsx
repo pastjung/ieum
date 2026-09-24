@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { BackHeader } from "@/components/BackHeader";
 import { AppButton } from "@/components/AppButton";
-import { learningService } from "@/services/learningService";
+import { learningService, learningSessionQueryKey } from "@/services/learningService";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticError } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
@@ -25,10 +25,11 @@ export default function SessionIntro() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
+  const queryClient = useQueryClient();
   const { theme: themeId } = useLocalSearchParams<{ theme?: LearningThemeId }>();
   const start = useSessionStore((s) => s.start);
   const { data, isError, refetch } = useQuery({
-    queryKey: ["learningSession", themeId ?? "default"],
+    queryKey: learningSessionQueryKey(themeId),
     queryFn: () => learningService.startSession(themeId),
     // 세션 생성은 서버에 행을 만든다. 화면에 다시 들어올 때마다 새 세션이 생기면 안 된다
     staleTime: Infinity,
@@ -88,6 +89,11 @@ export default function SessionIntro() {
           onPress={() => {
             if (!data) return;
             start(data.session, "free", data.meta);
+            // 세션의 소유권이 스토어로 넘어갔다. 캐시를 비우지 않으면 이 세션을 끝낸 뒤
+            // 같은 주제로 다시 들어왔을 때 완료된 세션이 되살아나고, 제출이 서버에서
+            // 거부된다(LearningSessionCompletionService가 완료된 배정을 다시 받으면
+            // INVALID_COMPLETION_REQUEST를 던진다)
+            queryClient.removeQueries({ queryKey: learningSessionQueryKey(themeId) });
             router.replace("/session/play");
           }}
         />
