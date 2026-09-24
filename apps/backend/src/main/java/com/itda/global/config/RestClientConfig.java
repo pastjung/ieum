@@ -12,8 +12,7 @@ public class RestClientConfig {
 
   @Bean
   public RestClient restClient(@Value("${itda.ai.base-url}") String baseUrl) {
-    HttpClient httpClient =
-        HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+    HttpClient httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
 
     JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
 
