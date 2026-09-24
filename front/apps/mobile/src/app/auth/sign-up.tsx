@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { signUpSchema, PASSWORD_POLICY_TEXT } from "@ieum/contracts";
+import { signUpSchema, PASSWORD_POLICY_TEXT, USERNAME_POLICY_TEXT } from "@ieum/contracts";
 import { ApiError } from "@ieum/api-client";
 import { ScreenShell } from "@/components/ScreenShell";
 import { BackHeader } from "@/components/BackHeader";
@@ -37,8 +37,8 @@ const steps = [
     key: "username",
     title: "아이디를\n입력하세요",
     label: "아이디",
-    hint: "영문, 숫자, 밑줄 4자 이상",
-    announceText: "회원가입 1단계. 아이디를 입력하세요. 영문, 숫자, 밑줄 4자 이상이에요.",
+    hint: USERNAME_POLICY_TEXT,
+    announceText: `회원가입 1단계. 아이디를 입력하세요. ${USERNAME_POLICY_TEXT}여야 해요.`,
   },
   {
     key: "password",
@@ -72,8 +72,13 @@ function VoiceSignUp() {
    * catch에서 바로 announce하면 그 낭독이 곧장 덮어써 버린다 — 상태로 넘겨 한 번만 읽는다
    */
   const [notice, setNotice] = useState<string | null>(null);
-  /** 중복 확인 결과. 아이디가 바뀌면 반드시 지운다 — A로 확인하고 B로 가입하는 구멍을 막는다 */
+  /** 중복 확인 결과 문구 */
   const [usernameCheck, setUsernameCheck] = useState<string | null>(null);
+  /**
+   * 확인을 통과한 아이디 자체를 기억한다. 단순한 boolean으로 두면 A로 확인하고 B로 가입하는
+   * 구멍이 열린다 — 지금 입력값과 같을 때만 통과로 친다.
+   */
+  const [checkedUsername, setCheckedUsername] = useState<string | null>(null);
   const { control, trigger, getValues, setValue, formState } = useForm<SignUpFormInput>({
     resolver: zodResolver(signUpFormSchema),
     defaultValues: { username: "", password: "", passwordConfirm: "", email: "" },
@@ -86,27 +91,39 @@ function VoiceSignUp() {
     announce(notice ?? current.announceText);
   }, [current, notice]);
 
-  /**
-   * 아이디 중복 확인.
-   *
-   * 백엔드에 조회 엔드포인트가 아직 없다. 형식만 먼저 봐 주고, 실제 중복 여부는 가입 시점에
-   * `409 ACCOUNT_IDENTIFIER_UNAVAILABLE`로 판정된다는 사실을 그대로 말한다 — "사용 가능한
-   * 아이디예요"라고 단정하면 확인하지 않은 것을 확인했다고 말하는 것이 된다.
-   *
-   * TODO(username-availability): `GET /api/v1/username-availability` 연결 지점.
-   */
+  /** 확인 결과는 화면과 낭독 양쪽에 남긴다. 음성이 꺼져 있어도 사용자가 알 수 있어야 한다 */
+  const setUsernameCheckAndAnnounce = (message: string) => {
+    setUsernameCheck(message);
+    announce(message);
+  };
+
+  /** 아이디 중복 확인 */
   const checkUsername = async () => {
     const valid = await trigger("username");
     if (!valid) {
       void hapticError();
+      setCheckedUsername(null);
       setUsernameCheck(null);
       const message = formState.errors.username?.message;
       if (message) announce(message);
       return;
     }
-    const message = "아이디 형식은 괜찮아요. 이미 쓰는 아이디인지는 가입할 때 확인돼요.";
-    setUsernameCheck(message);
-    announce(message);
+    try {
+      const result = await authService.checkUsernameAvailability(getValues("username"));
+      if (!result.available) {
+        void hapticError();
+        setCheckedUsername(null);
+        return setUsernameCheckAndAnnounce("이미 쓰고 있는 아이디예요. 다른 아이디로 해 주세요.");
+      }
+      // 서버가 정규화한 값으로 입력을 맞춘다. 그래야 확인한 아이디와 가입할 아이디가 같다
+      setValue("username", result.username);
+      setCheckedUsername(result.username);
+      setUsernameCheckAndAnnounce("사용 가능한 아이디예요.");
+    } catch (error) {
+      void hapticError();
+      setCheckedUsername(null);
+      setUsernameCheckAndAnnounce(describeAuthError(error));
+    }
   };
 
   const nextStep = async () => {
@@ -115,6 +132,12 @@ function VoiceSignUp() {
       void hapticError();
       const message = formState.errors[current.key]?.message;
       if (message) announce(message);
+      return;
+    }
+    // 확인을 통과한 그 아이디여야 넘어간다. 확인 후 값을 고쳤으면 통과가 아니다
+    if (current.key === "username" && getValues("username") !== checkedUsername) {
+      void hapticError();
+      setUsernameCheckAndAnnounce("중복 확인을 먼저 눌러 주세요.");
       return;
     }
     if (step < steps.length - 1) {
@@ -174,7 +197,10 @@ function VoiceSignUp() {
             onChangeText={(text) => {
               field.onChange(text);
               // 확인했던 아이디가 아니게 됐다. 결과를 남겨 두면 거짓이 된다
-              if (current.key === "username") setUsernameCheck(null);
+              if (current.key === "username") {
+                setUsernameCheck(null);
+                setCheckedUsername(null);
+              }
             }}
             secureTextEntry={current.key === "password" || current.key === "passwordConfirm"}
             keyboardType={current.key === "email" ? "email-address" : "default"}
@@ -224,26 +250,47 @@ function ScreenSignUp() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const [usernameCheck, setUsernameCheck] = useState<string | null>(null);
+  /** 확인을 통과한 아이디. 지금 입력값과 같을 때만 통과로 친다 */
+  const [checkedUsername, setCheckedUsername] = useState<string | null>(null);
   /** 서버가 거절한 이유. 입력칸 오류와 달리 붙일 자리가 없어 따로 띄운다 */
   const [formError, setFormError] = useState<string | null>(null);
-  const { control, handleSubmit, trigger, formState } = useForm<SignUpFormInput>({
-    resolver: zodResolver(signUpFormSchema),
-    defaultValues: { username: "", email: "", password: "", passwordConfirm: "" },
-  });
+  const { control, handleSubmit, trigger, formState, getValues, setValue } =
+    useForm<SignUpFormInput>({
+      resolver: zodResolver(signUpFormSchema),
+      defaultValues: { username: "", email: "", password: "", passwordConfirm: "" },
+    });
+
+  const setUsernameCheckAndAnnounce = (message: string) => {
+    setUsernameCheck(message);
+    announce(message);
+  };
 
   /** 음성 모드와 같은 동작. 근거는 VoiceSignUp의 checkUsername 주석 참고 */
   const checkUsername = async () => {
     const valid = await trigger("username");
     if (!valid) {
       void hapticError();
+      setCheckedUsername(null);
       setUsernameCheck(null);
       const message = formState.errors.username?.message;
       if (message) announce(message);
       return;
     }
-    const message = "아이디 형식은 괜찮아요. 이미 쓰는 아이디인지는 가입할 때 확인돼요.";
-    setUsernameCheck(message);
-    announce(message);
+    try {
+      const result = await authService.checkUsernameAvailability(getValues("username"));
+      if (!result.available) {
+        void hapticError();
+        setCheckedUsername(null);
+        return setUsernameCheckAndAnnounce("이미 쓰고 있는 아이디예요. 다른 아이디로 해 주세요.");
+      }
+      setValue("username", result.username);
+      setCheckedUsername(result.username);
+      setUsernameCheckAndAnnounce("사용 가능한 아이디예요.");
+    } catch (error) {
+      void hapticError();
+      setCheckedUsername(null);
+      setUsernameCheckAndAnnounce(describeAuthError(error));
+    }
   };
 
   useEffect(() => {
@@ -253,6 +300,12 @@ function ScreenSignUp() {
   const onSubmit = handleSubmit(
     async ({ username, email, password }) => {
       setFormError(null);
+      // 확인을 통과한 그 아이디여야 가입한다. 확인 후 값을 고쳤으면 통과가 아니다
+      if (username !== checkedUsername) {
+        void hapticError();
+        setUsernameCheckAndAnnounce("중복 확인을 먼저 눌러 주세요.");
+        return;
+      }
       try {
         await authService.signUp({ username, email, password });
         router.replace({ pathname: "/auth/verify-email", params: { email } });
@@ -285,11 +338,13 @@ function ScreenSignUp() {
             <BigInput
               label="아이디"
               accessibilityLabel="아이디"
+              hint={USERNAME_POLICY_TEXT}
               value={field.value}
               onChangeText={(text) => {
                 field.onChange(text);
                 // 확인했던 아이디가 아니게 됐다. 결과를 남겨 두면 거짓이 된다
                 setUsernameCheck(null);
+                setCheckedUsername(null);
               }}
               autoCapitalize="none"
               errorMessage={fieldState.error?.message}

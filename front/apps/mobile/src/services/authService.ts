@@ -1,9 +1,11 @@
 import { ApiError } from "@ieum/api-client";
 import {
   authSessionSchema,
+  usernameAvailabilitySchema,
   userSummarySchema,
   type SignInInput,
   type SignUpInput,
+  type UsernameAvailability,
   type UserSummary,
 } from "@ieum/contracts";
 import { api } from "./apiClient";
@@ -24,6 +26,20 @@ export const authService = {
   async signUp(input: SignUpInput): Promise<{ email: string }> {
     const user = userSummarySchema.parse(await api.post("/users", input, { auth: false }));
     return { email: user.email };
+  },
+
+  /**
+   * 아이디를 가입에 쓸 수 있는지 미리 조회한다. 로그인 전에 부르므로 인증을 붙이지 않는다.
+   *
+   * 결과는 **조회 시점의 판정일 뿐이다**. 이 조회와 가입 사이에 다른 사람이 같은 값을
+   * 선점할 수 있으므로 `available`이 참이어도 가입이 `409`로 실패할 수 있다.
+   */
+  async checkUsernameAvailability(username: string): Promise<UsernameAvailability> {
+    return usernameAvailabilitySchema.parse(
+      await api.get(`/username-availability?username=${encodeURIComponent(username)}`, {
+        auth: false,
+      }),
+    );
   },
 
   async signIn(input: SignInInput): Promise<{ userName: string }> {
