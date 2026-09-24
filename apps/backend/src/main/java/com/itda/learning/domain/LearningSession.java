@@ -36,4 +36,14 @@ public class LearningSession {
     this.userId = userId;
     this.curriculumStage = curriculumStage;
   }
+
+  public void complete(LocalDateTime completedAt) {
+    if (this.completedAt != null) {
+      throw new IllegalStateException("이미 완료된 학습 세션입니다.");
+    }
+    if (completedAt == null) {
+      throw new IllegalArgumentException("완료 시각은 필수입니다.");
+    }
+    this.completedAt = completedAt;
+  }
 }
