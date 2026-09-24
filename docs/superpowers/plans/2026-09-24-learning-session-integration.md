@@ -264,7 +264,7 @@ git commit -m "fix(learning): 완료 엔드포인트의 중복 경로 프리픽�
 
 ### Task 3: 세션 응답에 `problemSessionId` 를 넣는다
 
-세션 생성 응답의 문항에 `problemSessionId` 가 없는데 완료 제출은 문항마다 그것을 요구한다. 앱이 받은 값만으로 제출 요청을 만들 수 없다. 같은 문제가 한 세션에 두 번 배정될 수 있으므로 `problemId` 로 대신할 수 없다.
+세션 생성 응답의 문항에 `problemSessionId` 가 없는데 완료 제출은 문항마다 그것을 요구한다. 앱이 받은 값만으로 제출 요청을 만들 수 없다. `problemId` 로 대신할 수 없는 이유는 앱이 둘 사이의 대응을 알지 못하기 때문이다 — 그 대응은 서버만 안다.
 
 **Files:**
 - Modify: `apps/backend/src/main/java/com/itda/problem/dto/ProblemDetail.java`
@@ -641,7 +641,7 @@ git commit -m "feat(learning): 학습 세션 API 계약을 스키마로 정의�
 
 ### Task 5: `sessionStore` 가 배정 식별자를 들고 제출 페이로드를 만든다
 
-지금 `AnswerRecord` 는 `problemId` 를 들고 있는데, 완료 제출이 요구하는 것은 `problemSessionId` 다. 같은 문제가 한 세션에 두 번 배정될 수 있어 `problemId` 로는 어느 배정에 대한 답인지 가릴 수 없다.
+지금 `AnswerRecord` 는 `problemId` 를 들고 있는데, 완료 제출이 요구하는 것은 `problemSessionId` 다. 앱은 둘 사이의 대응을 알지 못하므로(서버만 안다) 받은 값을 문항 순서 그대로 들고 있어야 한다.
 
 **Files:**
 - Modify: `front/apps/mobile/src/stores/sessionStore.ts`
@@ -664,8 +664,7 @@ const session = {
   title: "자음",
   problems: [
     { id: "7", prompt: "'가'를 점자로 입력하세요", target: "가", expectedCells: [1] },
-    // 같은 문제가 두 번 배정된 경우. problemId로는 두 답을 가릴 수 없다
-    { id: "7", prompt: "'가'를 점자로 입력하세요", target: "가", expectedCells: [1] },
+    { id: "8", prompt: "'방'을 점자로 입력하세요", target: "방", expectedCells: [3] },
   ],
 };
 
@@ -674,6 +673,8 @@ const meta = { serverSessionId: 12, problemSessionIds: [101, 102] };
 describe("세션 스토어의 완료 페이로드", () => {
   beforeEach(() => useSessionStore.getState().reset());
 
+  // 앱은 problemId → problemSessionId 대응을 알지 못한다(서버만 안다). 받은 순서를 그대로
+  // 믿는 수밖에 없으므로, 순서가 어긋나면 답이 다른 문항에 기록된다
   it("배정 식별자를 문항 순서대로 붙인다", () => {
     const store = useSessionStore.getState();
     store.start(session, "free", meta);

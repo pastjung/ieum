@@ -88,10 +88,10 @@ export const learningService = {
   /**
    * 새 학습 세션을 만든다. 서버가 문항을 배정해 함께 돌려준다.
    *
-   * `theme` 없이 이 화면(`/session/intro`)으로 오는 진입점이 넷 있다 —
-   * `(tabs)/index.tsx`("이어서 풀기"·"복습 시작"), `(tabs)/learn.tsx`의 테마 없는
-   * 버튼, `class/review.tsx`, `tools/skills.tsx`("약한 것부터 복습"). 지금은 이 네
-   * 곳 전부 `theme ?? "consonant"`로 인해 조용히 **자음** 세션이 된다 — "복습 시작"을
+   * `theme` 없이 이 화면(`/session/intro`)으로 오는 진입점이 **4개 파일 8곳** 있다 —
+   * `(tabs)/index.tsx:99,227,269`("이어서 풀기"·"복습 시작"), `(tabs)/learn.tsx:76,82`의
+   * 테마 없는 버튼, `class/review.tsx:47`, `tools/skills.tsx:49,134`("약한 것부터 복습").
+   * 지금은 이 여덟 곳 전부 `theme ?? "consonant"`로 인해 조용히 **자음** 세션이 된다 — "복습 시작"을
    * 눌러도 실제로는 자음 학습이 시작된다. 목 시절에도 이 진입점들은 구분되지 않았으니
    * 이번 변경이 새로 만든 문제는 아니지만, 실제 API를 붙인 지금도 그대로 남아 있다.
    * 제대로 고치려면 복습 API(`/review-sessions`) 연동이 필요하고, 그건 이번 작업

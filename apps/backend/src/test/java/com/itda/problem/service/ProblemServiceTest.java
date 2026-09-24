@@ -293,8 +293,8 @@ class ProblemServiceTest {
 
   @Test
   void 세션_조회_응답의_각_문항이_problemSessionId를_갖는다() {
-    // 앱은 이 값으로만 완료 제출을 만들 수 있다. 같은 문제가 한 세션에 두 번 배정될 수 있어
-    // problemId로는 어느 배정에 대한 답인지 가릴 수 없다.
+    // 앱은 이 값으로만 완료 제출을 만들 수 있다. problemId로부터 problemSessionId를 유도할
+    // 방법이 앱에는 없다 — 그 대응은 서버만 안다.
     long sessionId = 55L;
     long learnerId = 9L;
     AuthenticatedUser learner = new AuthenticatedUser(learnerId, UserRole.LEARNER);
