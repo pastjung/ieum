@@ -11,7 +11,7 @@ import { BackHeader } from "@/components/BackHeader";
 import { BigInput } from "@/components/BigInput";
 import { AppButton } from "@/components/AppButton";
 import { authService } from "@/services/authService";
-import { describeAuthError } from "@/services/authErrors";
+import { describeActionTokenError } from "@/services/authErrors";
 import { extractActionToken } from "@/services/actionToken";
 import { announce, hapticError, hapticSuccess } from "@/a11y";
 import { useTheme } from "@/theme";
@@ -89,7 +89,7 @@ function ConfirmForm({ token }: { token: string }) {
         announce("비밀번호를 바꿨어요. 새 비밀번호로 로그인해 주세요.");
         router.replace("/auth/sign-in");
       } catch (error) {
-        fail(describeAuthError(error));
+        fail(describeActionTokenError(error, "재설정 메일을 새로 요청해 주세요."));
       }
     },
     (errors) => {

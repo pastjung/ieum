@@ -10,7 +10,7 @@ import { BackHeader } from "@/components/BackHeader";
 import { BigInput } from "@/components/BigInput";
 import { AppButton } from "@/components/AppButton";
 import { authService } from "@/services/authService";
-import { describeAuthError } from "@/services/authErrors";
+import { describeActionTokenError, describeAuthError } from "@/services/authErrors";
 import { extractActionToken } from "@/services/actionToken";
 import { announce, hapticError, hapticSuccess } from "@/a11y";
 import { useTheme } from "@/theme";
@@ -50,9 +50,7 @@ function Verifying({ token }: { token: string }) {
         if (cancelled) return;
         void hapticError();
         setState("failed");
-        // 만료·이미 사용·재발급 교체가 모두 같은 400으로 온다. 원인을 가르지 않고
-        // 다음 행동만 알려 준다 — 사용자가 할 수 있는 일은 어느 쪽이든 하나다
-        const text = `${describeAuthError(error)} 인증 메일을 새로 요청해 주세요.`;
+        const text = describeActionTokenError(error, "인증 메일을 새로 요청해 주세요.");
         setMessage(text);
         announce(text);
       });

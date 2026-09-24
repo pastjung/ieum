@@ -28,3 +28,20 @@ export function describeAuthError(error: unknown): string {
   }
   return "문제가 생겼어요. 잠시 후 다시 시도해 주세요.";
 }
+
+/**
+ * 메일 링크의 토큰을 소비하다 실패했을 때 읽어 줄 한 문장을 만든다.
+ *
+ * 토큰이 거절되는 이유는 만료·이미 사용·재발급 교체가 모두 같은 `ACTION_TOKEN_INVALID`로
+ * 온다. 원인을 가르지 않는 편이 낫다 — 어느 쪽이든 사용자가 할 수 있는 일은 하나뿐이다.
+ *
+ * `nextStep`을 화면이 넘기는 이유는, 그 하나가 화면마다 다르기 때문이다(인증 메일이냐
+ * 재설정 메일이냐). 서버 문구는 "링크를 다시 요청해 주세요"까지만 말하므로 거기에 화면
+ * 문구를 덧붙이면 같은 지시를 두 번 하게 된다 — 낭독으로 들으면 특히 거슬린다.
+ */
+export function describeActionTokenError(error: unknown, nextStep: string): string {
+  if (error instanceof ApiError && error.code === "ACTION_TOKEN_INVALID") {
+    return `링크가 만료되었거나 이미 사용됐어요. ${nextStep}`;
+  }
+  return `${describeAuthError(error)} ${nextStep}`;
+}
