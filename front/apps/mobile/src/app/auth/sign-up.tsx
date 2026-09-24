@@ -138,7 +138,9 @@ function VoiceSignUp() {
         setNotice(`${describeAuthError(error)} 1단계로 돌아왔어요. 아이디를 다시 입력하세요.`);
         return;
       }
-      announce(describeAuthError(error));
+      // notice로 넘기면 아래 낭독 effect가 읽고 화면에도 남는다. announce만 하면
+      // 음성이 꺼진 사용자에게는 진동 말고 아무 신호도 남지 않는다
+      setNotice(describeAuthError(error));
     }
   };
 
@@ -201,6 +203,14 @@ function VoiceSignUp() {
         </View>
       )}
       <View style={{ marginTop: "auto", gap: 12 }}>
+        {notice != null && (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{ fontSize: 16, fontWeight: "700", lineHeight: 26, color: theme.color.primary }}
+          >
+            {notice}
+          </Text>
+        )}
         <AppButton label={step < steps.length - 1 ? "다음" : "가입하기"} onPress={() => void nextStep()} />
       </View>
     </ScreenShell>
@@ -214,6 +224,8 @@ function ScreenSignUp() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const [usernameCheck, setUsernameCheck] = useState<string | null>(null);
+  /** 서버가 거절한 이유. 입력칸 오류와 달리 붙일 자리가 없어 따로 띄운다 */
+  const [formError, setFormError] = useState<string | null>(null);
   const { control, handleSubmit, trigger, formState } = useForm<SignUpFormInput>({
     resolver: zodResolver(signUpFormSchema),
     defaultValues: { username: "", email: "", password: "", passwordConfirm: "" },
@@ -240,12 +252,15 @@ function ScreenSignUp() {
 
   const onSubmit = handleSubmit(
     async ({ username, email, password }) => {
+      setFormError(null);
       try {
         await authService.signUp({ username, email, password });
         router.replace({ pathname: "/auth/verify-email", params: { email } });
       } catch (error) {
         void hapticError();
-        announce(describeAuthError(error));
+        const message = describeAuthError(error);
+        setFormError(message);
+        announce(message);
       }
     },
     (errors) => {
@@ -318,6 +333,14 @@ function ScreenSignUp() {
             <BigInput label="비밀번호 확인" accessibilityLabel="비밀번호 확인" value={field.value} onChangeText={field.onChange} secureTextEntry errorMessage={fieldState.error?.message} />
           )}
         />
+        {formError != null && (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{ fontSize: 15 * fontScale, fontWeight: "700", lineHeight: 25, color: theme.color.primary }}
+          >
+            {formError}
+          </Text>
+        )}
         <AppButton label="가입하기" onPress={() => void onSubmit()} />
         <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, alignItems: "center" }}>
           <Text style={{ fontSize: 15 * fontScale, color: theme.color.textMuted }}>이미 계정이 있나요?</Text>
