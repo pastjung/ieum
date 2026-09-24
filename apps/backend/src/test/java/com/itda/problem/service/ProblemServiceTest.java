@@ -9,7 +9,10 @@ import static org.mockito.Mockito.verify;
 
 import com.itda.curriculum.domain.CurriculumStageRepository;
 import com.itda.global.FastApiClient;
+import com.itda.global.error.BusinessException;
+import com.itda.global.error.ErrorCode;
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.LearningSessionRepository;
 import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.LectureProblem;
@@ -21,6 +24,7 @@ import com.itda.problem.domain.Problem;
 import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSkill;
 import com.itda.problem.domain.SkillType;
+import com.itda.problem.dto.NewStudyRequest;
 import com.itda.problem.dto.ProblemAnalyzeResponse;
 import com.itda.problem.dto.RegisterProblemRequest;
 import com.itda.problem.dto.SkillSet;
@@ -30,10 +34,16 @@ import com.itda.problem.repository.ProblemCellRepository;
 import com.itda.problem.repository.ProblemRepository;
 import com.itda.problem.repository.ProblemSessionRepository;
 import com.itda.problem.repository.ProblemSkillRepository;
+import com.itda.problem.repository.UserSkillErrorCountRepository;
+import com.itda.problem.repository.UserSkillMemoryRepository;
+import com.itda.problem.repository.UserWrongProblemRepository;
+import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
+import com.itda.user.repository.UserJpaRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -69,7 +79,11 @@ class ProblemServiceTest {
   @Mock private LearningSessionRepository learningSessionRepository;
   @Mock private CurriculumStageRepository curriculumStageRepository;
   @Mock private ProblemSessionRepository problemSessionRepository;
+  @Mock private UserWrongProblemRepository userWrongProblemRepository;
+  @Mock private UserSkillMemoryRepository userSkillMemoryRepository;
+  @Mock private UserSkillErrorCountRepository userSkillErrorCountRepository;
   @Mock private FastApiClient fastApiClient;
+  @Mock private UserJpaRepository userJpaRepository;
 
   @InjectMocks private ProblemService problemService;
 
@@ -148,10 +162,9 @@ class ProblemServiceTest {
   void 강사가_아니면_문제를_등록할_수_없다(UserRole role) {
     AuthenticatedUser other = new AuthenticatedUser(9L, role);
 
-    assertThatThrownBy(
-            () ->
-                problemService.registerProblem(other, LECTURE_ID, new RegisterProblemRequest("가방")))
-        .isInstanceOf(RuntimeException.class);
+    assertError(
+        () -> problemService.registerProblem(other, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.INSTRUCTOR_ACCESS_REQUIRED);
 
     verify(fastApiClient, never()).analyze(any());
     verify(problemRepository, never()).save(any());
@@ -161,11 +174,11 @@ class ProblemServiceTest {
   void 없는_수업이면_거부한다() {
     given(lectureRepository.findById(LECTURE_ID)).willReturn(Optional.empty());
 
-    assertThatThrownBy(
-            () ->
-                problemService.registerProblem(
-                    INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")))
-        .isInstanceOf(RuntimeException.class);
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.LECTURE_NOT_FOUND);
 
     verify(fastApiClient, never()).analyze(any());
     verify(problemRepository, never()).save(any());
@@ -177,11 +190,11 @@ class ProblemServiceTest {
     other.open(NOW);
     given(lectureRepository.findById(LECTURE_ID)).willReturn(Optional.of(other));
 
-    assertThatThrownBy(
-            () ->
-                problemService.registerProblem(
-                    INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")))
-        .isInstanceOf(RuntimeException.class);
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.LECTURE_NOT_FOUND);
 
     verify(fastApiClient, never()).analyze(any());
     verify(problemRepository, never()).save(any());
@@ -192,11 +205,11 @@ class ProblemServiceTest {
     Lecture scheduled = Lecture.schedule(INSTRUCTOR_ID, "점자 기초", null, "123456", null, NOW);
     given(lectureRepository.findById(LECTURE_ID)).willReturn(Optional.of(scheduled));
 
-    assertThatThrownBy(
-            () ->
-                problemService.registerProblem(
-                    INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")))
-        .isInstanceOf(RuntimeException.class);
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.INVALID_LECTURE_STATE);
 
     verify(fastApiClient, never()).analyze(any());
     verify(problemRepository, never()).save(any());
@@ -207,11 +220,11 @@ class ProblemServiceTest {
     givenLecture();
     givenAnalysis(null, List.of(0b000001), List.of(skillSet("ㄱ")));
 
-    assertThatThrownBy(
-            () ->
-                problemService.registerProblem(
-                    INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")))
-        .isInstanceOf(RuntimeException.class);
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.PROBLEM_VALIDATION_UNAVAILABLE);
 
     verify(problemRepository, never()).save(any());
   }
@@ -221,11 +234,11 @@ class ProblemServiceTest {
     givenLecture();
     givenAnalysis(Level.WORD, null, List.of(skillSet("ㄱ")));
 
-    assertThatThrownBy(
-            () ->
-                problemService.registerProblem(
-                    INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")))
-        .isInstanceOf(RuntimeException.class);
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.PROBLEM_VALIDATION_UNAVAILABLE);
 
     verify(problemRepository, never()).save(any());
   }
@@ -236,11 +249,11 @@ class ProblemServiceTest {
     givenLecture();
     givenAnalysis(Level.WORD, List.of(), List.of(skillSet("ㄱ")));
 
-    assertThatThrownBy(
-            () ->
-                problemService.registerProblem(
-                    INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")))
-        .isInstanceOf(RuntimeException.class);
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.PROBLEM_VALIDATION_UNAVAILABLE);
 
     verify(problemRepository, never()).save(any());
   }
@@ -254,11 +267,11 @@ class ProblemServiceTest {
     givenLecture();
     givenAnalysis(Level.WORD, List.of(0b000001), List.of());
 
-    assertThatThrownBy(
-            () ->
-                problemService.registerProblem(
-                    INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")))
-        .isInstanceOf(RuntimeException.class);
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.PROBLEM_VALIDATION_UNAVAILABLE);
 
     verify(problemRepository, never()).save(any());
     verify(learningSkillQueryRepository, never()).findAllBySkillSets(any());
@@ -269,14 +282,83 @@ class ProblemServiceTest {
     givenLecture();
     givenAnalysis(Level.WORD, List.of(0b000001), null);
 
-    assertThatThrownBy(
-            () ->
-                problemService.registerProblem(
-                    INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")))
-        .isInstanceOf(RuntimeException.class);
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.PROBLEM_VALIDATION_UNAVAILABLE);
 
     verify(problemRepository, never()).save(any());
     verify(learningSkillQueryRepository, never()).findAllBySkillSets(any());
+  }
+
+  @Test
+  void 없는_학습_세션은_조회할_수_없다() {
+    given(learningSessionRepository.findById(10L)).willReturn(Optional.empty());
+
+    assertError(
+        () -> problemService.studyWithOldSession(INSTRUCTOR, 10L),
+        ErrorCode.LEARNING_SESSION_NOT_FOUND);
+  }
+
+  @Test
+  void 다른_사용자의_학습_세션은_조회할_수_없다() {
+    User owner = org.mockito.Mockito.mock(User.class);
+    given(owner.getId()).willReturn(INSTRUCTOR_ID + 1);
+    LearningSession session = new LearningSession(owner, null);
+    given(learningSessionRepository.findById(10L)).willReturn(Optional.of(session));
+
+    assertError(
+        () -> problemService.studyWithOldSession(INSTRUCTOR, 10L),
+        ErrorCode.LEARNING_SESSION_NOT_FOUND);
+  }
+
+  @Test
+  void 종료된_학습_세션은_조회할_수_없다() {
+    User owner = org.mockito.Mockito.mock(User.class);
+    given(owner.getId()).willReturn(INSTRUCTOR_ID);
+    LearningSession session = new LearningSession(owner, null);
+    session.complete(NOW);
+    given(learningSessionRepository.findById(10L)).willReturn(Optional.of(session));
+
+    assertError(
+        () -> problemService.studyWithOldSession(INSTRUCTOR, 10L),
+        ErrorCode.LEARNING_SESSION_ALREADY_COMPLETED);
+  }
+
+  @Test
+  void 없는_커리큘럼으로_학습_세션을_생성할_수_없다() {
+    given(curriculumStageRepository.findById(5L)).willReturn(Optional.empty());
+
+    assertError(
+        () -> problemService.learningWithNewSession(INSTRUCTOR, new NewStudyRequest(5L)),
+        ErrorCode.INVALID_LEARNING_SESSION_INPUT);
+  }
+
+  @Test
+  void 사용자가_없으면_학습_세션을_생성할_수_없다() {
+    com.itda.curriculum.domain.CurriculumStage curriculumStage =
+        org.mockito.Mockito.mock(com.itda.curriculum.domain.CurriculumStage.class);
+    given(curriculumStageRepository.findById(5L)).willReturn(Optional.of(curriculumStage));
+    given(userJpaRepository.findById(INSTRUCTOR_ID)).willReturn(Optional.empty());
+
+    assertError(
+        () -> problemService.learningWithNewSession(INSTRUCTOR, new NewStudyRequest(5L)),
+        ErrorCode.USER_NOT_FOUND);
+  }
+
+  @Test
+  void 출제할_문제가_부족하면_학습_세션을_생성할_수_없다() {
+    com.itda.curriculum.domain.CurriculumStage curriculumStage =
+        org.mockito.Mockito.mock(com.itda.curriculum.domain.CurriculumStage.class);
+    given(curriculumStage.getLevel()).willReturn(Level.WORD);
+    given(curriculumStageRepository.findById(5L)).willReturn(Optional.of(curriculumStage));
+    User user = org.mockito.Mockito.mock(User.class);
+    given(userJpaRepository.findById(INSTRUCTOR_ID)).willReturn(Optional.of(user));
+
+    assertError(
+        () -> problemService.learningWithNewSession(INSTRUCTOR, new NewStudyRequest(5L)),
+        ErrorCode.LEARNING_CONTENT_NOT_READY);
   }
 
   private Lecture givenLecture() {
@@ -301,5 +383,12 @@ class ProblemServiceTest {
 
   private static LearningSkill skill(String metadata) {
     return LearningSkill.of(SkillType.SKILL_01, metadata, "요소 " + metadata, null);
+  }
+
+  private static void assertError(ThrowingCallable invocation, ErrorCode expectedErrorCode) {
+    assertThatThrownBy(invocation)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception -> assertThat(exception.getErrorCode()).isEqualTo(expectedErrorCode));
   }
 }

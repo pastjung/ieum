@@ -798,6 +798,7 @@ durationMs는 null일 수 있다. userId, problemId, curriculumStageId, lectureI
 | 401 | UNAUTHORIZED | 인증되지 않음 |
 | 403 | LEARNER_ACCESS_REQUIRED | 학습자 역할이 아님 |
 | 403 | CURRICULUM_STAGE_LOCKED | 열리지 않은 단계 |
+| 404 | USER_NOT_FOUND | 인증 주체에 해당하는 사용자 계정이 없음 |
 | 404 | LECTURE_NOT_FOUND | sourceLectureId 수업 없음 또는 요청 학습자의 참여 이력 없음 |
 | 404 | LEARNING_SESSION_NOT_FOUND | 세션 없음 또는 타인 소유 |
 | 409 | SELF_ASSESSMENT_REQUIRED | 최초 단계가 정해지지 않음 |
