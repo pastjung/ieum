@@ -12,7 +12,6 @@ from app.domain.skills.models import SkillCatalog, SkillSet
 from app.infrastructure.braille_core import curriculum, kbraille
 from app.infrastructure.braille_core.estimate import Estimator
 
-MIN_POOL = 12  # 백엔드 reviewWithNewSession 이 요구하는 최소 문항 수
 TOP_WEAK = 3  # 복습 세션에 넣는 약한 요소 수
 WEAK_THRESHOLD = 0.70
 
@@ -31,7 +30,6 @@ class ProblemAnalysis:
 
 @dataclass(frozen=True)
 class ReviewAnalysis:
-    level: str
     learning_skill_ids: list[int]
     diagnostics: dict[str, Any] = field(default_factory=dict)
 
@@ -66,7 +64,10 @@ class ReviewAnalyzeService:
     estimator: Estimator
 
     def analyze(
-        self, skill_states: list[dict[str, Any]], now: datetime | None = None
+        self,
+        skill_states: list[dict[str, Any]],
+        now: datetime | None = None,
+        level: str | None = None,
     ) -> ReviewAnalysis:
         """skill_states: estimate 규격의 상태 목록 (kc 키 포함). 비어 있으면 첫 복습 → 자음 단계 기본."""
         now = now or datetime.now(UTC).replace(tzinfo=None)
@@ -87,9 +88,7 @@ class ReviewAnalyzeService:
             weak = ["초성:ㄱ", "초성:ㄴ", "중성:ㅏ"]
         skills = [self.catalog.by_kc(kc) for kc in weak]
         ids = [s.id for s in skills]
-        level = self._choose_level(skills, ids)
         return ReviewAnalysis(
-            level=level,
             learning_skill_ids=ids,
             diagnostics={
                 "n_states": len(skill_states),
@@ -98,14 +97,3 @@ class ReviewAnalyzeService:
                 "estimator": self.estimator.version,
             },
         )
-
-    def _choose_level(self, skills: list[Any], ids: list[int]) -> str:
-        """가장 약한 요소의 단계를 우선. 그 level 에 문항이 12개 미만이면 문항이 충분한 단계로 올린다."""
-        preferred = skills[0].level
-        candidates = [preferred] + [
-            lv for lv in curriculum.STAGE_TO_LEVEL.values() if lv != preferred
-        ]
-        for level in candidates:
-            if self.catalog.problem_count(level, ids) >= MIN_POOL:
-                return level
-        return "WORD"
