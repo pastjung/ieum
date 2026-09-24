@@ -97,6 +97,10 @@ export default function Analyzing() {
         </View>
         <View style={{ gap: 12 }}>
           <AppButton label="다시 보내기" onPress={() => void submit()} />
+          {/* 재시도가 구조적으로 성공할 수 없는 실패(만료된 세션·계정 문제)도 있다. 탈출구가
+              없으면 음성으로만 쓰는 사용자는 이 화면에 갇힌다 — `intro.tsx`의 실패 화면과
+              같은 규칙으로 둘째 버튼을 둔다 */}
+          <AppButton label="홈으로" variant="secondary" onPress={() => router.replace("/(tabs)")} />
         </View>
       </ScreenShell>
     );
@@ -108,8 +112,10 @@ export default function Analyzing() {
       <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
         학습 완료!{"\n"}결과를 분석 중이에요
       </Text>
+      {/* 이어하기가 없다(설계 9절) — `sessionId`를 기기에 저장하지 않고 답안은 스토어
+          메모리에만 있다. "앱을 닫아도 괜찮다"고 안내하면 12문항이 전부 사라진다 */}
       <Text style={{ fontSize: 16 * fontScale, color: theme.color.textMuted, lineHeight: 27, textAlign: "center" }}>
-        앱을 닫아도 괜찮아요.{"\n"}다시 열면 이어서 보여 드려요.
+        결과를 보내는 중이에요.{"\n"}앱을 닫으면 처음부터 다시 풀어야 해요.
       </Text>
     </ScreenShell>
   );
