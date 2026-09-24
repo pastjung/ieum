@@ -93,7 +93,9 @@ describe("칸 수가 다른 답안의 정규화", () => {
     expect(attempts[0]!.inputPatterns).toHaveLength(2);
   });
 
-  it("넘치는 칸은 기대 칸 수까지 자른다", () => {
+  it("넘치는 칸은 기대 칸 수까지 자른다 (방어선 — play.tsx가 먼저 막는다)", () => {
+    // 넘치는 입력은 `play.tsx`의 제출 가드(describeTooManyCells)가 막으므로 여기 오지 않아야
+    // 한다. 우회 경로가 생겼을 때 세션 12문항을 통째로 잃지 않기 위한 마지막 방어선이다
     useSessionStore.getState().start(multiCell, "free", multiCellMeta);
     useSessionStore.getState().submit([1, 32, 5]);
 

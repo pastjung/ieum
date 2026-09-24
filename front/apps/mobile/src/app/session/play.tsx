@@ -8,7 +8,8 @@ import { LandscapeDotPad } from "@/components/LandscapeDotPad";
 import { AppButton } from "@/components/AppButton";
 import { useSessionStore } from "@/stores/sessionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { announce, hapticTap, speak } from "@/a11y";
+import { describeTooManyCells } from "@/services/answerLengthGuard";
+import { announce, hapticError, hapticTap, speak } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
 /** V14 문제 풀이 · 세로 V패드 / V14b 가로 두 손 입력 (기기를 돌리면 전환) */
@@ -59,6 +60,16 @@ export default function SessionPlay() {
   const submitAnswer = () => {
     if (cells.length === 0) {
       announce("아직 입력한 칸이 없어요. 점을 짚고 손을 떼면 한 칸이 입력돼요.");
+      return;
+    }
+    // 서버는 칸 수가 정확히 맞아야 답을 받는다. 넘친 채로 보내면 `buildAttempts`가 잘라서
+    // 보내게 되는데, `gradeAnswer`는 넘친 답을 오답으로 판정하므로 화면과 서버 채점이 갈라진다
+    // — 문항마다 "틀렸어요"를 듣고 결과 화면에서는 만점을 보게 된다. 여기서 막는다.
+    // 모자란 답은 그대로 보낸다 — 빈 칸으로 채워도 양쪽 다 오답이라 어긋나지 않는다.
+    const tooMany = describeTooManyCells(cells.length, problem.expectedCells.length);
+    if (tooMany) {
+      void hapticError();
+      announce(tooMany);
       return;
     }
     submit(cells);
