@@ -1,9 +1,14 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
-import { speakAsync } from "@/a11y";
+import { AppButton } from "@/components/AppButton";
+import { useSessionStore } from "@/stores/sessionStore";
+import { learningService } from "@/services/learningService";
+import { submitSessionResults } from "@/services/learningSessionSubmission";
+import { describeAuthError } from "@/services/authErrors";
+import { announce, hapticError, speakAsync } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
 /** V17 분석 중 */
@@ -11,20 +16,62 @@ export default function Analyzing() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
+  const serverSessionId = useSessionStore((s) => s.serverSessionId);
+  const buildAttempts = useSessionStore((s) => s.buildAttempts);
+  const setServerResult = useSessionStore((s) => s.setServerResult);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const submit = useCallback(async () => {
+    setFailed(null);
+    // 낭독은 제출과 나란히 간다. 낭독이 늦어도(또는 목 세션이라 제출이 없어도) 화면 전환을 막지 않는다
+    void speakAsync("학습 완료! 결과를 분석 중이에요. 잠시만 기다려 주세요.");
+    const outcome = await submitSessionResults({
+      serverSessionId,
+      attempts: buildAttempts(),
+      completeSession: learningService.completeSession,
+    });
+    if (outcome.kind === "failed") {
+      void hapticError();
+      const message = describeAuthError(outcome.error);
+      setFailed(message);
+      // 결과 화면으로 넘기지 않는다. 넘기면 사용자가 푼 것이 조용히 사라진다
+      announce(`${message} 다시 보내기를 누르면 한 번 더 시도해요.`);
+      return;
+    }
+    if (outcome.kind === "success") {
+      setServerResult(outcome.result);
+    }
+    // "skipped"(목 세션)이면 제출할 것이 없었을 뿐이다 — 결과 화면은 그대로 보여 준다
+    router.replace("/session/summary");
+  }, [serverSessionId, buildAttempts, setServerResult, router]);
 
   useEffect(() => {
-    let cancelled = false;
-    const minWait = new Promise((r) => setTimeout(r, 1800));
-    void Promise.all([
-      speakAsync("학습 완료! 결과를 분석 중이에요. 잠시만 기다려 주세요."),
-      minWait,
-    ]).then(() => {
-      if (!cancelled) router.replace("/session/summary");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+    void submit();
+  }, [submit]);
+
+  if (failed !== null) {
+    return (
+      <ScreenShell>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 18 }}>
+          <Text
+            accessibilityRole="header"
+            style={{ fontSize: 28 * fontScale, fontWeight: "900", lineHeight: 40, color: theme.color.text, textAlign: "center" }}
+          >
+            결과를 보내지{"\n"}못했어요
+          </Text>
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 29, textAlign: "center" }}
+          >
+            {failed}
+          </Text>
+        </View>
+        <View style={{ gap: 12 }}>
+          <AppButton label="다시 보내기" onPress={() => void submit()} />
+        </View>
+      </ScreenShell>
+    );
+  }
 
   return (
     <ScreenShell style={styles.center}>

@@ -22,8 +22,11 @@ export default function Summary() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const session = useSessionStore((s) => s.session);
-  const correct = useSessionStore((s) => s.correctCount)();
-  const total = session?.problems.length ?? 0;
+  const serverResult = useSessionStore((s) => s.serverResult);
+  const localCorrect = useSessionStore((s) => s.correctCount)();
+  // 서버 채점이 최종이다. 로컬 채점은 문항별 즉시 반응에만 쓴 잠정 값이라 결과에 쓰지 않는다
+  const correct = serverResult?.correctProblemCount ?? localCorrect;
+  const total = serverResult?.totalProblemCount ?? session?.problems.length ?? 0;
   const reset = useSessionStore((s) => s.reset);
   const { data: skills } = useQuery({ queryKey: ["skills"], queryFn: learningService.getSkillLevels });
 
