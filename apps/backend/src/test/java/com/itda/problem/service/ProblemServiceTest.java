@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.itda.curriculum.domain.CurriculumStage;
 import com.itda.curriculum.domain.CurriculumStageRepository;
 import com.itda.global.FastApiClient;
 import com.itda.global.security.AuthenticatedUser;
@@ -23,6 +25,7 @@ import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSession;
 import com.itda.problem.domain.ProblemSkill;
 import com.itda.problem.domain.SkillType;
+import com.itda.problem.dto.NewStudyRequest;
 import com.itda.problem.dto.ProblemAnalyzeResponse;
 import com.itda.problem.dto.ProblemsResponse;
 import com.itda.problem.dto.RegisterProblemRequest;
@@ -33,10 +36,14 @@ import com.itda.problem.repository.ProblemCellRepository;
 import com.itda.problem.repository.ProblemRepository;
 import com.itda.problem.repository.ProblemSessionRepository;
 import com.itda.problem.repository.ProblemSkillRepository;
+import com.itda.problem.repository.UserWrongProblemRepository;
 import com.itda.user.domain.UserRole;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -73,6 +80,7 @@ class ProblemServiceTest {
   @Mock private LearningSessionRepository learningSessionRepository;
   @Mock private CurriculumStageRepository curriculumStageRepository;
   @Mock private ProblemSessionRepository problemSessionRepository;
+  @Mock private UserWrongProblemRepository userWrongProblemRepository;
   @Mock private FastApiClient fastApiClient;
 
   @InjectMocks private ProblemService problemService;
@@ -309,6 +317,73 @@ class ProblemServiceTest {
     assertThat(response.problems())
         .singleElement()
         .satisfies(p -> assertThat(p.problemSessionId()).isEqualTo(101L));
+  }
+
+  /**
+   * {@code learningWithNewSession}은 오답·일반 문제를 합쳐 {@code Collections.shuffle}한 뒤, 같은 {@code
+   * randomProblems} 인덱스로 저장(saveAll)과 응답 조립 두 곳을 순회한다. 이 인덱스 대응이 어긋나면(예: 저장 루프와 응답 루프가 서로 다른 순서로
+   * 읽으면) 사용자가 실제로 배정받은 문항과 다른 {@code problemSessionId}가 응답에 실린다 — 화면은 멀쩡한데 완료 제출만 엉뚱한 배정에 기록되는 조용한
+   * 채점 버그다.
+   *
+   * <p>순서가 아니라 쌍이 맞는지를 검증한다: {@code saveAll}에 실제로 넘어간 {@link ProblemSession} 목록에서 problemId → 배정 ID
+   * 매핑을 만든 뒤, 응답의 각 문항이 자기 problemId에 매핑된 배정 ID를 갖는지 확인한다. 이렇게 하면 {@code Collections.shuffle}이 만드는
+   * 순서 자체는 검증 대상이 아니다.
+   */
+  @Test
+  void 신규_세션_응답의_각_문항이_자신을_배정한_ProblemSession_ID를_갖는다() {
+    long learnerId = 9L;
+    long curriculumId = 1L;
+    AuthenticatedUser learner = new AuthenticatedUser(learnerId, UserRole.LEARNER);
+
+    CurriculumStage stage = mock(CurriculumStage.class);
+    given(stage.getLevel()).willReturn(Level.WORD);
+    given(curriculumStageRepository.findById(curriculumId)).willReturn(Optional.of(stage));
+
+    given(
+            userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedIsNull(
+                learnerId, Level.WORD))
+        .willReturn(List.of());
+
+    List<Problem> problems = new ArrayList<>();
+    for (long i = 1; i <= 12; i++) {
+      Problem p = new Problem(Level.WORD, "문제" + i);
+      ReflectionTestUtils.setField(p, "id", i);
+      problems.add(p);
+    }
+    given(problemRepository.findAllByLevelAndIdNotIn(Level.WORD, List.of())).willReturn(problems);
+
+    given(problemCellRepository.findAllByProblem_IdInOrderByProblem_IdAscCellIndexAsc(any()))
+        .willReturn(List.of());
+
+    // saveAll은 IDENTITY 채번을 흉내낸다 — 넘어온 순서대로 서로 다른 ID를 매긴다. 인덱스가 어긋나면
+    // 저장된 배정과 problemId의 실제 짝이 뒤바뀌어야 이 스텁 아래에서 테스트가 실패한다.
+    given(problemSessionRepository.saveAll(any()))
+        .willAnswer(
+            invocation -> {
+              List<ProblemSession> sessions = invocation.getArgument(0);
+              long nextId = 1000L;
+              for (ProblemSession ps : sessions) {
+                ReflectionTestUtils.setField(ps, "id", nextId++);
+              }
+              return sessions;
+            });
+
+    ProblemsResponse response =
+        problemService.learningWithNewSession(learner, new NewStudyRequest(curriculumId));
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<ProblemSession>> sessionsCaptor = ArgumentCaptor.forClass(List.class);
+    verify(problemSessionRepository).saveAll(sessionsCaptor.capture());
+    Map<Long, Long> problemIdToAssignedSessionId =
+        sessionsCaptor.getValue().stream()
+            .collect(Collectors.toMap(ps -> ps.getProblem().getId(), ProblemSession::getId));
+
+    assertThat(response.problems()).hasSize(12);
+    assertThat(response.problems())
+        .allSatisfy(
+            detail ->
+                assertThat(detail.problemSessionId())
+                    .isEqualTo(problemIdToAssignedSessionId.get(detail.problemId())));
   }
 
   private Lecture givenLecture() {
