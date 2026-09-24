@@ -117,24 +117,12 @@ public class ProblemAttempt {
   }
 
   public static ProblemAttempt forLiveLecture(
-      Long userId,
-      Long problemId,
-      Long lectureId,
-      boolean correct,
-      LocalDateTime attemptedAt) {
+      Long userId, Long problemId, Long lectureId, boolean correct, LocalDateTime attemptedAt) {
     if (lectureId == null) {
       throw new IllegalArgumentException("실시간 수업 시도에는 수업이 필수입니다.");
     }
     return new ProblemAttempt(
-        userId,
-        problemId,
-        null,
-        null,
-        null,
-        lectureId,
-        AttemptMode.LIVE,
-        correct,
-        attemptedAt);
+        userId, problemId, null, null, null, lectureId, AttemptMode.LIVE, correct, attemptedAt);
   }
 
   public boolean isCorrect() {
