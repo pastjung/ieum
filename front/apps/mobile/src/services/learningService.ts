@@ -47,18 +47,13 @@ const THEME_LABEL: Record<LearningThemeId, string> = {
  * 아닌 글자로 끝나는 문항이 실제로 있는지는 확인되지 않았다 — 그 경우는 "을"로 둔다.
  */
 export function particleFor(text: string): "을" | "를" {
+  // charCodeAt(-1)은 NaN이라 아래 두 비교가 둘 다 false가 되어 가드를 빠져나간다.
+  // 그 뒤 NaN % 28 !== 0이 우연히 true가 되어 "을"이 나오지만, 의도한 경로가 아니다 —
+  // 빈 문자열은 여기서 명시적으로 끊는다.
+  if (!text) return "을";
   const last = text.charCodeAt(text.length - 1);
   if (last < 0xac00 || last > 0xd7a3) return "을";
   return (last - 0xac00) % 28 !== 0 ? "을" : "를";
-}
-
-/**
- * `intro.tsx`의 세션 조회 쿼리 키. 화면과 캐시 제거 쪽이 같은 키를 쓰도록 여기 한 곳에
- * 둔다 — 어긋나면 "시작하기"에서 지운 캐시와 다음 조회가 쓰는 캐시가 달라져 [1]의 버그가
- * (완료된 세션 재사용 → 서버가 재제출을 거부) 그대로 되살아난다.
- */
-export function learningSessionQueryKey(themeId: LearningThemeId | undefined) {
-  return ["learningSession", themeId ?? "default"] as const;
 }
 
 /**
