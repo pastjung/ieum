@@ -9,6 +9,7 @@ import { IeumFace } from "@/components/IeumFace";
 import { learningService } from "@/services/learningService";
 import { todayReview } from "@/services/mockData";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useTactileStore } from "@/stores/tactileStore";
 import { announce, hapticTap } from "@/a11y";
 import { fontSize, radius, useFontScale, useTheme } from "@/theme";
 
@@ -18,6 +19,8 @@ function VoiceHome() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const { data } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
+  // 장치 연결은 서버 요약이 아니라 실제 블루투스 상태에서 읽는다.
+  const deviceConnected = useTactileStore((s) => s.connected);
 
   useEffect(() => {
     if (!data) return;
@@ -82,7 +85,7 @@ function VoiceHome() {
             {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
             <ListRow
               label="점자 장치"
-              value={data.deviceConnected ? "연결됨" : "연결 안 됨"}
+              value={deviceConnected ? "연결됨" : "연결 안 됨"}
               accessibilityHint="장치 연결 상태를 확인해요"
               onPress={() => router.push("/device-error")}
             />
@@ -105,6 +108,8 @@ function ScreenHome() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const { data } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
+  // 장치 연결은 서버 요약이 아니라 실제 블루투스 상태에서 읽는다.
+  const deviceConnected = useTactileStore((s) => s.connected);
 
   return (
     <ScreenShell noBottomPadding>
@@ -186,7 +191,7 @@ function ScreenHome() {
         />
         <ListRow
           label="점자 장치"
-          value={data?.deviceConnected ? "연결됨" : "연결 안 됨"}
+          value={deviceConnected ? "연결됨" : "연결 안 됨"}
           accessibilityHint="장치 연결 상태를 확인해요"
           onPress={() => router.push("/device-error")}
         />
