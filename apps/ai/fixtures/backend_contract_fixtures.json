@@ -688,10 +688,14 @@
   "response": {
    "summary": "3문제 중 1문제를 맞혔어요. 받침 이응, 받침 기역은 조금 더 연습하면 좋겠어요.",
    "ttsText": "오늘 3문제 중 1문제를 맞혔어요. 받침 이응, 받침 기역을 다시 연습해 보세요.",
+   "errorTypeCounts": {
+    "mirror": 1,
+    "dot_missing": 1
+   },
    "weakSkills": [
     {
      "learningSkillId": 23,
-     "masteryProb": 0.133,
+     "masteryProb": 0.1325,
      "label": "더 연습해요",
      "dominantErrorType": "mirror",
      "explanation": "받침 이응에서 좌우를 뒤집어 쓰는 실수가 반복됐어요."

@@ -103,7 +103,11 @@ def test_session_summary_is_read_only_and_ranks_weak_skills():
     res = client.post("/session-summary", json=req)
     assert res.status_code == 200
     body = res.json()
-    assert set(body) == {"summary", "ttsText", "weakSkills"}
+    assert set(body) == {"summary", "ttsText", "errorTypeCounts", "weakSkills"}
+    assert body["errorTypeCounts"] == {
+        "mirror": 1,
+        "dot_missing": 1,
+    }  # 학교 좌우 대칭 + 가방 점 누락
     assert body["summary"].startswith("3문제 중 1문제")
     ids = [w["learningSkillId"] for w in body["weakSkills"]]
     assert ids[:2] == [23, 16]  # 약한 순
@@ -177,3 +181,19 @@ def test_invariant_correct_iff_no_errors_on_random_inputs():
             assert all(v >= 1 for v in r["errorCounts"].values())
         for u in body["updatedSkillStates"]:
             assert u["nCorrect"] == int(results[u["learningSkillId"]]["correct"])
+
+
+def test_session_summary_error_type_counts_is_empty_object_not_null():
+    """오류가 하나도 없으면 errorTypeCounts 는 {} — Spring Map 이 null 로 파싱되지 않게."""
+    req = {
+        "attempts": [
+            {"targetText": "나무", "expectedPatterns": [9, 17, 13], "inputPatterns": [9, 17, 13]},
+            {"targetText": "사과", "expectedPatterns": [7, 8, 39], "inputPatterns": [7, 8, 39]},
+        ],
+        "skillStates": [],
+    }
+    body = client.post("/session-summary", json=req).json()
+    assert body["errorTypeCounts"] == {}
+    assert body["weakSkills"] == []
+    empty = client.post("/session-summary", json={"attempts": [], "skillStates": []}).json()
+    assert empty["errorTypeCounts"] == {} and empty["weakSkills"] == []
