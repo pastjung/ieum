@@ -1,7 +1,7 @@
 """백엔드 FastApiClient 계약 테스트 — Java DTO 와 필드·형식이 일치하는지.
 
 RegisterProblemRequest(targetText) → ProblemAnalyzeResponse(level, cells, skillSets[{skillType, metadata}])
-ReviewAnalyzeRequest(skillStates[]) → ReviewAnalyzeResponse(level, learningSkillIds[])
+ReviewAnalyzeRequest(skillStates[]) → ReviewAnalyzeResponse(learningSkillIds[])
 """
 
 from fastapi.testclient import TestClient
@@ -10,7 +10,6 @@ from app.infrastructure.rule_engine import get_skill_catalog
 from app.main import app
 
 client = TestClient(app)
-LEVELS = {"CONSONANT", "VOWEL", "WORD", "SENTENCE", "CONTRACTION", "CONTRACTION_WORD"}
 
 
 def test_analyze_gabang_returns_level_cells_skill_sets():
@@ -50,7 +49,7 @@ def test_analyze_rejects_non_hangul():
     assert res.status_code == 422
 
 
-def test_review_returns_weak_skills_and_level_with_enough_problems():
+def test_review_returns_weak_skills_only():
     states = [
         {
             "learningSkillId": 23,
@@ -80,20 +79,18 @@ def test_review_returns_weak_skills_and_level_with_enough_problems():
     res = client.post("/reviewAnalyze", json={"skillStates": states})
     assert res.status_code == 200
     body = res.json()
-    assert set(body) == {"level", "learningSkillIds"}
-    assert body["level"] in LEVELS
-    assert body["learningSkillIds"][:2] == [23, 16] or set(body["learningSkillIds"][:2]) == {23, 16}
+    assert set(body) == {"learningSkillIds"}  # level 없음 — 문항 풀은 Spring 이 사용자 레벨로 결정
+    assert set(body["learningSkillIds"][:2]) == {23, 16}
     assert 1 not in body["learningSkillIds"][:2]  # 숙련(0.97)은 앞에 오지 않는다
-    assert get_skill_catalog().problem_count(body["level"], body["learningSkillIds"]) >= 12
 
 
 def test_review_with_empty_states_still_returns_valid_response():
     body = client.post("/reviewAnalyze", json={"skillStates": []}).json()
-    assert body["level"] in LEVELS and len(body["learningSkillIds"]) >= 1
+    assert len(body["learningSkillIds"]) >= 1
 
 
 def test_review_ignores_unknown_skill_ids_and_missing_optional_fields():
     states = [{"learningSkillId": 9999}, {"learningSkillId": 66}]
     body = client.post("/reviewAnalyze", json={"skillStates": states}).json()
     assert 9999 not in body["learningSkillIds"]
-    assert body["level"] in LEVELS
+    assert body["learningSkillIds"] == [66]

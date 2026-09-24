@@ -1,8 +1,7 @@
 """규칙 엔진 구현체 — 도메인 포트(BrailleConverter, SkillCatalog)를 kbraille 로 구현한다.
 
 데이터 파일
-  data/kc_catalog.json          학습 요소 100개 (id·kc·skill_type·metadata·stage·level·dots) — SQL 시드와 같은 원천
-  data/level_skill_counts.json  level 별 문항 수, (level, skill_id) 별 그 요소를 포함한 시드 문항 수 (복습 level 결정용 하한)
+  data/kc_catalog.json  학습 요소 100개 (id·kc·skill_type·metadata·stage·level·dots) — SQL 시드와 같은 원천
 """
 
 import json
@@ -21,7 +20,7 @@ _DATA = Path(__file__).parent / "data"
 class JsonSkillCatalog:
     """SkillCatalog 포트 구현 — 파일 한 번 읽어 메모리에 둔다."""
 
-    def __init__(self, catalog_path: Path | None = None, counts_path: Path | None = None) -> None:
+    def __init__(self, catalog_path: Path | None = None) -> None:
         raw: dict[str, Any] = json.loads(
             (catalog_path or _DATA / "kc_catalog.json").read_text(encoding="utf-8")
         )
@@ -39,14 +38,6 @@ class JsonSkillCatalog:
         ]
         self._by_kc = {s.kc: s for s in self._skills}
         self._by_id = {s.id: s for s in self._skills}
-        counts: dict[str, Any] = json.loads(
-            (counts_path or _DATA / "level_skill_counts.json").read_text(encoding="utf-8")
-        )
-        self._level_totals: dict[str, int] = {k: int(v) for k, v in counts["level_totals"].items()}
-        self._counts: dict[str, dict[int, int]] = {
-            level: {int(sid): int(n) for sid, n in per.items()}
-            for level, per in counts["counts"].items()
-        }
 
     def by_kc(self, kc: str) -> LearningSkill:
         return self._by_kc[kc]
@@ -56,14 +47,6 @@ class JsonSkillCatalog:
 
     def all(self) -> list[LearningSkill]:
         return list(self._skills)
-
-    def problem_count(self, level: str, skill_ids: list[int]) -> int:
-        # 합집합의 정확한 크기는 알 수 없으므로 '가장 많은 요소 하나'를 하한으로 쓴다 (보수적)
-        per = self._counts.get(level, {})
-        return max((per.get(sid, 0) for sid in skill_ids), default=0)
-
-    def level_total(self, level: str) -> int:
-        return self._level_totals.get(level, 0)
 
 
 @lru_cache
