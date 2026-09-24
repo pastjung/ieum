@@ -155,3 +155,73 @@ export const authSessionSchema = z.object({
   user: userSummarySchema,
 });
 export type AuthSessionResponse = z.infer<typeof authSessionSchema>;
+
+/* ─── 학습 세션 (구현된 백엔드 계약 기준) ──────────────────────────────────
+ *
+ * API 명세(api-spec.md 3.6절)와 구현이 갈라져 있다. 명세는 curriculumStageId·문항별 제출·
+ * 분석/결과 분리를 정의하지만 구현은 curriculumId·일괄 제출 하나다. 여기서는 **구현**에 맞춘다.
+ * 배경과 되돌릴 지점은 docs/superpowers/specs/2026-09-24-learning-session-integration-design.md
+ * 2.4절에 있다.
+ *
+ * 식별자를 숫자로 받는 이유: 백엔드가 Long을 JSON 숫자로 보낸다. 명세는 10진수 문자열을
+ * 요구하지만 구현이 그렇지 않다. JS 안전 정수 한계(2^53)를 넘으면 조용히 깨진다 — 식별자가
+ * 그 크기에 다다를 일이 생기면 백엔드를 문자열로 바꾸고 이 스키마도 함께 옮겨야 한다.
+ */
+const identifierSchema = z.number().int().nonnegative();
+
+export const problemDetailSchema = z.object({
+  /** 이 문항 "배정"의 식별자. 완료 제출이 요구한다 — problemId로는 대신할 수 없다 */
+  problemSessionId: identifierSchema,
+  problemId: identifierSchema,
+  sequence: z.number().int().positive(),
+  targetText: z.string().min(1),
+  expectedPatterns: z.array(cellSchema).min(1),
+  completed: z.boolean(),
+});
+export type ProblemDetail = z.infer<typeof problemDetailSchema>;
+
+export const problemsResponseSchema = z.object({
+  sessionId: identifierSchema,
+  problems: z.array(problemDetailSchema).min(1),
+});
+export type ProblemsResponse = z.infer<typeof problemsResponseSchema>;
+
+/** 일괄 제출. 백엔드가 @NotEmpty @Size(max=100) @Min(0) @Max(63)으로 검증한다 */
+export const attemptInputSchema = z.object({
+  problemSessionId: identifierSchema,
+  inputPatterns: z.array(cellSchema).min(1).max(100),
+});
+export type AttemptInput = z.infer<typeof attemptInputSchema>;
+
+export const completionRequestSchema = z.object({
+  attempts: z.array(attemptInputSchema).min(1).max(100),
+});
+export type CompletionRequest = z.infer<typeof completionRequestSchema>;
+
+export const cellCompletionSchema = z.object({
+  cellIndex: z.number().int(),
+  expectedPattern: cellSchema,
+  inputPattern: cellSchema,
+  diffMask: cellSchema,
+  missingMask: cellSchema,
+  extraMask: cellSchema,
+  missingDots: z.array(z.number().int()),
+  extraDots: z.array(z.number().int()),
+});
+
+export const problemCompletionSchema = z.object({
+  problemSessionId: identifierSchema,
+  problemId: identifierSchema,
+  attemptId: identifierSchema,
+  correct: z.boolean(),
+  cells: z.array(cellCompletionSchema),
+});
+
+export const completionResponseSchema = z.object({
+  sessionId: identifierSchema,
+  completedAt: z.string(),
+  totalProblemCount: z.number().int().nonnegative(),
+  correctProblemCount: z.number().int().nonnegative(),
+  problemResults: z.array(problemCompletionSchema),
+});
+export type CompletionResponse = z.infer<typeof completionResponseSchema>;
