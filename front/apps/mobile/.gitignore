@@ -4,3 +4,6 @@
 
 expo-env.d.ts
 # @end expo-cli
+# expo prebuild 산출물 — 각자 `npx expo prebuild`로 생성한다 (CNG)
+/android
+/ios
