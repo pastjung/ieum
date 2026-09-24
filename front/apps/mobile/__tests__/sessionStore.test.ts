@@ -1,5 +1,6 @@
 import { useSessionStore } from "@/stores/sessionStore";
 import { completionRequestSchema } from "@ieum/contracts";
+import { gradeAnswer } from "@ieum/domain";
 
 const session = {
   id: "12",
@@ -63,5 +64,62 @@ describe("세션 스토어의 완료 페이로드", () => {
     const attempts = useSessionStore.getState().buildAttempts();
 
     expect(attempts).toEqual([{ problemSessionId: 101, inputPatterns: [3] }]);
+  });
+});
+
+// 백엔드는 문항 하나라도 칸 수가 어긋나면 세션 전체를 롤백한다
+// (LearningSessionCompletionService.validateCellInputs + @Transactional). 그런데 칸 수가
+// 모자란 답은 초보 학습자의 가장 흔한 오답이고 앱은 그것을 정상적인 오답으로 채점한다 —
+// 정규화가 없으면 오답 하나가 세션 전체를 영구 실패시킨다.
+describe("칸 수가 다른 답안의 정규화", () => {
+  const multiCell = {
+    id: "13",
+    title: "단어",
+    problems: [
+      { id: "21", prompt: "'가방'을 점자로 입력하세요", target: "가방", expectedCells: [1, 32] },
+    ],
+  };
+  const multiCellMeta = { serverSessionId: 13, problemSessionIds: [201] };
+
+  beforeEach(() => useSessionStore.getState().reset());
+
+  it("모자란 칸은 빈 셀로 채워 기대 칸 수를 맞춘다", () => {
+    useSessionStore.getState().start(multiCell, "free", multiCellMeta);
+    useSessionStore.getState().submit([1]); // 두 칸짜리 문항에 한 칸만 입력
+
+    const attempts = useSessionStore.getState().buildAttempts();
+
+    expect(attempts).toEqual([{ problemSessionId: 201, inputPatterns: [1, 0] }]);
+    expect(attempts[0]!.inputPatterns).toHaveLength(2);
+  });
+
+  it("넘치는 칸은 기대 칸 수까지 자른다", () => {
+    useSessionStore.getState().start(multiCell, "free", multiCellMeta);
+    useSessionStore.getState().submit([1, 32, 5]);
+
+    const attempts = useSessionStore.getState().buildAttempts();
+
+    expect(attempts).toEqual([{ problemSessionId: 201, inputPatterns: [1, 32] }]);
+  });
+
+  it("정규화한 답안의 채점 결과가 사용자가 들은 로컬 채점과 같다", () => {
+    // gradeAnswer가 모자란 칸을 EMPTY_CELL로 읽는 것과 같은 규칙으로 채우기 때문이다.
+    // 규칙이 다르면 화면에서 들은 결과와 서버가 저장하는 결과가 갈라진다.
+    useSessionStore.getState().start(multiCell, "free", multiCellMeta);
+    const local = useSessionStore.getState().submit([1]);
+
+    const [attempt] = useSessionStore.getState().buildAttempts();
+
+    expect(gradeAnswer(multiCell.problems[0]!.expectedCells, attempt!.inputPatterns)).toEqual(local);
+    expect(local.correct).toBe(false);
+  });
+
+  it("정규화한 페이로드가 백엔드 검증을 통과하는 모양이다", () => {
+    useSessionStore.getState().start(multiCell, "free", multiCellMeta);
+    useSessionStore.getState().submit([1]);
+
+    expect(() =>
+      completionRequestSchema.parse({ attempts: useSessionStore.getState().buildAttempts() }),
+    ).not.toThrow();
   });
 });
