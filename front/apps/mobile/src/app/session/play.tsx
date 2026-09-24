@@ -8,6 +8,7 @@ import { LandscapeDotPad } from "@/components/LandscapeDotPad";
 import { AppButton } from "@/components/AppButton";
 import { useSessionStore } from "@/stores/sessionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { describeTooManyCells } from "@/services/answerLengthGuard";
 import { announce, hapticError, hapticTap, speak } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
 
@@ -24,8 +25,7 @@ export default function SessionPlay() {
   const problem = useSessionStore((s) => s.current)();
   const isScreenMode = useSettingsStore((s) => s.mode) === "screen";
   const [cells, setCells] = useState<Cell[]>([]);
-  // 제출이 막힌 이유(지금은 "한 칸도 입력하지 않음" 하나뿐이다 — 칸 수가 기대와 달라도 막지
-  // 않는다). 낭독만으로는 전달되지 않는다 — 음성·진동은 설정에서 끌 수 있고
+  // 제출이 막힌 이유. 낭독만으로는 전달되지 않는다 — 음성·진동은 설정에서 끌 수 있고
   // (`onboarding/accessibility.tsx`), 꺼져 있으면 `announce`도 `hapticError`도 아무 일을 하지
   // 않는다. 그러면 길게 눌러도 화면이 그대로여서 왜 제출이 안 되는지 알 방법이 없다.
   // 이 브랜치의 다른 실패 경로(`intro.tsx`·`analyzing.tsx`)와 같은 규칙으로 화면에도 띄운다.
@@ -67,16 +67,21 @@ export default function SessionPlay() {
 
   const submitAnswer = () => {
     if (cells.length === 0) {
-      const empty = "아직 입력한 칸이 없어요. 점을 짚고 손을 떼면 한 칸이 입력돼요.";
-      void hapticError();
-      // 화면 문구와 낭독 문구는 같은 문자열이다 (설계 8절)
-      setBlockedReason(empty);
-      announce(empty);
+      announce("아직 입력한 칸이 없어요. 점을 짚고 손을 떼면 한 칸이 입력돼요.");
       return;
     }
-    // 칸 수가 기대와 달라도 막지 않는다 — 모자란 답도 넘친 답도 정상적인 오답이고, 앱
-    // (`gradeAnswer`)과 서버(`LearningSessionCompletionService.isCorrect`)가 똑같이 오답으로
-    // 판정한다. 입력한 칸은 그대로 서버로 간다(`sessionStore.buildAttempts`).
+    // 서버는 칸 수가 정확히 맞아야 답을 받는다. 넘친 채로 보내면 `buildAttempts`가 잘라서
+    // 보내게 되는데, `gradeAnswer`는 넘친 답을 오답으로 판정하므로 화면과 서버 채점이 갈라진다
+    // — 문항마다 "틀렸어요"를 듣고 결과 화면에서는 만점을 보게 된다. 여기서 막는다.
+    // 모자란 답은 그대로 보낸다 — 빈 칸으로 채워도 양쪽 다 오답이라 어긋나지 않는다.
+    const tooMany = describeTooManyCells(cells.length, problem.expectedCells.length);
+    if (tooMany) {
+      void hapticError();
+      // 화면 문구와 낭독 문구는 같은 문자열이다 (설계 8절)
+      setBlockedReason(tooMany);
+      announce(tooMany);
+      return;
+    }
     setBlockedReason(null);
     submit(cells);
     router.replace("/session/grade");

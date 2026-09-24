@@ -76,8 +76,8 @@ export function gradeAnswer(
     const extra = cellToDots(act & ~exp & 0x3f);
     diffs.push({ index: i, expected: exp, actual: act, missing, extra });
   }
-  // 기대 칸 수를 넘는 입력은 막지 않는다 — 앱도 서버도 정상적인 오답으로 처리한다. 앞 칸이 다
-  // 맞았다면 넘친 첫 칸 하나만 오답으로 보여준다 — 기존 동작 그대로, diffs 유무로 판단 바꾸지 않음
+  // 기대 칸 수를 넘는 입력은 원래 방어선(`answerLengthGuard`)이 먼저 막지만, 우회해서 여기까지
+  // 오면 넘친 첫 칸 하나만 오답으로 보여준다 — 기존 동작 그대로, diffs 유무로 판단 바꾸지 않음
   if (actual.length > expected.length && diffs.length === 0) {
     const act = actual[expected.length] ?? EMPTY_CELL;
     diffs.push({
