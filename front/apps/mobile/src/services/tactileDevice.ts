@@ -14,6 +14,12 @@ import { useTactileStore } from "@/stores/tactileStore";
 export const TACTILE_NAME_HINT = "HC-06";
 
 /**
+ * 점을 올려 둘 수 있는 최대 시간. 솔레노이드는 켜 둔 채로 두면 뜨거워진다.
+ * 펌웨어(iot/braille_solenoid)도 같은 값으로 스스로 내리지만, 앱도 내려서 화면 상태를 맞춘다.
+ */
+export const HOLD_MS = 5_000;
+
+/**
  * 아두이노 6점 모듈(HC-06)에 붙는 `TactileDevice` 구현.
  *
  * 판정(무엇을 보낼지)은 `@ieum/itda`가 하고, 여기서는 네이티브 모듈에 줄을 넘기기만 한다.
@@ -21,6 +27,8 @@ export const TACTILE_NAME_HINT = "HC-06";
  */
 export class Hc06TactileDevice implements TactileDevice {
   private current: Cell = EMPTY_CELL;
+  /** HOLD_MS 뒤에 전부 내리는 예약. 올릴 때 걸고, 내릴 때 푼다. */
+  private holdTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly nameHint: string = TACTILE_NAME_HINT) {}
 
@@ -55,6 +63,7 @@ export class Hc06TactileDevice implements TactileDevice {
     try {
       const reply = await ItdaTactileModule.send(toSerialLine(command), this.nameHint);
       this.current = applyTo(command, this.current);
+      this.scheduleAutoLower();
       return reply;
     } catch (error) {
       throw asTactileError(error);
@@ -65,9 +74,34 @@ export class Hc06TactileDevice implements TactileDevice {
   }
 
   disconnect(): void {
+    this.clearHold();
     ItdaTactileModule.disconnect();
     this.current = EMPTY_CELL;
     this.publish();
+  }
+
+  /**
+   * 명령 뒤에 올라온 점이 하나라도 남아 있으면 **지금부터** HOLD_MS를 다시 세고, 없으면 예약을 푼다.
+   *
+   * 펌웨어와 같은 기준이다. "사과"를 올린 4초 뒤 "감자"를 올리면 감자도 온전히 5초를 얻고,
+   * `OFF 2`처럼 일부만 내려도 남은 점은 새로 5초를 얻는다. 기준을 "명령 종류"로 두면
+   * 일부 내림에서 예약이 사라져 펌웨어가 내린 뒤에도 앱은 올라온 줄로 알게 된다.
+   */
+  private scheduleAutoLower(): void {
+    this.clearHold();
+    if (this.current === EMPTY_CELL) return;
+
+    this.holdTimer = setTimeout(() => {
+      this.holdTimer = null;
+      void this.send({ kind: "lowerAll" }).catch(() => {
+        // 이미 끊겼으면 내릴 것도 없다 — 펌웨어가 같은 시간에 스스로 내린다.
+      });
+    }, HOLD_MS);
+  }
+
+  private clearHold(): void {
+    if (this.holdTimer) clearTimeout(this.holdTimer);
+    this.holdTimer = null;
   }
 
   /** 네이티브가 말하는 실제 상태를 화면용 스토어에 옮겨 적는다. */
