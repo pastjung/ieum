@@ -21,8 +21,8 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
     FROM Problem p
     JOIN ProblemSkill ps ON ps.problem = p
     WHERE p.level = :level
-      AND ps.skill.id IN :learningSkillIds
+      AND ps.skill.id = :learningSkillId
     """)
-  List<Problem> findAllByLevelAndLearningSkillIds(
-      @Param("level") Level level, @Param("learningSkillIds") List<Long> learningSkillIds);
+  List<Problem> findAllByLevelAndLearningSkillId(
+      @Param("level") Level level, @Param("learningSkillId") Long learningSkillId);
 }
