@@ -75,7 +75,7 @@ class LearningSessionCompletionServiceTest {
 
     Problem problem = new Problem(Level.WORD, "가방");
     ReflectionTestUtils.setField(problem, "id", PROBLEM_ID);
-    problemSession = new ProblemSession(problem, session);
+    problemSession = new ProblemSession(problem, session, 1L);
     ReflectionTestUtils.setField(problemSession, "id", PROBLEM_SESSION_ID);
 
     given(learningSessionRepository.findByIdForCompletion(SESSION_ID))
