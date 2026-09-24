@@ -99,6 +99,7 @@ class SessionSummary:
     summary: str
     tts_text: str
     weak_skills: list[WeakSkill]
+    error_type_counts: dict[str, int]  # 이번 세션 오류 유형별 횟수. 오류가 없으면 {} (null 아님)
 
 
 @dataclass
@@ -271,9 +272,9 @@ class SessionService:
             tts += f" {joined}{josa(names[-1], ('을', '를'))} 다시 연습해 보세요."
         else:
             tts += " 아주 잘했어요."
-        return SessionSummary(n, n_correct, summary, tts, weak)
+        return SessionSummary(n, n_correct, summary, tts, weak, error_type_counts(graded))
 
 
 def error_type_counts(graded: list[dict[str, Any]]) -> dict[str, int]:
-    """세션 오류 유형별 횟수 (계약에서는 제외됐지만 로그·분석용으로 남겨 둠)."""
+    """세션 오류 유형별 횟수(요소 합산). 오류가 없으면 빈 dict — 응답에서 null 이 되지 않게 한다."""
     return dict(Counter(e["type"] for g in graded for e in g["errors"]))

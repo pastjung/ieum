@@ -174,10 +174,12 @@ class WeakSkillSchema(CamelModel):
 
 
 class SessionSummaryResponse(CamelModel):
-    """{ summary, ttsText, weakSkills[] } — 읽기 전용(상태 갱신 없음)"""
+    """{ summary, ttsText, errorTypeCounts, weakSkills[] } — 읽기 전용(상태 갱신 없음).
+    errorTypeCounts 는 항상 객체다(오류가 없으면 {}). Java Map<String, Long> 이 null 이 되지 않게."""
 
     summary: str
     tts_text: str
+    error_type_counts: dict[str, int] = Field(default_factory=dict)
     weak_skills: list[WeakSkillSchema]
 
 
@@ -329,6 +331,7 @@ def session_summary(
     return SessionSummaryResponse(
         summary=result.summary,
         tts_text=result.tts_text,
+        error_type_counts=dict(result.error_type_counts),
         weak_skills=[
             WeakSkillSchema(
                 learning_skill_id=w.learning_skill_id,
