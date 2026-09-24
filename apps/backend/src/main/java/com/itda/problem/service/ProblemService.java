@@ -63,7 +63,12 @@ public class ProblemService {
 
     ProblemDetail problemDetail =
         new ProblemDetail(
-            problem.getId(), 1L, registerProblemRequest.targetText(), expectedPatterns, false);
+            null,
+            problem.getId(),
+            1L,
+            registerProblemRequest.targetText(),
+            expectedPatterns,
+            false);
     // TODO:수강생들에게 문제 전달
 
   }
@@ -192,6 +197,7 @@ public class ProblemService {
       Problem p = randomProblems.get(i);
       problemDetails.add(
           new ProblemDetail(
+              problemSessions.get(i).getId(),
               p.getId(),
               (long) i + 1,
               p.getTargetText(),
@@ -224,6 +230,7 @@ public class ProblemService {
       Problem p = s.getProblem();
       problemDetails.add(
           new ProblemDetail(
+              s.getId(),
               p.getId(),
               s.getSequence(),
               p.getTargetText(),
@@ -331,6 +338,7 @@ public class ProblemService {
       Problem p = randomProblems.get(i);
       problemDetails.add(
           new ProblemDetail(
+              problemSessions.get(i).getId(),
               p.getId(),
               (long) i + 1,
               p.getTargetText(),

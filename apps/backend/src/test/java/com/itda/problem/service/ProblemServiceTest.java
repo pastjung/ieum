@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import com.itda.curriculum.domain.CurriculumStageRepository;
 import com.itda.global.FastApiClient;
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.LearningSessionRepository;
 import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.LectureProblem;
@@ -19,9 +20,11 @@ import com.itda.problem.domain.LearningSkill;
 import com.itda.problem.domain.Level;
 import com.itda.problem.domain.Problem;
 import com.itda.problem.domain.ProblemCell;
+import com.itda.problem.domain.ProblemSession;
 import com.itda.problem.domain.ProblemSkill;
 import com.itda.problem.domain.SkillType;
 import com.itda.problem.dto.ProblemAnalyzeResponse;
+import com.itda.problem.dto.ProblemsResponse;
 import com.itda.problem.dto.RegisterProblemRequest;
 import com.itda.problem.dto.SkillSet;
 import com.itda.problem.repository.LearningSkillQueryRepository;
@@ -43,6 +46,7 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * 강사 문제 등록의 협력 흐름을 검증한다. DB·FastAPI 없이 순수 단위 테스트로 돌린다.
@@ -277,6 +281,34 @@ class ProblemServiceTest {
 
     verify(problemRepository, never()).save(any());
     verify(learningSkillQueryRepository, never()).findAllBySkillSets(any());
+  }
+
+  @Test
+  void 세션_조회_응답의_각_문항이_problemSessionId를_갖는다() {
+    // 앱은 이 값으로만 완료 제출을 만들 수 있다. 같은 문제가 한 세션에 두 번 배정될 수 있어
+    // problemId로는 어느 배정에 대한 답인지 가릴 수 없다.
+    long sessionId = 55L;
+    long learnerId = 9L;
+    AuthenticatedUser learner = new AuthenticatedUser(learnerId, UserRole.LEARNER);
+
+    LearningSession session = new LearningSession(learnerId, null);
+    given(learningSessionRepository.findById(sessionId)).willReturn(Optional.of(session));
+
+    Problem problem = new Problem(Level.WORD, "가방");
+    ReflectionTestUtils.setField(problem, "id", 31L);
+    ProblemSession assigned = new ProblemSession(problem, session, 1L);
+    ReflectionTestUtils.setField(assigned, "id", 101L);
+    given(problemSessionRepository.findAllBySession_IdOrderBySequence(sessionId))
+        .willReturn(List.of(assigned));
+
+    given(problemCellRepository.findAllByProblem_IdInOrderByProblem_IdAscCellIndexAsc(List.of(31L)))
+        .willReturn(List.of());
+
+    ProblemsResponse response = problemService.studyWithOldSession(learner, sessionId);
+
+    assertThat(response.problems())
+        .singleElement()
+        .satisfies(p -> assertThat(p.problemSessionId()).isEqualTo(101L));
   }
 
   private Lecture givenLecture() {
