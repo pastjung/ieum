@@ -42,7 +42,6 @@ export default function Dictionary() {
           setQuery(t);
           setNotFound(false);
         }}
-        focused
       />
       <AppButton label="찾기" variant="secondary" onPress={search} />
       {entry && (

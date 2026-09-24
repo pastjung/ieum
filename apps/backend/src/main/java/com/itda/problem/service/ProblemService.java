@@ -3,6 +3,8 @@ package com.itda.problem.service;
 import com.itda.curriculum.domain.CurriculumStage;
 import com.itda.curriculum.domain.CurriculumStageRepository;
 import com.itda.global.FastApiClient;
+import com.itda.global.error.BusinessException;
+import com.itda.global.error.ErrorCode;
 import com.itda.global.security.AuthenticatedUser;
 import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.LearningSessionRepository;
@@ -14,7 +16,10 @@ import com.itda.lecture.repository.LectureRepository;
 import com.itda.problem.domain.*;
 import com.itda.problem.dto.*;
 import com.itda.problem.repository.*;
+import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
+import com.itda.user.repository.UserJpaRepository;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
@@ -41,6 +46,7 @@ public class ProblemService {
   private final UserSkillMemoryRepository userSkillMemoryRepository;
   private final UserSkillErrorCountRepository userSkillErrorCountRepository;
   private final FastApiClient fastApiClient;
+  private final UserJpaRepository userJpaRepository;
 
   @Transactional
   public void registerProblem(
@@ -95,27 +101,35 @@ public class ProblemService {
   }
 
   private Lecture validateInstructor(AuthenticatedUser user, Long lectureId) {
-    if (!user.role().equals(UserRole.INSTRUCTOR)) throw new RuntimeException("강사만 문제를 출제할 수 있습니다.");
+    if (!user.role().equals(UserRole.INSTRUCTOR)) {
+      throw new BusinessException(ErrorCode.INSTRUCTOR_ACCESS_REQUIRED);
+    }
 
     Lecture lecture =
         lectureRepository
             .findById(lectureId)
-            .orElseThrow(() -> new RuntimeException("요청에 해당하는 강의가 없습니다."));
+            .orElseThrow(() -> new BusinessException(ErrorCode.LECTURE_NOT_FOUND));
 
-    if (!lecture.getInstructorUserId().equals(user.userId()))
-      throw new RuntimeException("본인 강의에서만 문제를 출제할 수 있습니다");
-    if (!lecture.isOpen()) throw new RuntimeException("진행중인 강의에서만 문제를 출제할 수 있습니다.");
+    if (!lecture.getInstructorUserId().equals(user.userId())) {
+      throw new BusinessException(ErrorCode.LECTURE_NOT_FOUND);
+    }
+    if (!lecture.isOpen()) {
+      throw new BusinessException(ErrorCode.INVALID_LECTURE_STATE);
+    }
 
     return lecture;
   }
 
   private void validateAnalyzeResponse(ProblemAnalyzeResponse analyzeResponse) {
-    if (analyzeResponse.level() == null)
-      throw new RuntimeException("FastAPI 응답의 problemType 이 null 입니다.");
-    if (analyzeResponse.skillSets() == null || analyzeResponse.skillSets().isEmpty())
-      throw new RuntimeException("FastAPI 응답의 skillSets 가 비어 있습니다.");
-    if (analyzeResponse.cells() == null || analyzeResponse.cells().isEmpty())
-      throw new RuntimeException("FastAPI 응답의 cells 가 비어 있습니다.");
+    if (analyzeResponse.level() == null) {
+      throw new BusinessException(ErrorCode.PROBLEM_VALIDATION_UNAVAILABLE);
+    }
+    if (analyzeResponse.skillSets() == null || analyzeResponse.skillSets().isEmpty()) {
+      throw new BusinessException(ErrorCode.PROBLEM_VALIDATION_UNAVAILABLE);
+    }
+    if (analyzeResponse.cells() == null || analyzeResponse.cells().isEmpty()) {
+      throw new BusinessException(ErrorCode.PROBLEM_VALIDATION_UNAVAILABLE);
+    }
   }
 
   @Transactional
@@ -124,12 +138,13 @@ public class ProblemService {
     CurriculumStage curriculumStage =
         curriculumStageRepository
             .findById(newStudyRequest.curriculumId())
-            .orElseThrow(() -> new RuntimeException("해당 커리큘럼이 없습니다."));
+            .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_LEARNING_SESSION_INPUT));
     LearningSession learningSession = createSession(user.userId(), curriculumStage);
     Level level = curriculumStage.getLevel();
 
     List<UserWrongProblem> wrongProblems =
-        userWrongProblemRepository.findAllByUser_IdAndLevel(user.userId(), level);
+        userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedIsNull(
+            user.userId(), level);
     int wrongCnt = Math.min(wrongProblems.size(), 4);
     Collections.shuffle(wrongProblems);
     List<Long> wrongProblemIds =
@@ -144,7 +159,7 @@ public class ProblemService {
     int normalCnt = 12 - wrongCnt;
 
     if (problems.size() < normalCnt) {
-      throw new RuntimeException("출제 가능한 문제가 부족합니다.");
+      throw new BusinessException(ErrorCode.LEARNING_CONTENT_NOT_READY);
     }
 
     Set<Integer> selectedIndexes = new HashSet<>();
@@ -234,9 +249,12 @@ public class ProblemService {
     LearningSession ls =
         learningSessionRepository
             .findById(sessionId)
-            .orElseThrow(() -> new RuntimeException("학습 세션이 없습니다."));
-    if (!ls.getUserId().equals(user.userId())) {
-      throw new RuntimeException("해당 세션의 소유자가 아닙니다.");
+            .orElseThrow(() -> new BusinessException(ErrorCode.LEARNING_SESSION_NOT_FOUND));
+    if (!ls.getUser().getId().equals(user.userId())) {
+      throw new BusinessException(ErrorCode.LEARNING_SESSION_NOT_FOUND);
+    }
+    if (ls.getCompletedAt() != null) {
+      throw new BusinessException(ErrorCode.LEARNING_SESSION_ALREADY_COMPLETED);
     }
   }
 
@@ -279,24 +297,27 @@ public class ProblemService {
     ReviewAnalyzeRequest reviewAnalyzeRequest = new ReviewAnalyzeRequest(skillStates);
     ReviewAnalyzeResponse response = fastApiClient.reviewAnalyze(reviewAnalyzeRequest);
 
-    Level level = response.level();
+    User curUser =
+        userJpaRepository
+            .findById(user.userId())
+            .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+    Level level = curUser.getLevel();
     List<Long> learningSkillIds = response.learningSkillIds();
 
-    List<Problem> problems =
-        problemRepository.findAllByLevelAndLearningSkillIds(level, learningSkillIds);
-
-    if (problems.size() < 12) {
-      throw new RuntimeException("출제 가능한 문제가 부족합니다.");
-    }
-
-    Set<Integer> selectedIndexes = new HashSet<>();
+    Set<Long> selectedProblemIds = new HashSet<>();
     ThreadLocalRandom random = ThreadLocalRandom.current();
 
-    while (selectedIndexes.size() < 12) {
-      selectedIndexes.add(random.nextInt(problems.size()));
+    for (int i = 1; i <= 3; i++) {
+      List<Problem> problem =
+          problemRepository.findAllByLevelAndLearningSkillId(level, learningSkillIds.get(i - 1));
+      while (selectedProblemIds.size() < i * 4) {
+        selectedProblemIds.add(problem.get(random.nextInt(problem.size())).getId());
+      }
     }
 
-    List<Problem> randomProblems = selectedIndexes.stream().map(problems::get).toList();
+    List<Problem> randomProblems = problemRepository.findAllById(selectedProblemIds);
+    Collections.shuffle(randomProblems);
 
     List<ProblemSession> problemSessions = new ArrayList<>();
 
@@ -334,7 +355,22 @@ public class ProblemService {
   }
 
   private LearningSession createSession(Long userId, CurriculumStage curriculum) {
-    LearningSession learningSession = new LearningSession(userId, curriculum);
+    User user =
+        userJpaRepository
+            .findById(userId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    LocalDateTime completedAt = LocalDateTime.now();
+    if (curriculum == null) {
+      learningSessionRepository
+          .findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user)
+          .forEach(session -> session.complete(completedAt));
+    } else {
+      learningSessionRepository
+          .findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(user)
+          .forEach(session -> session.complete(completedAt));
+    }
+
+    LearningSession learningSession = new LearningSession(user, curriculum);
     learningSessionRepository.save(learningSession);
     return learningSession;
   }

@@ -17,5 +17,4 @@ public interface ProblemSessionRepository extends JpaRepository<ProblemSession, 
   List<ProblemSession> findAllForCompletion(@Param("sessionId") Long sessionId);
 
   List<ProblemSession> findAllBySession_IdOrderBySequence(Long sessionId);
-
 }

@@ -1,0 +1,15 @@
+.git
+node_modules
+**/node_modules
+.env
+.env.*
+Dockerfile
+*.tsbuildinfo
+
+# Expo·RN 산출물. android/ 는 prebuild가 만드는 네이티브 프로젝트라 수 GB까지 커진다 —
+# 빌드 컨텍스트로 보내면 검증이 느려지기만 하고 쓰이지 않는다.
+**/.expo
+**/android
+**/ios
+**/dist
+**/build

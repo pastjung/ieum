@@ -82,6 +82,7 @@ Access Token은 15분 유효 JWT이며 MariaDB·Redis에 원문을 저장하지 
 | 목적 | Method·path | 요청 | 성공 |
 | --- | --- | --- | --- |
 | 회원가입 | `POST /api/v1/users` | `{ username, email, password }` | `201`, 사용자 요약 |
+| 아이디 사용 가능 확인 | `GET /api/v1/username-availability` | `?username=<값>` | `200`, `{ username, available }` |
 | 내 정보 | `GET /api/v1/users/me` | Bearer Access Token | `200`, 사용자 요약 |
 | 회원 탈퇴 | `POST /api/v1/users/me/withdrawals` | `{ currentPassword }` | `204` |
 | 로그인 | `POST /api/v1/auth-sessions` | `X-Client-Platform`, `{ username, password }` | `201`, 인증 응답 |
@@ -126,15 +127,33 @@ email은 trim 후 소문자로 정규화하며 유효한 이메일 형식이어�
 
 `POST /api/v1/users/me/withdrawals` 요청 body는 required·non-null 문자열 `currentPassword` 하나이며 성공은 `204`와 빈 body다. `currentPassword`가 누락·null·빈 문자열이면 `422 INVALID_ACCOUNT_INPUT`이고, non-empty지만 실제 비밀번호와 다르면 `403 CURRENT_PASSWORD_MISMATCH`다.
 
+`GET /api/v1/username-availability`는 회원가입 화면이 아이디를 미리 확인하기 위한 조회다. 인증을 요구하지 않는다. required query parameter `username` 하나를 받고 성공은 `200`과 다음 body다.
+
+| 필드 | 타입 | required | nullable |
+| --- | --- | :---: | :---: |
+| `username` | string | O | X |
+| `available` | boolean | O | X |
+
+응답의 `username`은 이 절의 규칙으로 **정규화한 값**이다. trim·NFC 정규화로 요청 값과 달라질 수 있고, 클라이언트는 무엇에 대한 판정인지 알아야 사용자에게 정확히 안내할 수 있다.
+
+`available`은 조회 시점에 그 값을 가입에 쓸 수 있는지만 뜻한다. 조회와 실제 가입 사이에 다른 요청이 같은 값을 선점할 수 있으므로 **`200`은 이후 가입의 `201`을 보장하지 않는다.** 최종 판정은 `POST /api/v1/users`의 `409 ACCOUNT_IDENTIFIER_UNAVAILABLE`이며, 클라이언트는 이 조회를 통과했다는 이유로 가입 실패를 예외로 다루지 않는다.
+
+`username`이 누락되거나 이 절의 형식·길이 규칙을 위반하면 `422 INVALID_ACCOUNT_INPUT`이고 `available`을 돌려주지 않는다. **형식 위반을 `available: false`로 답하지 않는다** — 쓸 수 없는 이유가 중복인지 형식인지 구분되지 않으면 클라이언트가 사용자에게 무엇을 고치라고 안내할 수 없다.
+
+탈퇴한 계정의 username은 탈퇴 시점에 가명으로 바뀌어 더 이상 그 값을 점유하지 않으므로 `available: true`다.
+
 다음은 이 절에서 확정하는 계정 업무 오류다. 공통 HTTP 파싱·전송 오류는 제외하고, 저장소 장애 code의 상세 판정 절차는 3.6.2절을 따르며 code 정의는 3.5절을 따른다.
 
 | API | 오류 |
 | --- | --- |
 | `POST /api/v1/users` | `409 ACCOUNT_IDENTIFIER_UNAVAILABLE`, `422 INVALID_ACCOUNT_INPUT`, `422 INVALID_PASSWORD`, `503 PASSWORD_POLICY_UNAVAILABLE`, `503 AUTH_STATE_UNAVAILABLE` |
+| `GET /api/v1/username-availability` | `422 INVALID_ACCOUNT_INPUT` |
 | `GET /api/v1/users/me` | `401 UNAUTHORIZED` |
 | `POST /api/v1/users/me/withdrawals` | `401 UNAUTHORIZED`, `403 CURRENT_PASSWORD_MISMATCH`, `422 INVALID_ACCOUNT_INPUT` |
 
-`409`는 username과 email 중 어느 값이 중복됐는지 구분하지 않는다. 이로 인한 계정 열거 가능성은 MVP에서 의도적으로 수용한다. 가입 API는 계정 열거 완화를 위한 요청 제한 대상이며 구체 제한 수치는 후속 보안 계약에서 정한다.
+`409`는 username과 email 중 어느 값이 중복됐는지 구분하지 않는다. 이로 인한 계정 열거 가능성은 MVP에서 의도적으로 수용한다. 가입 API와 `GET /api/v1/username-availability`는 계정 열거 완화를 위한 요청 제한 대상이며 구체 제한 수치는 후속 보안 계약에서 정한다.
+
+조회 API는 가입 API보다 열거 비용이 낮다. 가입은 body 세 개를 갖춰 보내야 하고 성공하면 행과 메일 작업을 만들지만, 조회는 요청 하나로 username 하나의 사용 여부를 그대로 알려 준다. 제한 수치를 정할 때 이 차이를 전제로 하며, 두 API에 같은 수치를 쓰지 않는다. email에 대응하는 조회 API는 두지 않는다 — 이메일은 아이디보다 추측 대상이 되기 쉽고, 가입 화면이 미리 확인해야 할 이유도 없다.
 
 ### 3.3 플랫폼별 Refresh Token 전달
 
@@ -779,6 +798,7 @@ durationMs는 null일 수 있다. userId, problemId, curriculumStageId, lectureI
 | 401 | UNAUTHORIZED | 인증되지 않음 |
 | 403 | LEARNER_ACCESS_REQUIRED | 학습자 역할이 아님 |
 | 403 | CURRICULUM_STAGE_LOCKED | 열리지 않은 단계 |
+| 404 | USER_NOT_FOUND | 인증 주체에 해당하는 사용자 계정이 없음 |
 | 404 | LECTURE_NOT_FOUND | sourceLectureId 수업 없음 또는 요청 학습자의 참여 이력 없음 |
 | 404 | LEARNING_SESSION_NOT_FOUND | 세션 없음 또는 타인 소유 |
 | 409 | SELF_ASSESSMENT_REQUIRED | 최초 단계가 정해지지 않음 |

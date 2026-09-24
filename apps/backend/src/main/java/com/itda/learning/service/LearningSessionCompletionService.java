@@ -51,7 +51,9 @@ public class LearningSessionCompletionService {
   @Transactional
   public CompletionResult complete(long userId, long sessionId, CompletionCommand command) {
     validateCommand(command);
+
     LearningSession session = findOwnedSession(userId, sessionId);
+
     List<ProblemSession> assignedProblems =
         problemSessionRepository.findAllForCompletion(sessionId);
     if (session.getCompletedAt() != null) {
@@ -81,7 +83,8 @@ public class LearningSessionCompletionService {
         learningSessionRepository
             .findByIdForCompletion(sessionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.LEARNING_SESSION_NOT_FOUND));
-    if (!session.getUserId().equals(userId)) {
+
+    if (!session.getUser().getId().equals(userId)) {
       throw new BusinessException(ErrorCode.LEARNING_SESSION_NOT_FOUND);
     }
     return session;
@@ -267,7 +270,8 @@ public class LearningSessionCompletionService {
         problemResults.size(),
         correctProblemCount,
         problemResults,
-        summary);
+        summary
+    );
   }
 
   private static ProblemResult toProblemResult(

@@ -65,18 +65,34 @@ public enum ErrorCode {
   ACTION_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "요청을 처리할 수 없습니다. 링크를 다시 요청해 주세요."),
   PASSWORD_POLICY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."),
 
+  // 사용자
+  USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
+
+  // lecture
+  INSTRUCTOR_ACCESS_REQUIRED(HttpStatus.FORBIDDEN, "강사 권한이 필요합니다."),
+  LECTURE_NOT_FOUND(HttpStatus.NOT_FOUND, "수업을 찾을 수 없습니다."),
+  INVALID_LECTURE_STATE(HttpStatus.CONFLICT, "현재 수업 상태에서는 요청을 처리할 수 없습니다."),
+
   // braille
   PATTERN_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "패턴 값이 허용 범위(0~63)를 벗어났습니다."),
 
   // learning completion
   LEARNING_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "학습 세션을 찾을 수 없습니다."),
+
   INVALID_ATTEMPT_ANALYSIS_REQUEST(
       HttpStatus.UNPROCESSABLE_CONTENT, "문제 풀이 분석 요청을 확인해 주세요."),
   LEARNING_PROBLEM_ALREADY_ANALYZED(
       HttpStatus.CONFLICT, "이미 분석이 완료된 문제입니다."),
   INVALID_COMPLETION_REQUEST(HttpStatus.UNPROCESSABLE_CONTENT, "학습 완료 요청을 확인해 주세요."),
   LEARNING_ANALYSIS_UNAVAILABLE(
-      HttpStatus.SERVICE_UNAVAILABLE, "학습 결과를 분석할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+      HttpStatus.SERVICE_UNAVAILABLE, "학습 결과를 분석할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+  LEARNING_SESSION_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 종료된 학습 세션입니다."),
+  INVALID_LEARNING_SESSION_INPUT(HttpStatus.UNPROCESSABLE_CONTENT, "학습 세션 요청을 확인해 주세요."),
+
+  LEARNING_CONTENT_NOT_READY(HttpStatus.SERVICE_UNAVAILABLE, "학습 콘텐츠가 아직 준비되지 않았습니다."),
+
+  // problem
+  PROBLEM_VALIDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "문제 검증 서비스를 일시적으로 사용할 수 없습니다.");
 
   private final HttpStatus status;
   private final String message;
