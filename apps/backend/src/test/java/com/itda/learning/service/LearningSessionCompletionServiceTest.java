@@ -2,7 +2,6 @@ package com.itda.learning.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -18,7 +17,6 @@ import com.itda.learning.domain.LearningSessionRepository;
 import com.itda.learning.domain.ProblemAttempt;
 import com.itda.learning.domain.ProblemAttemptRepository;
 import com.itda.learning.service.LearningSessionCompletionService.AttemptCommand;
-import com.itda.learning.service.LearningSessionCompletionService.CellResult;
 import com.itda.learning.service.LearningSessionCompletionService.CompletionCommand;
 import com.itda.learning.service.LearningSessionCompletionService.CompletionResult;
 import com.itda.problem.domain.Level;
@@ -28,7 +26,6 @@ import com.itda.problem.domain.ProblemSession;
 import com.itda.problem.repository.ProblemCellRepository;
 import com.itda.problem.repository.ProblemSessionRepository;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -49,10 +46,6 @@ class LearningSessionCompletionServiceTest {
   private static final long SESSION_ID = 10L;
   private static final long PROBLEM_ID = 20L;
   private static final long PROBLEM_SESSION_ID = 30L;
-  private static final int FIRST_CELL = 0b001011;
-  private static final int SECOND_CELL = 0b000001;
-  private static final int THIRD_CELL = 0b000100;
-
   @Mock private LearningSessionRepository learningSessionRepository;
   @Mock private ProblemSessionRepository problemSessionRepository;
   @Mock private ProblemCellRepository problemCellRepository;
@@ -61,7 +54,6 @@ class LearningSessionCompletionServiceTest {
 
   private LearningSessionCompletionService service;
   private LearningSession session;
-  private Problem problem;
   private ProblemSession problemSession;
   private AtomicReference<List<ProblemAttempt>> savedAttempts;
   private AtomicReference<List<AttemptCell>> savedAttemptCells;
@@ -81,7 +73,7 @@ class LearningSessionCompletionServiceTest {
     session = new LearningSession(USER_ID, curriculumStage);
     ReflectionTestUtils.setField(session, "id", SESSION_ID);
 
-    problem = new Problem(Level.WORD, "가방");
+    Problem problem = new Problem(Level.WORD, "가방");
     ReflectionTestUtils.setField(problem, "id", PROBLEM_ID);
     problemSession = new ProblemSession(problem, session, 1L);
     ReflectionTestUtils.setField(problemSession, "id", PROBLEM_SESSION_ID);
@@ -210,78 +202,20 @@ class LearningSessionCompletionServiceTest {
   }
 
   @Test
-  void 기대보다_입력_칸이_모자라면_거부하지_않고_오답으로_처리한다() {
-    givenTwoCellProblem();
+  void 정답_Cell_개수와_입력_개수가_다르면_거부한다() {
+    CompletionCommand command =
+        new CompletionCommand(List.of(new AttemptCommand(PROBLEM_SESSION_ID, List.of(1, 2))));
 
-    CompletionResult result = service.complete(USER_ID, SESSION_ID, command(FIRST_CELL));
-
-    assertThat(result.correctProblemCount()).isZero();
-    assertThat(result.problemResults().getFirst().correct()).isFalse();
-    // 입력하지 않은 둘째 칸도 결과에 담긴다 — 앱이 "둘째 칸이 비었다"를 말할 수 있어야 한다
-    assertThat(result.problemResults().getFirst().cells())
-        .extracting(CellResult::cellIndex, CellResult::expectedPattern, CellResult::inputPattern)
-        .containsExactly(tuple(1, FIRST_CELL, FIRST_CELL), tuple(2, SECOND_CELL, 0));
-    assertThat(problemSession.isCompleted()).isTrue();
+    assertThatThrownBy(() -> service.complete(USER_ID, SESSION_ID, command))
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(ErrorCode.INVALID_COMPLETION_REQUEST));
   }
 
-  @Test
-  void 기대보다_입력_칸이_넘치면_거부하지_않고_오답으로_처리한다() {
-    givenTwoCellProblem();
-
-    CompletionResult result =
-        service.complete(USER_ID, SESSION_ID, command(FIRST_CELL, SECOND_CELL, THIRD_CELL));
-
-    assertThat(result.correctProblemCount()).isZero();
-    assertThat(result.problemResults().getFirst().correct()).isFalse();
-    // 넘친 셋째 칸도 결과에 담긴다 — 기대는 빈 칸, 입력은 사용자가 넣은 값
-    assertThat(result.problemResults().getFirst().cells())
-        .extracting(CellResult::cellIndex, CellResult::expectedPattern, CellResult::inputPattern)
-        .containsExactly(
-            tuple(1, FIRST_CELL, FIRST_CELL),
-            tuple(2, SECOND_CELL, SECOND_CELL),
-            tuple(3, 0, THIRD_CELL));
-  }
-
-  /**
-   * 서버 채점이 앱의 `gradeAnswer`(front/packages/domain)와 같은 판정을 내리는지 고정한다. 같은 문항(기대 2칸)·같은 입력 세 가지에 대한
-   * 기대 판정은 front 쪽 `sessionStore.test.ts`의 "로컬 채점과 서버 채점이 같은 판정을 내린다"와 짝을 이룬다. 갈라지면 사용자는 문항마다 들은
-   * 결과와 결과 화면의 점수가 다른 것을 보게 된다.
-   */
-  @Test
-  void 칸_수가_부족_정확_초과인_세_경우의_판정이_로컬_채점과_같다() {
-    assertThat(serverVerdict(FIRST_CELL)).isFalse();
-    assertThat(serverVerdict(FIRST_CELL, SECOND_CELL)).isTrue();
-    assertThat(serverVerdict(FIRST_CELL, SECOND_CELL, THIRD_CELL)).isFalse();
-  }
-
-  private boolean serverVerdict(int... inputPatterns) {
-    LearningSession freshSession = new LearningSession(USER_ID, null);
-    ReflectionTestUtils.setField(freshSession, "id", SESSION_ID);
-    ProblemSession freshProblemSession = new ProblemSession(problem, freshSession, 1L);
-    ReflectionTestUtils.setField(freshProblemSession, "id", PROBLEM_SESSION_ID);
-    given(learningSessionRepository.findByIdForCompletion(SESSION_ID))
-        .willReturn(Optional.of(freshSession));
-    given(problemSessionRepository.findAllForCompletion(SESSION_ID))
-        .willReturn(List.of(freshProblemSession));
-    given(learningSessionRepository.saveAndFlush(freshSession)).willReturn(freshSession);
-    givenTwoCellProblem();
-
-    return service
-        .complete(USER_ID, SESSION_ID, command(inputPatterns))
-        .problemResults()
-        .getFirst()
-        .correct();
-  }
-
-  private void givenTwoCellProblem() {
-    given(problemCellRepository.findByProblemIdOrderByCellIndexAsc(PROBLEM_ID))
-        .willReturn(
-            List.of(
-                new ProblemCell(problem, 1, FIRST_CELL), new ProblemCell(problem, 2, SECOND_CELL)));
-  }
-
-  private static CompletionCommand command(int... inputPatterns) {
-    List<Integer> patterns = Arrays.stream(inputPatterns).boxed().toList();
-    return new CompletionCommand(List.of(new AttemptCommand(PROBLEM_SESSION_ID, patterns)));
+  private static CompletionCommand command(int inputPattern) {
+    return new CompletionCommand(
+        List.of(new AttemptCommand(PROBLEM_SESSION_ID, List.of(inputPattern))));
   }
 }

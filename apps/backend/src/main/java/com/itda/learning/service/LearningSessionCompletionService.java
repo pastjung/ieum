@@ -33,9 +33,6 @@ public class LearningSessionCompletionService {
   private static final int MAX_PATTERN = 0b111111;
   private static final int DOTS_PER_CELL = 6;
 
-  /** 입력하지 않은 칸·기대하지 않은 칸을 채우는 값. 앱의 {@code EMPTY_CELL}과 같다. */
-  private static final int EMPTY_CELL = 0;
-
   private final LearningSessionRepository learningSessionRepository;
   private final ProblemSessionRepository problemSessionRepository;
   private final ProblemCellRepository problemCellRepository;
@@ -74,7 +71,7 @@ public class LearningSessionCompletionService {
       AttemptCommand attemptCommand = commandsByProblemSession.get(assigned.getId());
       List<ProblemCell> expectedCells =
           problemCellRepository.findByProblemIdOrderByCellIndexAsc(assigned.getProblem().getId());
-      validateExpectedCells(expectedCells);
+      validateCellInputs(expectedCells, attemptCommand.inputPatterns());
 
       boolean correct = isCorrect(expectedCells, attemptCommand.inputPatterns());
       ProblemAttempt attempt =
@@ -160,13 +157,9 @@ public class LearningSessionCompletionService {
     return indexed;
   }
 
-  /**
-   * 문제 쪽 데이터가 성립하는지만 본다. 답안의 칸 수는 여기서 보지 않는다 — 기대와 다른 칸 수는 요청의 결함이 아니라 학습자의 오답이고, {@link
-   * #isCorrect}가 오답으로 판정한다. 예전에는 길이가 다르면 요청 전체를 거부했는데, {@code complete()}가 {@code @Transactional}이라
-   * 12문항 중 한 문항의 칸 수만 어긋나도 세션 전체가 롤백됐다.
-   */
-  private static void validateExpectedCells(List<ProblemCell> expectedCells) {
-    if (expectedCells.isEmpty()) {
+  private static void validateCellInputs(
+      List<ProblemCell> expectedCells, List<Integer> inputPatterns) {
+    if (expectedCells.isEmpty() || expectedCells.size() != inputPatterns.size()) {
       throw new BusinessException(ErrorCode.INVALID_COMPLETION_REQUEST);
     }
     for (int index = 0; index < expectedCells.size(); index++) {
@@ -176,14 +169,7 @@ public class LearningSessionCompletionService {
     }
   }
 
-  /**
-   * 앱의 {@code gradeAnswer}(front/packages/domain)와 같은 규칙으로 판정한다: 칸 수가 기대와 다르면 오답이고(모자라도, 넘쳐도), 같을
-   * 때만 칸별 패턴을 비교한다. 두 채점이 갈라지면 사용자는 화면에서 들은 결과와 결과 화면의 점수가 다른 것을 보게 된다.
-   */
   private static boolean isCorrect(List<ProblemCell> expectedCells, List<Integer> inputPatterns) {
-    if (expectedCells.size() != inputPatterns.size()) {
-      return false;
-    }
     for (int index = 0; index < expectedCells.size(); index++) {
       if (expectedCells.get(index).getExpectedPattern() != inputPatterns.get(index)) {
         return false;
@@ -192,23 +178,20 @@ public class LearningSessionCompletionService {
     return true;
   }
 
-  /**
-   * 기대 칸과 입력 칸 중 긴 쪽만큼 셀을 만들고, 없는 쪽은 빈 셀({@code 0})로 둔다. 그래야 응답의 {@code cells}가 모자란 칸·넘친 칸을 모두 담아
-   * 앱이 "몇 번째 칸에 무엇을 넣었고 무엇이 기대됐는지"로 피드백을 만들 수 있다.
-   */
   private static List<AttemptCell> createAttemptCells(
       ProblemAttempt attempt,
       List<ProblemCell> expectedCells,
       AttemptCommand attemptCommand,
       LocalDateTime respondedAt) {
-    List<Integer> inputPatterns = attemptCommand.inputPatterns();
-    int cellCount = Math.max(expectedCells.size(), inputPatterns.size());
-    List<AttemptCell> cells = new ArrayList<>(cellCount);
-    for (int index = 0; index < cellCount; index++) {
-      int expectedPattern =
-          index < expectedCells.size() ? expectedCells.get(index).getExpectedPattern() : EMPTY_CELL;
-      int inputPattern = index < inputPatterns.size() ? inputPatterns.get(index) : EMPTY_CELL;
-      cells.add(new AttemptCell(attempt, index + 1, expectedPattern, inputPattern, respondedAt));
+    List<AttemptCell> cells = new ArrayList<>(expectedCells.size());
+    for (int index = 0; index < expectedCells.size(); index++) {
+      cells.add(
+          new AttemptCell(
+              attempt,
+              index + 1,
+              expectedCells.get(index).getExpectedPattern(),
+              attemptCommand.inputPatterns().get(index),
+              respondedAt));
     }
     return cells;
   }
