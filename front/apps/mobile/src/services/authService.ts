@@ -104,4 +104,25 @@ export const authService = {
   async requestPasswordReset(email: string): Promise<void> {
     await api.post("/password-reset-requests", { email }, { auth: false });
   },
+
+  /**
+   * 메일 링크의 토큰으로 이메일 인증을 끝낸다. 성공은 204다.
+   *
+   * 자동 로그인하지 않는다 — 계약이 그렇게 정했다. 인증이 끝나면 사용자가 직접 로그인한다.
+   * 토큰은 한 번만 쓸 수 있고, 만료·사용 완료·재발급 교체는 모두 400 ACTION_TOKEN_INVALID로
+   * 구분 없이 돌아온다. 화면은 원인을 가르지 않고 "새 메일을 요청하세요"로 안내한다.
+   */
+  async completeEmailVerification(token: string): Promise<void> {
+    await api.post("/email-verifications", { token }, { auth: false });
+  },
+
+  /**
+   * 메일 링크의 토큰으로 비밀번호를 바꾼다. 성공은 204다.
+   *
+   * 여기서도 자동 로그인하지 않는다. 비밀번호가 바뀌면 기존 인증 세션이 전부 무효가 되므로
+   * 사용자가 새 비밀번호로 직접 로그인해야 한다.
+   */
+  async completePasswordReset(token: string, newPassword: string): Promise<void> {
+    await api.post("/password-resets", { token, newPassword }, { auth: false });
+  },
 };

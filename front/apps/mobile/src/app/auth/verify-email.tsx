@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
+import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,7 +11,8 @@ import { BigInput } from "@/components/BigInput";
 import { AppButton } from "@/components/AppButton";
 import { authService } from "@/services/authService";
 import { describeAuthError } from "@/services/authErrors";
-import { announce, hapticError } from "@/a11y";
+import { extractActionToken } from "@/services/actionToken";
+import { announce, hapticError, hapticSuccess } from "@/a11y";
 import { useTheme } from "@/theme";
 
 const schema = z.object({ email: z.string().email("이메일 형식을 확인해 주세요") });
@@ -21,6 +23,69 @@ type Input = z.infer<typeof schema>;
  * 알려 주는 셈이라 계정 열거 취약점이 된다 — 발송을 확신할 수 있는 경로에서만 단정한다
  */
 const REQUEST_ACCEPTED = "요청을 접수했어요. 가입된 이메일이면 인증 메일이 도착해요. 메일함을 확인해 주세요.";
+
+/* ─── 메일 링크 경로 — 중계 페이지가 ieum://auth/verify-email#token=... 으로 넘겨준 상태 ─── */
+
+function Verifying({ token }: { token: string }) {
+  const router = useRouter();
+  const theme = useTheme();
+  const [state, setState] = useState<"working" | "done" | "failed">("working");
+  const [message, setMessage] = useState("인증을 확인하고 있어요. 잠시만 기다려 주세요.");
+
+  useEffect(() => {
+    let cancelled = false;
+    announce("인증을 확인하고 있어요.");
+
+    void authService
+      .completeEmailVerification(token)
+      .then(() => {
+        if (cancelled) return;
+        void hapticSuccess();
+        setState("done");
+        // 계약이 자동 로그인을 금지한다. 인증만 끝내고 사용자가 직접 로그인한다
+        setMessage("이메일 인증이 끝났어요. 이제 로그인할 수 있어요.");
+        announce("이메일 인증이 끝났어요. 이제 로그인할 수 있어요.");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        void hapticError();
+        setState("failed");
+        // 만료·이미 사용·재발급 교체가 모두 같은 400으로 온다. 원인을 가르지 않고
+        // 다음 행동만 알려 준다 — 사용자가 할 수 있는 일은 어느 쪽이든 하나다
+        const text = `${describeAuthError(error)} 인증 메일을 새로 요청해 주세요.`;
+        setMessage(text);
+        announce(text);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  return (
+    <ScreenShell>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 18 }}>
+        <Text accessibilityRole="header" style={{ fontSize: 28, fontWeight: "900", lineHeight: 40, color: theme.color.text, textAlign: "center" }}>
+          이메일 인증
+        </Text>
+        <Text
+          accessibilityLiveRegion="polite"
+          style={{ fontSize: 17, color: theme.color.textMuted, lineHeight: 29, textAlign: "center" }}
+        >
+          {message}
+        </Text>
+      </View>
+      {state !== "working" && (
+        <View style={{ gap: 12 }}>
+          <AppButton
+            label={state === "done" ? "로그인하러 가기" : "로그인 화면으로"}
+            onPress={() => router.replace("/auth/sign-in")}
+          />
+        </View>
+      )}
+    </ScreenShell>
+  );
+}
 
 /* ─── 가입 직후 경로 — 서버가 실제로 인증 메일을 발송한 상태 ─── */
 
@@ -135,5 +200,9 @@ function RequestForm() {
  */
 export default function VerifyEmail() {
   const { email } = useLocalSearchParams<{ email?: string }>();
+  // 딥링크 fragment는 라우트 파라미터로 오지 않는다. 앱을 연 URL 원문에서 직접 읽는다
+  const token = extractActionToken(Linking.useURL());
+
+  if (token != null) return <Verifying token={token} />;
   return email ? <SentNotice email={email} /> : <RequestForm />;
 }
