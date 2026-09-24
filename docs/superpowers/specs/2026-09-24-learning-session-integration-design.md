@@ -11,7 +11,7 @@
 | 엔드포인트 | 쓰임 |
 |---|---|
 | `POST /api/v1/learning-sessions` | 세션 생성. `{curriculumId}` → `{sessionId, problems[]}` |
-| `GET /api/v1/learning-sessions/{sessionId}` | 같은 실행 안에서의 재진입 |
+| `GET /api/v1/learning-sessions/{sessionId}` | 인증 보호만 한다 — 앱은 이번에 호출하지 않는다 (9절) |
 | `POST /api/v1/learning-sessions/{sessionId}/completion` | 일괄 제출·최종 채점 |
 
 `POST /api/v1/lectures/{lectureId}/problems` 는 제외한다. `validateInstructor()` 로 막힌 교육자
@@ -213,9 +213,13 @@ BIGINT 식별자는 10진수 문자열"을 요구하지만 구현에 맞추기�
 
 구현하지 않기로 한 것을 명시한다. 나중에 "왜 안 되지"를 다시 조사하지 않기 위해서다.
 
-- **앱 재시작 후 이어하기.** `GET /learning-sessions/current` 가 없고 앱이 `sessionId` 를 기기에
-  저장하지 않는다. 홈의 "이어서 학습"은 목으로 남는다. `GET /{sessionId}` 는 같은 실행 안에서의
-  재진입에만 쓴다.
+- **이어하기 전부.** `GET /learning-sessions/current` 가 없고 앱이 `sessionId` 를 기기에 저장하지
+  않는다. 홈의 "이어서 학습"은 목으로 남는다.
+
+  `GET /{sessionId}` 도 앱이 호출하지 않는다. 계획을 짜면서 부를 자리를 찾지 못했다 — 세션을
+  만든 `intro` 부터 결과까지 스토어가 메모리로 들고 가므로 같은 실행 안에서는 다시 받을 일이
+  없고, 실행을 넘기는 이어하기는 기기 저장이 있어야 한다. 쓰지 않을 함수를 미리 만들지 않는다.
+  다만 **인증 보호에는 포함한다** — 앱이 부르지 않는다고 해서 열어 둘 이유는 없다.
 - **문제 부족 시 안내.** `ProblemService.java:151` 이 `RuntimeException` 을 던져 500이 나가고, 앱은
   "일시적인 오류"로만 말한다. 명세는 이 경우를 503으로 정의하지만(`api-spec.md:728`) 백엔드를 더
   고치지 않기로 했다.
@@ -230,6 +234,7 @@ BIGINT 식별자는 10진수 문자열"을 요구하지만 구현에 맞추기�
 - 세 경로에 토큰 없이 요청하면 **401** 이다 (지금은 500).
 - `POST /api/v1/learning-sessions/{id}/completion` 이 응답한다 (지금은 404).
 - 세션 생성 응답의 각 문항에 `problemSessionId` 가 있고, 그 값으로 만든 완료 요청이 통과한다.
+- `GET /learning-sessions/{sessionId}` 도 토큰 없이는 401이다 (앱이 부르지 않아도 막혀 있어야 한다).
 - `./gradlew test` 와 `spotlessCheck` 가 통과한다.
 
 **앱**
