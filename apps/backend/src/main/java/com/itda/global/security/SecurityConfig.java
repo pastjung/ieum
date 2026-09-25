@@ -96,6 +96,9 @@ public class SecurityConfig {
   /** 진행 중인 세션 조회. 내 학습 이력이므로 보호 대상이다 */
   private static final String IN_PROGRESS_SESSION_PATH = "/learning-sessions/in-progress";
 
+  /** 내 숙련 상태 조회. 같은 이유로 보호 대상이다 */
+  private static final String SKILL_SUMMARY_PATH = "/learning-sessions/skill-summary";
+
   private static final String REVIEW_SESSIONS_PATH = "/review-sessions";
 
   private static final String REVIEW_SESSION_PATH = "/review-sessions/{sessionId}";
@@ -141,6 +144,7 @@ public class SecurityConfig {
                     HttpMethod.POST, LEARNING_SESSION_ATTEMPT_ANALYSIS_PATH),
                 PathPatternRequestMatcher.pathPattern(
                     HttpMethod.GET, IN_PROGRESS_SESSION_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, SKILL_SUMMARY_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, REVIEW_SESSIONS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, REVIEW_SESSION_PATH)))
         .addFilterBefore(

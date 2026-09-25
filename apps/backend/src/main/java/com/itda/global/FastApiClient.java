@@ -3,6 +3,8 @@ package com.itda.global;
 import com.itda.learning.dto.LearningAttemptAnalysisFastApiRequest;
 import com.itda.learning.dto.LearningAttemptAnalysisFastApiResponse;
 import com.itda.learning.dto.LearningSessionSummaryFastApiRequest;
+import com.itda.learning.dto.LearningSkillSummaryFastApiRequest;
+import com.itda.learning.dto.LearningSkillSummaryFastApiResponse;
 import com.itda.learning.dto.LearningSkillStatesFastApiRequest;
 import com.itda.learning.dto.LearningSkillStatesFastApiResponse;
 import com.itda.learning.dto.LearningSessionSummaryFastApiResponse;
@@ -49,6 +51,17 @@ public class FastApiClient {
         .body(request)
         .retrieve()
         .body(LearningAttemptAnalysisFastApiResponse.class);
+  }
+
+  /** 세션 밖에서 요소별 숙련 상태를 읽는다. 상태를 바꾸지 않는다 */
+  public LearningSkillSummaryFastApiResponse summarizeSkills(
+      LearningSkillSummaryFastApiRequest request) {
+    return restClient
+        .post()
+        .uri("/skill-summary")
+        .body(request)
+        .retrieve()
+        .body(LearningSkillSummaryFastApiResponse.class);
   }
 
   /** 글자 없이 숙련도만 갱신한다. 낱자 문항(자음·모음)이 쓰는 경로다 */
