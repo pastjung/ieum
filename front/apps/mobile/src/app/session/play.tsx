@@ -166,9 +166,12 @@ export default function SessionPlay() {
         router.replace("/session/grade");
         return;
       case "already":
+        // 화면에 남긴다 — 다음 문항으로 넘어갈 때 위쪽 리셋 effect가 어차피 비운다.
+        // announce만 하고 지우면 음성 모드를 끈 사용자는 이 문항에 무슨 일이 있었는지
+        // 아무 신호도 못 받고 결과 화면으로 튕긴다.
+        setStatusMessage(ALREADY_MESSAGE);
         announce(ALREADY_MESSAGE);
         setPhase("idle");
-        setStatusMessage(null);
         router.replace("/session/grade");
         return;
       case "failed":
@@ -216,6 +219,10 @@ export default function SessionPlay() {
   };
 
   const retry = () => {
+    // `locked`(phase !== "idle")를 그대로 쓰면 retry는 정확히 phase === "failed"일 때만
+    // 눌리는데 그 상태도 locked === true라 항상 막힌다. 여기서 막아야 하는 것은 "failed가
+    // 아닐 때"(요청이 아직 진행 중인 waiting, 이미 넘어간 idle/exhausted)의 연타다.
+    if (phase !== "failed") return;
     void runAttempt(cells);
   };
 
@@ -232,9 +239,17 @@ export default function SessionPlay() {
     });
   };
 
+  // 재시도도 "입력 완료"와 같은 길게 누르기다 — MAX_ATTEMPT_TRIES(3)는 희소 자원이라 실수로
+  // 누르면 세 번째에 12문항을 처음부터 다시 풀어야 한다. 같은 화면에서 어떤 버튼은 짧게, 어떤
+  // 버튼은 길게 누르면 한 번 익힌 조작 모델이 깨진다.
   const submitButtonProps =
     phase === "failed"
-      ? { label: "다시 보내기", onPress: retry }
+      ? {
+          label: "다시 보내기",
+          requireLongPress: true,
+          accessibilityHint: "길게 누르면 방금 입력한 답을 다시 보내요.",
+          onPress: retry,
+        }
       : { label: "길게 눌러 제출", requireLongPress: true, onPress: submitAnswer, onShortPress: readInput };
 
   // V14b 가로 두 손 입력 — 왼손 3·2·1, 오른손 6·5·4
