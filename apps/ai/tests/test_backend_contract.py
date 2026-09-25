@@ -13,7 +13,7 @@ client = TestClient(app)
 
 
 def test_analyze_gabang_returns_level_cells_skill_sets():
-    res = client.post("/analyze", json={"targetText": "가방"})
+    res = client.post("/api/v1/analyze", json={"targetText": "가방"})
     assert res.status_code == 200
     body = res.json()
     assert body["level"] == "CONTRACTION"  # 약자 가·바 포함 → 약자 단계
@@ -27,7 +27,7 @@ def test_analyze_gabang_returns_level_cells_skill_sets():
 
 
 def test_analyze_includes_zero_width_rule_skill():
-    body = client.post("/analyze", json={"targetText": "음식"}).json()
+    body = client.post("/api/v1/analyze", json={"targetText": "음식"}).json()
     assert body["cells"] == [42, 34, 32, 21, 1]
     assert {"skillType": "SKILL_01", "metadata": "ㅇ생략"} in body[
         "skillSets"
@@ -40,12 +40,12 @@ def test_analyze_skill_sets_match_catalog_metadata():
     cat = get_skill_catalog()
     keys = {(s.skill_type, s.metadata) for s in cat.all()}
     for word in ["학교", "그래서", "나이", "소화액", "까치"]:
-        for ss in client.post("/analyze", json={"targetText": word}).json()["skillSets"]:
+        for ss in client.post("/api/v1/analyze", json={"targetText": word}).json()["skillSets"]:
             assert (ss["skillType"], ss["metadata"]) in keys, (word, ss)
 
 
 def test_analyze_rejects_non_hangul():
-    res = client.post("/analyze", json={"targetText": "abc"})
+    res = client.post("/api/v1/analyze", json={"targetText": "abc"})
     assert res.status_code == 422
 
 
@@ -76,7 +76,7 @@ def test_review_returns_weak_skills_only():
             "errorCounts": {},
         },
     ]
-    res = client.post("/reviewAnalyze", json={"skillStates": states})
+    res = client.post("/api/v1/reviewAnalyze", json={"skillStates": states})
     assert res.status_code == 200
     body = res.json()
     assert set(body) == {"learningSkillIds"}  # level 없음 — 문항 풀은 Spring 이 사용자 레벨로 결정
@@ -85,12 +85,12 @@ def test_review_returns_weak_skills_only():
 
 
 def test_review_with_empty_states_still_returns_valid_response():
-    body = client.post("/reviewAnalyze", json={"skillStates": []}).json()
+    body = client.post("/api/v1/reviewAnalyze", json={"skillStates": []}).json()
     assert len(body["learningSkillIds"]) >= 1
 
 
 def test_review_ignores_unknown_skill_ids_and_missing_optional_fields():
     states = [{"learningSkillId": 9999}, {"learningSkillId": 66}]
-    body = client.post("/reviewAnalyze", json={"skillStates": states}).json()
+    body = client.post("/api/v1/reviewAnalyze", json={"skillStates": states}).json()
     assert 9999 not in body["learningSkillIds"]
     assert body["learningSkillIds"] == [66]

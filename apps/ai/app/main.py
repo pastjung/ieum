@@ -24,8 +24,11 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(convert_router.router, prefix=settings.api_prefix)
-    # 백엔드 FastApiClient 는 baseUrl 바로 아래 /analyze, /reviewAnalyze 를 부른다 (접두어·래퍼 없음)
-    app.include_router(backend_router.router)
+    # 백엔드 FastApiClient 는 baseUrl 바로 아래 /analyze, /reviewAnalyze, /attempt-analyze,
+    # /session-summary 를 부른다 (래퍼 없음). 그 baseUrl(AI_BASE_URL)이 이미 api_prefix 로 끝나므로
+    # (docker-compose.yml, deploy/docker-compose.prod.yml, deploy/.env.config.example)
+    # 이 라우터도 같은 접두어 아래에 있어야 한다 — 접두어 없이 두면 네 경로 전부 404 다.
+    app.include_router(backend_router.router, prefix=settings.api_prefix)
 
     @app.get(f"{settings.api_prefix}/health", tags=["health"])
     def health() -> dict:
