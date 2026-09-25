@@ -88,11 +88,13 @@ describe("세션 스토어의 완료 페이로드", () => {
   });
 });
 
-// 백엔드는 문항 하나라도 칸 수가 어긋나면 세션 전체를 롤백한다
-// (LearningSessionCompletionService.validateCellInputs + @Transactional). 그런데 칸 수가
-// 모자란 답은 초보 학습자의 가장 흔한 오답이고 앱은 그것을 정상적인 오답으로 채점한다 —
-// 정규화가 없으면 오답 하나가 세션 전체를 영구 실패시킨다.
-describe("칸 수가 다른 답안의 정규화", () => {
+// 예전에는 여기서 답안을 기대 칸 수에 맞춰 잘라내고 채웠다. 근거로 든 백엔드 함수
+// `LearningSessionCompletionService.validateCellInputs`는 **존재하지 않는다** — dev가 길이
+// 동등 검사를 걷어냈다. 그 사이 자르기·채우기는 해로웠다: `attempt-analysis`는 원본 cells를
+// 보내 서버가 그대로 저장하는데 `/completion`만 손댄 값을 보냈고, 백엔드의
+// `prepareAnalysisAttempts`가 그 손댄 값을 AI 세션 요약에 먹였다. 요약이 학습자가 실제로
+// 내지 않은 답으로 계산됐다.
+describe("칸 수가 기대와 다른 답안", () => {
   const multiCell = {
     id: "13",
     title: "단어",
@@ -104,30 +106,36 @@ describe("칸 수가 다른 답안의 정규화", () => {
 
   beforeEach(() => useSessionStore.getState().reset());
 
-  it("모자란 칸은 빈 셀로 채워 기대 칸 수를 맞춘다", () => {
+  it("모자란 답을 빈 셀로 채우지 않고 그대로 보낸다", () => {
     useSessionStore.getState().start(multiCell, "free", multiCellMeta);
     useSessionStore.getState().submit([1]); // 두 칸짜리 문항에 한 칸만 입력
 
     const attempts = useSessionStore.getState().buildAttempts();
 
-    expect(attempts).toEqual([{ problemSessionId: 201, inputPatterns: [1, 0] }]);
-    expect(attempts[0]!.inputPatterns).toHaveLength(2);
+    expect(attempts).toEqual([{ problemSessionId: 201, inputPatterns: [1] }]);
   });
 
-  it("넘치는 칸은 기대 칸 수까지 자른다 (방어선 — play.tsx가 먼저 막는다)", () => {
-    // 넘치는 입력은 `play.tsx`의 제출 가드(describeTooManyCells)가 막으므로 여기 오지 않아야
-    // 한다. 우회 경로가 생겼을 때 세션 12문항을 통째로 잃지 않기 위한 마지막 방어선이다
+  it("넘치는 답을 자르지 않고 그대로 보낸다", () => {
     useSessionStore.getState().start(multiCell, "free", multiCellMeta);
     useSessionStore.getState().submit([1, 32, 5]);
 
     const attempts = useSessionStore.getState().buildAttempts();
 
-    expect(attempts).toEqual([{ problemSessionId: 201, inputPatterns: [1, 32] }]);
+    expect(attempts).toEqual([{ problemSessionId: 201, inputPatterns: [1, 32, 5] }]);
   });
 
-  it("정규화한 답안의 채점 결과가 사용자가 들은 로컬 채점과 같다", () => {
-    // gradeAnswer가 모자란 칸을 EMPTY_CELL로 읽는 것과 같은 규칙으로 채우기 때문이다.
-    // 규칙이 다르면 화면에서 들은 결과와 서버가 저장하는 결과가 갈라진다.
+  it("완료 제출이 문항 분석에 보낸 것과 같은 셀을 보낸다", () => {
+    // 두 경로가 서로 다른 값을 보내면 서버가 저장한 답과 AI 요약이 계산한 답이 갈린다
+    useSessionStore.getState().start(multiCell, "free", multiCellMeta);
+    const submitted = [1];
+    useSessionStore.getState().submit(submitted);
+
+    const [attempt] = useSessionStore.getState().buildAttempts();
+
+    expect(attempt!.inputPatterns).toEqual(submitted);
+  });
+
+  it("보낸 답안의 채점 결과가 사용자가 들은 로컬 채점과 같다", () => {
     useSessionStore.getState().start(multiCell, "free", multiCellMeta);
     const local = useSessionStore.getState().submit([1]);
 
@@ -137,7 +145,7 @@ describe("칸 수가 다른 답안의 정규화", () => {
     expect(local.correct).toBe(false);
   });
 
-  it("정규화한 페이로드가 백엔드 검증을 통과하는 모양이다", () => {
+  it("페이로드가 백엔드 검증을 통과하는 모양이다", () => {
     useSessionStore.getState().start(multiCell, "free", multiCellMeta);
     useSessionStore.getState().submit([1]);
 

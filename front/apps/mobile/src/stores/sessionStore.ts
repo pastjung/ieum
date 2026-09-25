@@ -6,7 +6,7 @@ import type {
   LearningSession,
   Problem,
 } from "@ieum/contracts";
-import { EMPTY_CELL, gradeAnswer, type Cell, type GradeResult } from "@ieum/domain";
+import { gradeAnswer, type Cell, type GradeResult } from "@ieum/domain";
 
 export type SessionKind = "free" | "class";
 
@@ -50,45 +50,6 @@ interface SessionState {
   setServerResult: (result: CompletionResponse) => void;
   setLastAnalysis: (result: AttemptAnalysisResponse | null) => void;
   reset: () => void;
-}
-
-/**
- * 답안을 그 문항이 요구하는 칸 수에 맞춘다 — 모자라면 빈 셀로 채우고, 넘치면 자른다.
- *
- * **왜 필요한가**: 백엔드는 문항 하나라도 `expectedCells.size() != inputPatterns.size()` 이면
- * 세션 전체를 거부한다(`LearningSessionCompletionService.validateCellInputs`). `complete()`는
- * `@Transactional`이라 12문항 중 하나만 칸 수가 어긋나도 전부 롤백된다. 그런데 칸 수가 모자란
- * 답은 예외가 아니라 초보 학습자의 가장 흔한 오답이다 — 앱은 이것을 막지 않고(`play.tsx`의
- * 제출 가드는 "한 칸도 없음"만 본다) 정상적인 오답으로 채점해 왔다. 정규화하지 않으면 그 오답
- * 하나가 세션 전체를 영구 실패시킨다.
- *
- * **모자란 답을 채우는 것은 (한 가지 예외를 빼면) 채점을 바꾸지 않는다**: `gradeAnswer`
- * (`@ieum/domain`)가 모자란 칸을 `?? EMPTY_CELL`로 읽으므로, 빈 셀로 채워 보내면 서버도 같은
- * 값을 보고 같은 판정을 한다.
- *
- * 예외는 **기대 셀의 뒤쪽이 빈 칸(`0`)인 문항**이다. 그때는 로컬이 길이 미달을 오답으로 보지만
- * (`correct: firstDiff === null && actual.length >= total`) 서버는 셀 값만 비교하므로 정답으로
- * 센다. 지금 시드에는 `expected_pattern = 0` 인 행이 없어 발현하지 않는다(확인함). 빈 칸이
- * 섞이기 쉬운 **문장 단계 시드가 들어오면 발현한다.** 근본 수정은 `gradeAnswer`의 길이 규칙을
- * 바꾸는 것인데 그 함수는 실시간 수업도 쓰므로 함께 다뤄야 한다 — 이번 작업 범위 밖이다
- * (설계 9절에도 적어 두었다).
- *
- * **넘치는 답은 이제 흔히 여기까지 온다**: `play.tsx`의 제출 가드(`describeTooManyCells`)는 더
- * 이상 기대 칸 수 초과를 막지 않는다 — AI 분석의 입력 상한(12칸)만 본다(설계 4.1절, dev가
- * `validateExpectedCells`에서 길이 동등 검사를 뺐다). 그래서 기대보다 많이 입력한 답도
- * `attempt-analysis`까지는 그대로 간다. `gradeAnswer`는 앞 칸이 다 맞아도 칸이 남으면 오답으로
- * 판정하므로(`actual.length > expected.length` 분기) 로컬 채점은 이미 끝난 뒤이고, 여기의
- * 자르기는 오직 `/completion`(`buildAttempts`)으로 보낼 페이로드만을 위한 것이다 — 그쪽은
- * 여전히 `expectedCells.size() != inputPatterns.size()`이면 세션 전체를 거부하므로
- * (`LearningSessionCompletionService.validateCellInputs`), 자르지 않으면 넘친 답 하나가 세션
- * 12문항을 통째로 실패시킨다.
- *
- * 기대 길이를 모르면(목 세션 등) 손대지 않는다.
- */
-function normalizeToExpectedLength(cells: Cell[], expectedLength: number | undefined): Cell[] {
-  if (expectedLength === undefined || cells.length === expectedLength) return cells;
-  if (cells.length > expectedLength) return cells.slice(0, expectedLength);
-  return [...cells, ...Array<Cell>(expectedLength - cells.length).fill(EMPTY_CELL)];
 }
 
 export const useSessionStore = create<SessionState>()((set, get) => ({
@@ -153,18 +114,25 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   },
   correctCount: () => get().answers.filter((a) => a.result.correct).length,
   markDisconnectShown: () => set({ disconnectShown: true }),
+  /**
+   * 완료 제출 페이로드. **학습자가 실제로 입력한 셀을 그대로 보낸다.**
+   *
+   * 예전에는 문항의 기대 칸 수에 맞춰 모자란 답을 빈 셀로 채우고 넘치는 답을 잘랐다. 그
+   * 근거는 백엔드 `LearningSessionCompletionService.validateCellInputs`가 길이 동등을
+   * 검사한다는 것이었는데 **그 함수는 존재하지 않는다** — dev가 길이 동등 검사를 걷어냈고,
+   * 지금 `/completion`이 보는 것은 배정 대응(`validateAndIndexAttempts`)과 정답 셀의 순번
+   * 연속성(`validateExpectedCells`)뿐이다.
+   *
+   * 그 사이 자르기·채우기는 해로웠다. `attempt-analysis`는 원본 `cells`를 보내 서버가
+   * 그대로 저장하는데 `/completion`만 손댄 값을 보냈고, `prepareAnalysisAttempts`가 그
+   * 손댄 값을 AI 세션 요약에 먹였다 — **요약이 학습자가 내지 않은 답으로 계산됐다.**
+   * 그러면 화면에 보이는 점수(백엔드가 DB 시드로 채점한 `correctProblemCount`)와 요약이
+   * 말하는 점수가 갈릴 수 있다.
+   *
+   * 12칸 상한은 `play.tsx`의 제출 가드(`describeTooManyCells`)가 보증한다.
+   */
   buildAttempts: () => {
-    const { answers, session, problemSessionIds } = get();
-    // 배정 식별자 → 그 문항이 요구하는 칸 수. 문항 순서와 problemSessionIds는 같은 인덱스다
-    // (`submit`이 답을 붙일 때 쓰는 대응과 같다)
-    const expectedLengthById = new Map<number, number>();
-    session?.problems.forEach((problem, index) => {
-      const problemSessionId = problemSessionIds[index];
-      if (problemSessionId !== undefined) {
-        expectedLengthById.set(problemSessionId, problem.expectedCells.length);
-      }
-    });
-
+    const { answers } = get();
     // 백엔드는 같은 problemSessionId가 두 번 있으면 제출 전체를 거부한다
     // (LearningSessionCompletionService.validateAndIndexAttempts) — 재제출 시 마지막 답만 남긴다
     const latestByProblemSessionId = new Map<number, Cell[]>();
@@ -174,7 +142,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     }
     return Array.from(latestByProblemSessionId, ([problemSessionId, cells]) => ({
       problemSessionId,
-      inputPatterns: normalizeToExpectedLength(cells, expectedLengthById.get(problemSessionId)),
+      inputPatterns: cells,
     }));
   },
   setServerResult: (result) => set({ serverResult: result }),
