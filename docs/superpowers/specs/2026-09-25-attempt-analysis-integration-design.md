@@ -40,7 +40,7 @@ POST /api/v1/learning-sessions/{sessionId}/attempt-analysis
 
 POST /api/v1/learning-sessions/{sessionId}/completion
   { attempts[]{problemSessionId, inputPatterns[]} }
-  → 기존 필드 + summary{ summary, ttsText, errorTypeCounts, weakSkills[] }
+  → 기존 필드 + summary, ttsText, errorTypeCounts, weakSkills[]   ← 최상위에 평평하게
 ```
 
 ### 2.1 재시도 안전성
@@ -143,7 +143,7 @@ play ──제출──> (대기) ──> grade ──> play … ──마지막
 `analyzing` 은 그대로 `/completion` 을 부른다. 역할이 저장에서 검증·요약으로 바뀌었을 뿐
 앱에서 보이는 동작은 같다.
 
-`summary` 는 서버의 `summary.ttsText` 를 낭독하고 `weakSkills` 를 표시한다.
+`summary` 화면은 서버의 최상위 `ttsText` 를 낭독하고 `weakSkills` 를 표시한다(7절 참고 — 중첩이 아니다).
 
 ## 5. 오류 처리
 
@@ -187,7 +187,15 @@ List<Problem> findAllByLevelAndIdNotIn(Level level, List<Long> ids);
 - `inputPatterns` 는 6비트 정수 배열, **최대 12개**. 백엔드는 `@Max(63)` 만 보지만 FastAPI가
   12칸에서 막으므로 앱이 먼저 막는다.
 - `cells[]` 는 완료 응답의 `CellCompletionResponse` 와 같은 모양이다. 스키마를 공유한다.
-- `completion` 응답에 `summary` 를 더한다. 지금은 스키마에 없어 조용히 버려지고 있다.
+- `completion` 응답에 `summary`·`ttsText`·`errorTypeCounts`·`weakSkills` 를 더한다. 지금은
+  스키마에 없어 조용히 버려지고 있다.
+
+  **네 필드는 응답의 최상위에 평평하게 놓인다.** 서비스 계층(`SessionSummaryResult`)은 중첩
+  레코드지만 `LearningSessionCompletionResponse.from()` 이 `result.summary().summary()` 처럼
+  풀어서 넣는다. 중첩 객체로 스키마를 쓰면 **모든 정상 응답이 파싱에 실패한다.**
+
+  `summary`·`ttsText` 는 `SessionSummaryResult.notAvailable()` 일 때 `null` 이 되므로
+  `nullable()` 이어야 한다 — 키 자체는 항상 온다.
 
 ## 8. 이번에 안 되는 것
 
