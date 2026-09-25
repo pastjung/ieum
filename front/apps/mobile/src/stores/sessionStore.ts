@@ -135,6 +135,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         },
       ],
       lastResult: result,
+      // 새 답은 이전 분석을 무효로 만든다 — 서버 응답을 기다리는 동안(setLastAnalysis 호출
+      // 전까지) 이전 문항·이전 시도의 분석이 남아 있으면 그 사이 화면이 무관한 설명을 읽는다
+      lastAnalysis: null,
     }));
     return result;
   },

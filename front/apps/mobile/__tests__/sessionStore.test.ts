@@ -170,4 +170,30 @@ describe("문항별 분석 결과 보관", () => {
 
     expect(useSessionStore.getState().lastAnalysis).toBeNull();
   });
+
+  it("reset 없이 다시 start해도 이전 분석 결과를 비운다", () => {
+    // beforeEach의 reset()이 아니라 start() 자신이 비워야 한다 — 세션을 이어서 다시
+    // 시작하는 경로(reset을 거치지 않는 경로)에서 이전 문항의 분석이 새어 나가면 안 된다
+    const store = useSessionStore.getState();
+    store.start(session, "free", meta);
+    useSessionStore.getState().setLastAnalysis(analysis);
+    expect(useSessionStore.getState().lastAnalysis).toEqual(analysis);
+
+    useSessionStore.getState().start(session, "free", meta);
+
+    expect(useSessionStore.getState().lastAnalysis).toBeNull();
+  });
+
+  it("새로 제출하면 이전 분석 결과를 비운다", () => {
+    // 재제출 사이(서버 응답을 기다리는 동안)에 이전 문항 또는 이전 시도의 분석이 남아
+    // 있으면, 그 사이 화면이 열려 방금 낸 답과 무관한 설명을 읽게 된다
+    const store = useSessionStore.getState();
+    store.start(session, "free", meta);
+    useSessionStore.getState().setLastAnalysis(analysis);
+    expect(useSessionStore.getState().lastAnalysis).toEqual(analysis);
+
+    useSessionStore.getState().submit([1]);
+
+    expect(useSessionStore.getState().lastAnalysis).toBeNull();
+  });
 });
