@@ -246,8 +246,31 @@ export const attemptAnalysisResponseSchema = z.object({
   correct: z.boolean(),
   attemptedAt: z.string(),
   cells: z.array(attemptCellAnalysisSchema),
-  /** 서버가 AI로 만든 규칙 설명. 낭독할 문장이 없으면 오답 화면이 말할 것이 없다 */
+  /**
+   * AI가 만든 두 문장. **둘 다 규칙 설명이 아니다.**
+   *   tts    — AI가 자체 채점한 점 수준 서술. 앱의 XOR 설명과 겹치고 백엔드 채점과 갈릴 수 있다
+   *   detail — 대개 "모음 유는 1, 4, 6점입니다" 같은 점 나열. 진짜 규칙 문장은 두 경우뿐이다
+   * 학습자가 "왜 틀렸는지"를 아는 경로는 아래 `violatedSkills`다.
+   */
   feedback: z.object({ tts: z.string(), detail: z.string() }),
+  /**
+   * 이번 풀이에서 어긴 점자 규칙. AI가 고른 학습요소를 백엔드가 learning_skills의
+   * 이름·설명과 이어 준다 (`LearningAttemptService.saveSkillResults`).
+   *
+   * `default([])`를 두는 이유: 이 필드가 없던 백엔드에 앱이 붙어도 응답 전체가 파싱에
+   * 실패하지 않게 한다 — 실패하면 그 문항이 재시도 3회로 소진되고 세션을 처음부터
+   * 다시 풀어야 한다 (`gradeFeedback.ts`의 `toDots` 주석과 같은 판단).
+   */
+  violatedSkills: z
+    .array(
+      z.object({
+        id: identifierSchema,
+        name: z.string(),
+        /** learning_skills.description은 TEXT NULL이다 */
+        description: z.string().nullable(),
+      }),
+    )
+    .default([]),
 });
 export type AttemptAnalysisResponse = z.infer<typeof attemptAnalysisResponseSchema>;
 

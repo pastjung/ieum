@@ -94,7 +94,10 @@ export function describeCells(
   const steps = wrongCells.map((c, i): CellStep => {
     const sentence = `${ordinalKo(c.cellIndex - 1)} 칸의 정답은 ${expectedDescription(c.expectedPattern)}. ${cellDiffPhrase(c)}.`;
     const opening = i === 0 ? `${countMsg} ` : "";
-    const closing = i === wrongCells.length - 1 && rule ? ` ${rule}` : "";
+    // 규칙은 칸이 아니라 문항 전체에 대한 설명이라 첫 단계에만 붙인다. 마지막 단계에 두면
+    // 여러 칸을 틀렸을 때 끝까지 넘겨야 들을 수 있어 사실상 안 들린다.
+    // 점 수준 설명 뒤에 두는 순서는 그대로다 — 무엇을 고칠지 먼저, 왜인지는 그 뒤 (설계 4.2절)
+    const closing = i === 0 && rule ? ` ${rule}` : "";
     const detail = `${opening}${sentence}${closing}`;
     return {
       cellIndex: c.cellIndex,

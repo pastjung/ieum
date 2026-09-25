@@ -93,7 +93,7 @@ public class LearningAttemptService {
     List<AttemptCell> savedCells =
         attemptCellRepository.saveAllAndFlush(
             createAttemptCells(savedAttempt, expectedCells, command.inputPatterns(), attemptedAt));
-    saveSkillResults(savedAttempt, analysis);
+    List<ViolatedSkill> violatedSkills = saveSkillResults(savedAttempt, analysis);
 
     assigned.complete();
     problemSessionRepository.saveAndFlush(assigned);
@@ -104,7 +104,8 @@ public class LearningAttemptService {
         correct,
         attemptedAt.toInstant(ZoneOffset.UTC),
         savedCells.stream().map(LearningAttemptService::toCellResult).toList(),
-        analysis.feedback());
+        analysis.feedback(),
+        violatedSkills);
   }
 
   private LearningSession findOwnedSession(long userId, long sessionId) {
@@ -125,7 +126,16 @@ public class LearningAttemptService {
         .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_ATTEMPT_ANALYSIS_REQUEST));
   }
 
-  private void saveSkillResults(ProblemAttempt attempt, AttemptAnalysisResult analysis) {
+  /**
+   * 요소별 정오를 저장하고, **어긴 학습요소**를 돌려준다.
+   *
+   * AI는 어긴 요소의 id만 알려준다. 사람이 읽을 규칙 문장("첫소리 ㄲ은 ㄱ 점자 앞에
+   * 된소리표를 붙여 나타낸다")은 learning_skills에 있고, 이 메서드가 저장을 위해
+   * 이미 그 엔티티를 조회한다 — 학습자가 "왜 틀렸는지"를 아는 경로를 여기서 잇는다.
+   * 추가 조회는 없다.
+   */
+  private List<ViolatedSkill> saveSkillResults(
+      ProblemAttempt attempt, AttemptAnalysisResult analysis) {
     Set<Long> skillIds =
         analysis.skillResults().stream()
             .map(LearningSessionAnalysisService.SkillResult::learningSkillId)
@@ -165,6 +175,13 @@ public class LearningAttemptService {
     if (!errors.isEmpty()) {
       attemptSkillResultErrorRepository.saveAll(errors);
     }
+
+    // AI가 준 순서를 지킨다 — 앞에 오는 것이 이번 오답에 가장 가까운 요소다
+    return analysis.skillResults().stream()
+        .filter(result -> !result.correct())
+        .map(result -> skillsById.get(result.learningSkillId()))
+        .map(skill -> new ViolatedSkill(skill.getId(), skill.getName(), skill.getDescription()))
+        .toList();
   }
 
   private static int totalErrorCount(Map<String, Long> errorCounts) {
@@ -275,11 +292,16 @@ public class LearningAttemptService {
       boolean correct,
       Instant attemptedAt,
       List<CellResult> cells,
-      FeedbackResult feedback) {
+      FeedbackResult feedback,
+      List<ViolatedSkill> violatedSkills) {
     public AttemptResult {
       cells = List.copyOf(cells);
+      violatedSkills = List.copyOf(violatedSkills);
     }
   }
+
+  /** 이번 풀이에서 어긴 학습요소. `description`은 없을 수 있다(learning_skills.description은 TEXT NULL) */
+  public record ViolatedSkill(Long id, String name, String description) {}
 
   public record CellResult(
       int cellIndex,

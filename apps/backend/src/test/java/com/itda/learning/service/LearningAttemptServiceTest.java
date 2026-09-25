@@ -119,7 +119,9 @@ class LearningAttemptServiceTest {
     given(attemptCellRepository.saveAllAndFlush(org.mockito.ArgumentMatchers.anyList()))
         .willAnswer(invocation -> invocation.getArgument(0));
 
-    LearningSkill skill = LearningSkill.of(SkillType.SKILL_03, "ㅇ", "받침 이응", null);
+    LearningSkill skill =
+        LearningSkill.of(
+            SkillType.SKILL_03, "ㅇ", "받침 이응", "받침 ㅇ은 1, 2, 3, 5, 6점으로 나타낸다.");
     ReflectionTestUtils.setField(skill, "id", SKILL_ID);
     given(learningSkillRepository.findAllById(org.mockito.ArgumentMatchers.anySet()))
         .willReturn(List.of(skill));
@@ -162,6 +164,41 @@ class LearningAttemptServiceTest {
               assertThat(error.getErrorType()).isEqualTo(ErrorType.DOT_MISSING);
               assertThat(error.getErrorCount()).isEqualTo(1);
             });
+  }
+
+  @Test
+  void 어긴_학습요소의_규칙_문장을_응답에_싣는다() {
+    // 학습자가 "왜 틀렸는지" 아는 유일한 경로다. AI는 어긴 요소의 id만 알려주고,
+    // 규칙 문장은 learning_skills에 있다 — 이 둘을 잇는 자리가 여기다
+    LearningAttemptService.AttemptResult result =
+        service.analyze(USER_ID, SESSION_ID, new AttemptCommand(PROBLEM_SESSION_ID, List.of(32)));
+
+    assertThat(result.violatedSkills())
+        .singleElement()
+        .satisfies(
+            skill -> {
+              assertThat(skill.id()).isEqualTo(SKILL_ID);
+              assertThat(skill.name()).isEqualTo("받침 이응");
+              assertThat(skill.description()).isEqualTo("받침 ㅇ은 1, 2, 3, 5, 6점으로 나타낸다.");
+            });
+  }
+
+  @Test
+  void 맞힌_학습요소는_어긴_목록에_넣지_않는다() {
+    given(
+            analysisService.analyzeAttempt(
+                org.mockito.ArgumentMatchers.eq(USER_ID),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()))
+        .willReturn(
+            new AttemptAnalysisResult(
+                new FeedbackResult("확인해 보세요.", "정답 점형을 확인해 보세요."),
+                List.of(new SkillResult(SKILL_ID, true, Map.of()))));
+
+    LearningAttemptService.AttemptResult result =
+        service.analyze(USER_ID, SESSION_ID, new AttemptCommand(PROBLEM_SESSION_ID, List.of(32)));
+
+    assertThat(result.violatedSkills()).isEmpty();
   }
 
   @Test

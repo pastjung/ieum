@@ -129,12 +129,21 @@ describe("셀 진단을 칸별 단계로", () => {
     expect(r.steps[1].speech).not.toContain("오답이에요");
   });
 
-  it("규칙 설명은 마지막 단계에서 한 번만 붙인다", () => {
+  it("규칙 설명은 첫 단계에서 한 번만 붙인다", () => {
+    // 규칙은 칸이 아니라 문항 전체에 대한 설명이다. 마지막 칸에 두면 여러 칸을 틀렸을 때
+    // 끝까지 넘겨야 들을 수 있어 사실상 안 들린다 — 학습자가 먼저 알아야 할 것이다
     const cells = [1, 2].map((i) => cell(i, 0b000101, 0b000001, [3], []));
     const r = describeCells(cells, false, "제13항 첫소리 이응은 적지 않아요.");
 
-    expect(r.steps[0].speech).not.toContain("제13항");
-    expect(r.steps[1].speech).toContain("제13항 첫소리 이응은 적지 않아요.");
+    expect(r.steps[0].speech).toContain("제13항 첫소리 이응은 적지 않아요.");
+    expect(r.steps[1].speech).not.toContain("제13항");
+  });
+
+  it("규칙은 점 수준 설명 뒤에 온다 — 무엇을 고칠지 먼저, 왜인지는 그 뒤", () => {
+    const r = describeCells([cell(1, 0b000101, 0b000001, [3], [])], false, "제13항");
+    const speech = r.steps[0].speech;
+
+    expect(speech.indexOf("3번 점이 빠졌어요")).toBeLessThan(speech.indexOf("제13항"));
   });
 
   it("틀린 칸이 하나면 그 한 단계에 개요와 규칙이 함께 붙는다", () => {
