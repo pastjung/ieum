@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ordinalKo } from "@ieum/domain";
@@ -22,7 +22,6 @@ export default function Grade() {
   const notice = useSessionStore((s) => s.lastAttemptNotice);
   const local = useSessionStore((s) => s.lastResult);
   const next = useSessionStore((s) => s.next);
-  const answers = useSessionStore((s) => s.answers);
   const problem = useSessionStore((s) => s.current)();
   const kind = useSessionStore((s) => s.kind);
   const disconnectShown = useSessionStore((s) => s.disconnectShown);
@@ -31,6 +30,23 @@ export default function Grade() {
   // 서버 분석(analysis)이 있으면 그것을, 없으면 기존 로컬 채점(local)을 쓴다. 실시간 수업은
   // 서버 세션이 없어 analysis가 항상 null이라 이 화면은 그대로 기존 로컬 경로로 떨어진다
   const feedback = selectGradeFeedback(analysis, local);
+
+  /**
+   * 지금 보고 있는 틀린 칸의 순서. 단어처럼 칸이 여럿인 문항은 한 칸씩 넘겨 가며 본다 —
+   * 화면에는 그 칸의 정답·내 입력만 그리고, 낭독도 그 칸만 말한다.
+   */
+  const [step, setStep] = useState(0);
+
+  // 문항이 바뀌면 처음 칸부터 다시 본다. 이 초기화가 없으면 3칸이 틀렸던 앞 문항에서
+  // step 2에 머문 채 다음 문항으로 넘어가 범위 밖을 가리킨다
+  useEffect(() => {
+    setStep(0);
+  }, [index]);
+
+  const steps = feedback?.steps ?? [];
+  // step이 범위를 벗어나는 순간(위 초기화가 도는 렌더 사이)에도 무언가는 그려야 한다
+  const current = steps[step] ?? steps[0];
+  const isLastStep = step + 1 >= steps.length;
 
   useEffect(() => {
     // 서버가 이미 끝낸 문항이라 이번 설명이 없다. 정오 진동도 내지 않는다 — 그 판정은
@@ -41,18 +57,21 @@ export default function Grade() {
       announce(notice);
       return;
     }
-    if (!feedback) return;
-    if (feedback.correct) {
-      void hapticSuccess();
-    } else {
-      void hapticError();
+    if (!feedback || !current) return;
+    // 정오 진동은 문항당 한 번이다. 칸을 넘길 때마다 울리면 칸마다 새로 채점된 것처럼 느껴진다
+    if (step === 0) {
+      if (feedback.correct) {
+        void hapticSuccess();
+      } else {
+        void hapticError();
+      }
     }
     // 화면 문구와 같은 문자열을 낭독한다 (서버 분석 경로는 describeCells의 불변식이 보장하고,
     // 로컬 경로는 기존 V16 낭독 문구를 그대로 유지한다)
-    announce(feedback.speech);
-  }, [feedback, notice]);
+    announce(current.speech);
+  }, [current, feedback, notice, step]);
 
-  if (!session || !local || !feedback) {
+  if (!session || !local || !feedback || !current) {
     return (
       <ScreenShell style={styles.center}>
         <AppButton label="홈으로" onPress={() => router.replace("/(tabs)")} />
@@ -61,7 +80,6 @@ export default function Grade() {
   }
 
   const progress = `${index + 1} / ${session.problems.length}`;
-  const lastAnswer = answers[answers.length - 1];
 
   const goNext = () => {
     if (next()) {
@@ -109,6 +127,7 @@ export default function Grade() {
       <Text style={{ fontSize: 18, fontWeight: "700", color: theme.color.textMuted, fontVariant: ["tabular-nums"] }}>
         {progress}
         {feedback.correct ? "" : " · 오답"}
+        {steps.length > 1 ? ` · 틀린 칸 ${step + 1} / ${steps.length}` : ""}
       </Text>
       {feedback.correct ? (
         <View style={styles.center}>
@@ -137,22 +156,22 @@ export default function Grade() {
             </Text>
             <IeumFace size={84} expression="frown" accessibilityLabel="아쉬워하는 이음 캐릭터" />
           </View>
-          <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 28 }}>{feedback.detail}</Text>
-          {feedback.compareCell && (
+          <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 28 }}>{current.detail}</Text>
+          {current.compare && (
             <View style={[styles.compare, { backgroundColor: theme.color.surface, borderColor: theme.color.border, borderRadius: radius.card }]}>
               <BrailleCellView
-                cell={feedback.compareCell.expected}
-                caption={`정답 · ${ordinalKo(feedback.compareCell.index)} 칸`}
-                accessibilityLabel={`정답 점자, ${ordinalKo(feedback.compareCell.index)} 칸`}
+                cell={current.compare.expected}
+                caption={`정답 · ${ordinalKo(current.compare.index)} 칸`}
+                accessibilityLabel={`정답 점자, ${ordinalKo(current.compare.index)} 칸`}
               />
               <BrailleCellView
-                cell={feedback.compareCell.actual}
+                cell={current.compare.actual}
                 emphasized
-                markDots={feedback.compareCell.missingDots}
+                markDots={current.compare.missingDots}
                 caption={
-                  feedback.compareCell.missingDots.length > 0
-                    ? `내 입력 · ${feedback.compareCell.missingDots.join("·")}번 누락`
-                    : `내 입력 · ${feedback.compareCell.extraDots.join("·")}번 초과`
+                  current.compare.missingDots.length > 0
+                    ? `내 입력 · ${current.compare.missingDots.join("·")}번 누락`
+                    : `내 입력 · ${current.compare.extraDots.join("·")}번 초과`
                 }
                 accessibilityLabel="내가 입력한 점자"
               />
@@ -169,10 +188,19 @@ export default function Grade() {
         </>
       )}
       <View style={{ marginTop: "auto" }}>
+        {/*
+          틀린 칸이 남아 있으면 먼저 그 칸들을 하나씩 보여 준다. 마지막 칸에서야 다음
+          문항으로 넘어간다 — 버튼이 하나라 학습자가 "지금 무엇을 누르는지" 헷갈리지 않는다
+        */}
         <AppButton
-          label={index + 1 >= session.problems.length ? "결과 보기" : "다음 문항"}
-          onPress={goNext}
-          accessibilityHint={lastAnswer ? undefined : undefined}
+          label={
+            isLastStep
+              ? index + 1 >= session.problems.length
+                ? "결과 보기"
+                : "다음 문항"
+              : "다음 점자"
+          }
+          onPress={isLastStep ? goNext : () => setStep((s) => s + 1)}
         />
       </View>
     </ScreenShell>

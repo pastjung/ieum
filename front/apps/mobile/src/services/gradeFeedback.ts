@@ -12,20 +12,27 @@ export interface GradeCompareCell {
   index: number;
 }
 
-export interface GradeFeedback {
-  correct: boolean;
-  headline: string;
+/**
+ * 채점 화면이 한 번에 하나씩 보여 주는 단계. 학습자가 "다음 점자"로 넘긴다.
+ *
+ * `compare`와 `speech`는 **같은 칸**을 가리켜야 한다 — 어긋나면 화면에는 세 번째 칸이
+ * 떠 있는데 "두 번째 칸" 설명이 들린다.
+ */
+export interface GradeStep {
+  /** 화면 문구 */
   detail: string;
-  /** 낭독 문구. 서버 분석 경로에서는 항상 `${headline} ${detail}`.trim()과 같다
-   *  (`describeCells`의 불변식). 로컬 경로는 기존 V16 낭독 문구를 그대로 유지한다 —
-   *  화면 문구(headline/detail)와 다를 수 있으나 이는 이 작업 이전부터의 동작이다 */
+  /** 이 단계에 도착했을 때 읽을 문장 */
   speech: string;
-  /** 그릴 칸이 없으면(정답이거나, 오답인데 진단할 칸을 못 찾으면) null */
-  compareCell: GradeCompareCell | null;
+  /** 나란히 그릴 정답·내 입력 한 쌍. 그릴 칸이 없으면 null */
+  compare: GradeCompareCell | null;
 }
 
-function firstWrongCell(cells: AttemptCellAnalysis[]): AttemptCellAnalysis | null {
-  return cells.find((c) => c.diffMask !== 0) ?? null;
+export interface GradeFeedback {
+  correct: boolean;
+  /** 화면 헤더. 단계를 넘겨도 그대로 떠 있다 */
+  headline: string;
+  /** 항상 한 개 이상이다 — 정답일 때도 화면이 steps[0]을 그대로 읽는다 */
+  steps: GradeStep[];
 }
 
 /**
@@ -59,31 +66,46 @@ export function selectGradeFeedback(
   local: GradeResult | null,
 ): GradeFeedback | null {
   if (analysis) {
-    const { headline, detail, speech } = describeCells(
+    const { headline, steps } = describeCells(
       analysis.cells,
       analysis.correct,
       analysis.feedback.tts,
     );
-    const wrong = analysis.correct ? null : firstWrongCell(analysis.cells);
-    const compareCell: GradeCompareCell | null = wrong
-      ? {
-          expected: wrong.expectedPattern,
-          actual: wrong.inputPattern,
-          missingDots: toDots(wrong.missingDots),
-          extraDots: toDots(wrong.extraDots),
-          index: wrong.cellIndex - 1,
-        }
-      : null;
-    return { correct: analysis.correct, headline, detail, speech, compareCell };
+    // `describeCells`가 틀린 칸마다 단계를 만들고 그 칸 번호(`cellIndex`)를 달아 준다.
+    // 그릴 칸은 그 번호로 되찾는다 — 두 곳에서 따로 "틀린 칸"을 고르면 어긋날 수 있다
+    const byIndex = new Map(analysis.cells.map((c) => [c.cellIndex, c]));
+    return {
+      correct: analysis.correct,
+      headline,
+      steps: steps.map((step) => {
+        const wrong = step.cellIndex === null ? undefined : byIndex.get(step.cellIndex);
+        return {
+          detail: step.detail,
+          speech: step.speech,
+          compare: wrong
+            ? {
+                expected: wrong.expectedPattern,
+                actual: wrong.inputPattern,
+                missingDots: toDots(wrong.missingDots),
+                extraDots: toDots(wrong.extraDots),
+                index: wrong.cellIndex - 1,
+              }
+            : null,
+        };
+      }),
+    };
   }
 
   if (!local) return null;
 
   // 기존 V16 경로. 화면 문구(headline/detail)와 낭독 문구(speech)를 그대로 유지한다 —
-  // 실시간 수업이 이 경로만 쓰므로 문자 하나도 바꾸지 않는다
+  // 실시간 수업이 이 경로만 쓰므로 문자 하나도 바꾸지 않는다.
+  //
+  // 로컬 채점(`GradeResult`)은 틀린 첫 칸(`firstDiff`) 하나만 안다. 그래서 단계도 하나다 —
+  // 칸별 순회는 서버 분석이 있을 때의 기능이고, 실시간 수업은 서버 세션이 없다
   const diff = describeDiff(local);
   const speech = local.correct ? "정답이에요!" : `오답이에요. ${diff.headline}. ${diff.detail}`;
-  const compareCell: GradeCompareCell | null = local.firstDiff
+  const compare: GradeCompareCell | null = local.firstDiff
     ? {
         expected: local.firstDiff.expected,
         actual: local.firstDiff.actual,
@@ -92,5 +114,9 @@ export function selectGradeFeedback(
         index: local.firstDiff.index,
       }
     : null;
-  return { correct: local.correct, headline: diff.headline, detail: diff.detail, speech, compareCell };
+  return {
+    correct: local.correct,
+    headline: diff.headline,
+    steps: [{ detail: local.correct ? "" : diff.detail, speech, compare }],
+  };
 }
