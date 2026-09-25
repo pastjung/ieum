@@ -1,6 +1,9 @@
 import {
   problemsResponseSchema,
   completionResponseSchema,
+  attemptAnalysisRequestSchema,
+  attemptAnalysisResponseSchema,
+  type AttemptAnalysisResponse,
   type AttemptInput,
   type CompletionResponse,
   type LearningSession,
@@ -112,6 +115,24 @@ export const learningService = {
   ): Promise<CompletionResponse> {
     return completionResponseSchema.parse(
       await api.post(`/learning-sessions/${sessionId}/completion`, { attempts }),
+    );
+  },
+
+  /**
+   * 문항 하나를 제출해 서버 채점과 규칙 분석을 받는다.
+   *
+   * 요청도 `parse` 하는 이유: 12칸 상한(`MAX_INPUT_CELLS`)을 네트워크에 나가기 전에 막는다 —
+   * AI가 어차피 12개를 넘으면 거부하므로(`apps/ai/app/presentation/api/backend/router.py`),
+   * 여기서 먼저 걸러야 사용자가 왕복 지연 뒤에야 같은 오류를 본다.
+   */
+  async analyzeAttempt(
+    sessionId: number,
+    problemSessionId: number,
+    inputPatterns: number[],
+  ): Promise<AttemptAnalysisResponse> {
+    const body = attemptAnalysisRequestSchema.parse({ problemSessionId, inputPatterns });
+    return attemptAnalysisResponseSchema.parse(
+      await api.post(`/learning-sessions/${sessionId}/attempt-analysis`, body),
     );
   },
 
