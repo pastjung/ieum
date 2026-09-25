@@ -251,14 +251,6 @@ export const attemptAnalysisResponseSchema = z.object({
 });
 export type AttemptAnalysisResponse = z.infer<typeof attemptAnalysisResponseSchema>;
 
-export const sessionSummarySchema = z.object({
-  summary: z.string().nullable(),
-  ttsText: z.string().nullable(),
-  errorTypeCounts: z.record(z.string(), z.number()),
-  weakSkills: z.array(z.unknown()),
-});
-export type SessionSummary = z.infer<typeof sessionSummarySchema>;
-
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),
@@ -266,10 +258,20 @@ export const completionResponseSchema = z.object({
   correctProblemCount: z.number().int().nonnegative(),
   problemResults: z.array(problemCompletionSchema),
   /**
-   * `optional()` 로 두는 이유: 이 필드는 최근에 생겼고, 서버가 요약을 만들지 못한 경우
-   * (`SessionSummaryResult.notAvailable()`)에도 응답이 와야 한다. 받는 값에 엄격하면 서버의 정상
-   * 응답을 앱이 거부하는 더 나쁜 실패가 생긴다.
+   * 세션 요약. 서비스 계층은 중첩 레코드지만 응답 DTO가 최상위로 풀어서 내보낸다
+   * (`LearningSessionCompletionResponse.from()`). 중첩으로 받으면 모든 정상 응답이
+   * 파싱에 실패한다.
+   *
+   * 서버가 요약을 만들지 못하면(`SessionSummaryResult.notAvailable()`) 값이 null이 된다 —
+   * 키 자체는 항상 오므로 `optional()`이 아니라 `nullable()`이다.
    */
-  summary: sessionSummarySchema.optional(),
+  summary: z.string().nullable(),
+  ttsText: z.string().nullable(),
+  errorTypeCounts: z.record(z.string(), z.number().int().nonnegative()),
+  /**
+   * 앱이 이번에 쓰지 않는다. 모양을 지금 못 박으면 서버가 바꿀 때 앱이 먼저 깨진다.
+   * 쓰게 될 때 구체화한다.
+   */
+  weakSkills: z.array(z.unknown()),
 });
 export type CompletionResponse = z.infer<typeof completionResponseSchema>;

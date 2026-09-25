@@ -102,6 +102,10 @@ describe("완료 제출 계약", () => {
           ],
         },
       ],
+      summary: "틀린 부분을 다시 연습해요.",
+      ttsText: "다시 한 번 해보세요.",
+      errorTypeCounts: { extra_dot: 1 },
+      weakSkills: [],
     });
     expect(parsed.problemResults[0].cells[0].extraDots).toEqual([2]);
   });
@@ -164,13 +168,30 @@ describe("문항별 분석 계약", () => {
       totalProblemCount: 1,
       correctProblemCount: 0,
       problemResults: [],
-      summary: {
-        summary: "받침에서 자주 틀렸어요.",
-        ttsText: "받침 규칙을 더 연습해요.",
-        errorTypeCounts: { missing_dot: 3 },
-        weakSkills: [],
-      },
+      summary: "받침에서 자주 틀렸어요.",
+      ttsText: "받침 규칙을 더 연습해요.",
+      errorTypeCounts: { missing_dot: 3 },
+      weakSkills: [],
     });
-    expect(parsed.summary?.ttsText).toContain("받침");
+    expect(parsed.summary).toContain("받침");
+    expect(parsed.ttsText).toContain("규칙");
+  });
+
+  it("요약을 만들지 못한 완료 응답을 받는다", () => {
+    // SessionSummaryResult.notAvailable()일 때 — summary와 ttsText는 null, 카운트는 빈 맵
+    const parsed = completionResponseSchema.parse({
+      sessionId: 12,
+      completedAt: "2026-09-25T02:00:00Z",
+      totalProblemCount: 1,
+      correctProblemCount: 0,
+      problemResults: [],
+      summary: null,
+      ttsText: null,
+      errorTypeCounts: {},
+      weakSkills: [],
+    });
+    expect(parsed.summary).toBeNull();
+    expect(parsed.ttsText).toBeNull();
+    expect(parsed.errorTypeCounts).toEqual({});
   });
 });
