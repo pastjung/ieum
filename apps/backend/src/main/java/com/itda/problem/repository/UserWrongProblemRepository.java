@@ -14,5 +14,4 @@ public interface UserWrongProblemRepository extends JpaRepository<UserWrongProbl
   List<UserWrongProblem> findAllByUser_IdAndProblem_IdIn(Long userId, List<Long> problemIds);
 
   List<UserWrongProblem> findAllByUser_IdAndLevelAndIsCompletedIsNull(Long userId, Level level);
-
 }

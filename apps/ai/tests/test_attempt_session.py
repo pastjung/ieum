@@ -1,4 +1,4 @@
-"""① /attempt-analyze, ② /session-summary 계약 테스트 (2026-09-25 확정안)."""
+"""① /api/v1/attempt-analyze, ② /api/v1/session-summary 계약 테스트 (2026-09-25 확정안)."""
 
 from fastapi.testclient import TestClient
 
@@ -35,7 +35,7 @@ STATES = [
 
 def _attempt(text, expected, inputs, states=STATES):
     return client.post(
-        "/attempt-analyze",
+        "/api/v1/attempt-analyze",
         json={
             "attempt": {"targetText": text, "expectedPatterns": expected, "inputPatterns": inputs},
             "skillStates": states,
@@ -100,7 +100,7 @@ def test_session_summary_is_read_only_and_ranks_weak_skills():
         ],
         "skillStates": states,
     }
-    res = client.post("/session-summary", json=req)
+    res = client.post("/api/v1/session-summary", json=req)
     assert res.status_code == 200
     body = res.json()
     assert set(body) == {"summary", "ttsText", "errorTypeCounts", "weakSkills"}
@@ -114,7 +114,7 @@ def test_session_summary_is_read_only_and_ranks_weak_skills():
     assert all(w["label"] in {"더 연습해요", "배우는 중"} for w in body["weakSkills"])
     assert 1 not in ids  # 초성 ㄱ(0.99)은 익숙해요 → 제외
     assert (
-        client.post("/session-summary", json=req).json() == body
+        client.post("/api/v1/session-summary", json=req).json() == body
     )  # 두 번 불러도 같다(상태 변화 없음)
 
 
@@ -192,8 +192,8 @@ def test_session_summary_error_type_counts_is_empty_object_not_null():
         ],
         "skillStates": [],
     }
-    body = client.post("/session-summary", json=req).json()
+    body = client.post("/api/v1/session-summary", json=req).json()
     assert body["errorTypeCounts"] == {}
     assert body["weakSkills"] == []
-    empty = client.post("/session-summary", json={"attempts": [], "skillStates": []}).json()
+    empty = client.post("/api/v1/session-summary", json={"attempts": [], "skillStates": []}).json()
     assert empty["errorTypeCounts"] == {} and empty["weakSkills"] == []

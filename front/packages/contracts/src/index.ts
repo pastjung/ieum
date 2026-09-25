@@ -155,3 +155,171 @@ export const authSessionSchema = z.object({
   user: userSummarySchema,
 });
 export type AuthSessionResponse = z.infer<typeof authSessionSchema>;
+
+/* ─── 학습 세션 (구현된 백엔드 계약 기준) ──────────────────────────────────
+ *
+ * API 명세(api-spec.md 3.6절)와 구현이 갈라져 있다. 명세는 curriculumStageId·문항별 제출·
+ * 분석/결과 분리를 정의하지만 구현은 curriculumId·일괄 제출 하나다. 여기서는 **구현**에 맞춘다.
+ * 배경과 되돌릴 지점은 docs/superpowers/specs/2026-09-24-learning-session-integration-design.md
+ * 2.4절에 있다.
+ *
+ * 식별자를 숫자로 받는 이유: 백엔드가 Long을 JSON 숫자로 보낸다. 명세는 10진수 문자열을
+ * 요구하지만 구현이 그렇지 않다. JS 안전 정수 한계(2^53)를 넘으면 조용히 깨진다 — 식별자가
+ * 그 크기에 다다를 일이 생기면 백엔드를 문자열로 바꾸고 이 스키마도 함께 옮겨야 한다.
+ */
+const identifierSchema = z.number().int().nonnegative();
+
+/** 요청으로 보내는 식별자. 백엔드가 @Positive(1 이상)로 검증한다 */
+const requestIdentifierSchema = z.number().int().positive();
+
+export const problemDetailSchema = z.object({
+  /** 이 문항 "배정"의 식별자. 완료 제출이 요구한다 — problemId로는 대신할 수 없다 */
+  problemSessionId: identifierSchema,
+  problemId: identifierSchema,
+  sequence: z.number().int().positive(),
+  targetText: z.string().min(1),
+  expectedPatterns: z.array(cellSchema).min(1),
+  completed: z.boolean(),
+});
+export type ProblemDetail = z.infer<typeof problemDetailSchema>;
+
+export const problemsResponseSchema = z.object({
+  sessionId: identifierSchema,
+  problems: z.array(problemDetailSchema).min(1),
+});
+export type ProblemsResponse = z.infer<typeof problemsResponseSchema>;
+
+/** 일괄 제출. 백엔드가 @NotEmpty @Size(max=100) @Min(0) @Max(63)으로 검증한다 */
+export const attemptInputSchema = z.object({
+  problemSessionId: requestIdentifierSchema,
+  inputPatterns: z.array(cellSchema).min(1).max(100),
+});
+export type AttemptInput = z.infer<typeof attemptInputSchema>;
+
+export const completionRequestSchema = z.object({
+  attempts: z.array(attemptInputSchema).min(1).max(100),
+});
+export type CompletionRequest = z.infer<typeof completionRequestSchema>;
+
+export const cellCompletionSchema = z.object({
+  cellIndex: z.number().int(),
+  expectedPattern: cellSchema,
+  inputPattern: cellSchema,
+  diffMask: cellSchema,
+  missingMask: cellSchema,
+  extraMask: cellSchema,
+  missingDots: z.array(z.number().int()),
+  extraDots: z.array(z.number().int()),
+});
+
+export const problemCompletionSchema = z.object({
+  problemSessionId: identifierSchema,
+  problemId: identifierSchema,
+  attemptId: identifierSchema,
+  correct: z.boolean(),
+  cells: z.array(cellCompletionSchema),
+});
+
+/**
+ * 한 문항에 보낼 수 있는 최대 칸 수.
+ *
+ * AI가 `input_patterns`를 12개까지만 받는다
+ * (`apps/ai/app/presentation/api/backend/router.py`). 기대 칸 수와 무관하게 이 상한이
+ * 걸리므로 — 5칸 문제에 13칸을 넣어도 거부된다 — 앱이 먼저 막는다.
+ */
+export const MAX_INPUT_CELLS = 12;
+
+export const attemptAnalysisRequestSchema = z.object({
+  problemSessionId: requestIdentifierSchema,
+  inputPatterns: z.array(cellSchema).min(1).max(MAX_INPUT_CELLS),
+});
+export type AttemptAnalysisRequest = z.infer<typeof attemptAnalysisRequestSchema>;
+
+/** 셀 하나의 진단. 완료 응답의 셀과 같은 모양이라 스키마를 공유한다 */
+export const attemptCellAnalysisSchema = cellCompletionSchema;
+export type AttemptCellAnalysis = z.infer<typeof attemptCellAnalysisSchema>;
+
+export const attemptAnalysisResponseSchema = z.object({
+  problemSessionId: identifierSchema,
+  problemId: identifierSchema,
+  attemptId: identifierSchema,
+  correct: z.boolean(),
+  attemptedAt: z.string(),
+  cells: z.array(attemptCellAnalysisSchema),
+  /**
+   * AI가 만든 두 문장. **둘 다 규칙 설명이 아니다.**
+   *   tts    — AI가 자체 채점한 점 수준 서술. 앱의 XOR 설명과 겹치고 백엔드 채점과 갈릴 수 있다
+   *   detail — 대개 "모음 유는 1, 4, 6점입니다" 같은 점 나열. 진짜 규칙 문장은 두 경우뿐이다
+   * 학습자가 "왜 틀렸는지"를 아는 경로는 아래 `violatedSkills`다.
+   */
+  feedback: z.object({ tts: z.string(), detail: z.string() }),
+  /**
+   * 이번 풀이에서 어긴 점자 규칙. AI가 고른 학습요소를 백엔드가 learning_skills의
+   * 이름·설명과 이어 준다 (`LearningAttemptService.saveSkillResults`).
+   *
+   * `default([])`를 두는 이유: 이 필드가 없던 백엔드에 앱이 붙어도 응답 전체가 파싱에
+   * 실패하지 않게 한다 — 실패하면 그 문항이 재시도 3회로 소진되고 세션을 처음부터
+   * 다시 풀어야 한다 (`gradeFeedback.ts`의 `toDots` 주석과 같은 판단).
+   */
+  violatedSkills: z
+    .array(
+      z.object({
+        id: identifierSchema,
+        name: z.string(),
+        /** learning_skills.description은 TEXT NULL이다 */
+        description: z.string().nullable(),
+      }),
+    )
+    .default([]),
+});
+export type AttemptAnalysisResponse = z.infer<typeof attemptAnalysisResponseSchema>;
+
+/**
+ * 이번 세션에서 약한 학습요소. AI가 고르고(`summarize_session`) 백엔드가 옮긴다
+ * (`LearningSessionCompletionResponse.WeakSkillResponse`).
+ *
+ * **"익숙해요"인 요소는 오지 않는다** — 약한 것만 골라 온 목록이다. 그리고 그 요소에
+ * 기록이 2건 이상이어야 판정한다(`n_attempts < 2`면 건너뛴다), 그래서 처음 몇 세션은
+ * 비어 있을 수 있다.
+ */
+export const weakSkillSchema = z.object({
+  learningSkillId: identifierSchema,
+  /** 0~1 숙련 추정치 */
+  masteryProb: z.number().nullable(),
+  /** "배우는 중" | "더 연습해요" — AI가 만든 문자열을 그대로 쓴다 */
+  label: z.string(),
+  /** 가장 잦았던 오류 유형. 오류 기록이 없으면 null */
+  dominantErrorType: z.string().nullable(),
+  /** "받침 이응에서 점 누락이 반복됐어요." 처럼 완성된 문장 */
+  explanation: z.string(),
+});
+export type WeakSkill = z.infer<typeof weakSkillSchema>;
+
+export const completionResponseSchema = z.object({
+  sessionId: identifierSchema,
+  completedAt: z.string(),
+  totalProblemCount: z.number().int().nonnegative(),
+  correctProblemCount: z.number().int().nonnegative(),
+  problemResults: z.array(problemCompletionSchema),
+  /**
+   * 세션 요약. 서비스 계층은 중첩 레코드지만 응답 DTO가 최상위로 풀어서 내보낸다
+   * (`LearningSessionCompletionResponse.from()`). 중첩으로 받으면 모든 정상 응답이
+   * 파싱에 실패한다.
+   *
+   * 서버가 요약을 만들지 못하면(`SessionSummaryResult.notAvailable()`) 값이 null이 된다 —
+   * 키 자체는 항상 오므로 `optional()`이 아니라 `nullable()`이다.
+   */
+  summary: z.string().nullable(),
+  ttsText: z.string().nullable(),
+  /**
+   * 이번 세션의 오류 유형별 횟수. 키는 snake_case다 (`dot_missing`, `jamo_confusion` …) —
+   * 백엔드 `ErrorType` enum을 소문자로 옮긴 값이고, 앱이 한글 이름을 붙인다
+   */
+  errorTypeCounts: z.record(z.string(), z.number().int().nonnegative()),
+  /**
+   * 앱이 이번에 쓰지 않는다. 모양을 지금 못 박으면 서버가 바꿀 때 앱이 먼저 깨진다.
+   * 쓰게 될 때 구체화한다.
+   */
+  weakSkills: z.array(weakSkillSchema).catch([]),
+});
+export type CompletionResponse = z.infer<typeof completionResponseSchema>;

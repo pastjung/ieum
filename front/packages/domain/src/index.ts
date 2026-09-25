@@ -50,8 +50,12 @@ export interface GradeResult {
   total: number;
   /** 일치한 셀 수 */
   matched: number;
-  /** 첫 번째 불일치 (정답이면 null) */
+  /** 첫 번째 불일치 (정답이면 null). 항상 `diffs[0] ?? null` 과 같다 — 바꾸지 않는다.
+   *  `grade.tsx` 가 점자 셀 비교 그림(정답/내 입력 두 칸)을 그릴 때 이것만 쓴다. */
   firstDiff: CellDiff | null;
+  /** 틀린 칸 전부(순서대로). 판정 규칙(correct/total/matched/firstDiff)에는 영향을 주지 않는
+   *  추가 정보다 — 낭독·화면 문구(`describeDiff`)가 여러 칸을 알려줄 때 이걸 읽는다. */
+  diffs: CellDiff[];
 }
 
 export function gradeAnswer(
@@ -60,7 +64,7 @@ export function gradeAnswer(
 ): GradeResult {
   const total = expected.length;
   let matched = 0;
-  let firstDiff: CellDiff | null = null;
+  const diffs: CellDiff[] = [];
   for (let i = 0; i < total; i++) {
     const exp = expected[i] ?? EMPTY_CELL;
     const act = actual[i] ?? EMPTY_CELL;
@@ -68,28 +72,30 @@ export function gradeAnswer(
       matched += 1;
       continue;
     }
-    if (!firstDiff) {
-      const missing = cellToDots(exp & ~act & 0x3f);
-      const extra = cellToDots(act & ~exp & 0x3f);
-      firstDiff = { index: i, expected: exp, actual: act, missing, extra };
-    }
+    const missing = cellToDots(exp & ~act & 0x3f);
+    const extra = cellToDots(act & ~exp & 0x3f);
+    diffs.push({ index: i, expected: exp, actual: act, missing, extra });
   }
-  if (actual.length > expected.length && !firstDiff) {
+  // 기대 칸 수를 넘는 입력은 원래 방어선(`answerLengthGuard`)이 먼저 막지만, 우회해서 여기까지
+  // 오면 넘친 첫 칸 하나만 오답으로 보여준다 — 기존 동작 그대로, diffs 유무로 판단 바꾸지 않음
+  if (actual.length > expected.length && diffs.length === 0) {
     const act = actual[expected.length] ?? EMPTY_CELL;
-    firstDiff = {
+    diffs.push({
       index: expected.length,
       expected: EMPTY_CELL,
       actual: act,
       missing: [],
       extra: cellToDots(act),
-    };
-    return { correct: false, total, matched, firstDiff };
+    });
+    return { correct: false, total, matched, firstDiff: diffs[0]!, diffs };
   }
+  const firstDiff = diffs[0] ?? null;
   return {
     correct: firstDiff === null && actual.length >= total,
     total,
     matched,
     firstDiff,
+    diffs,
   };
 }
 
@@ -106,9 +112,28 @@ function listDots(dots: readonly Dot[]): string {
   return dots.join("번과 ") + "번";
 }
 
+function diffPhrase({ missing, extra }: CellDiff): string {
+  if (missing.length > 0 && extra.length === 0) {
+    return `${listDots(missing)} 점이 빠졌어요`;
+  }
+  if (extra.length > 0 && missing.length === 0) {
+    return `${listDots(extra)} 점이 더 눌렸어요`;
+  }
+  return "점 위치가 달라요";
+}
+
 /**
- * 오답 차이 설명 생성 (V16 화면·음성 문구)
- * 예: { headline: "3번 점이 빠졌어요", detail: "다섯 번째 칸에서요. 나머지 네 칸은 맞았어요." }
+ * 낭독에서 각 칸을 자세히 설명하는 최대 개수. 단어 단계는 최대 8칸이라 다 틀리면 8칸을 전부
+ * 자세히 읽게 되는데, 그러면 낭독이 지나치게 길어진다(설계: multi-cell-feedback). 앞의 3칸만
+ * "몇 번째 칸은 무슨 점이 빠졌다/더 눌렸다"로 자세히 읽고, 그 뒤는 "그 외 N칸도 더 틀렸어요"로
+ * 개수만 요약한다. 몇 칸이 틀렸는지는 이 요약과 별개로 "모두 N칸이 틀렸어요"에 항상 나온다.
+ */
+const DETAIL_LIMIT = 3;
+
+/**
+ * 오답 차이 설명 생성 (V16 화면·음성 문구, V17에서 다중 칸으로 확장)
+ * 예(1칸 오답, 기존과 동일): { headline: "3번 점이 빠졌어요", detail: "다섯 번째 칸에서요. 나머지 네 칸은 맞았어요." }
+ * 예(다중 오답): { headline: "3번 점이 빠졌어요", detail: "첫 번째 칸에서요. 모두 3칸이 틀렸어요. 세 번째 칸은 1번 점이 더 눌렸어요. 다섯 번째 칸은 점 위치가 달라요." }
  */
 export function describeDiff(result: GradeResult): {
   headline: string;
@@ -117,22 +142,34 @@ export function describeDiff(result: GradeResult): {
   if (result.correct || !result.firstDiff) {
     return { headline: "정답이에요!", detail: "" };
   }
-  const { index, missing, extra } = result.firstDiff;
-  let headline: string;
-  if (missing.length > 0 && extra.length === 0) {
-    headline = `${listDots(missing)} 점이 빠졌어요`;
-  } else if (extra.length > 0 && missing.length === 0) {
-    headline = `${listDots(extra)} 점이 더 눌렸어요`;
-  } else {
-    headline = "점 위치가 달라요";
+  const headline = diffPhrase(result.firstDiff);
+  const where = `${ordinalKo(result.firstDiff.index)} 칸에서요.`;
+
+  // 한 칸만 틀렸으면 기존 V16 문구를 그대로 유지한다 (퇴행 금지)
+  if (result.diffs.length <= 1) {
+    const rest = result.total - 1;
+    const restMsg =
+      result.matched === rest && rest > 0
+        ? ` 나머지 ${rest === 4 ? "네 " : `${rest}`}칸은 맞았어요.`
+        : result.matched > 0
+          ? ` ${result.matched}칸은 맞았어요.`
+          : "";
+    return { headline, detail: `${where}${restMsg}` };
   }
-  const rest = result.total - 1;
-  const where = `${ordinalKo(index)} 칸에서요.`;
-  const restMsg =
-    result.matched === rest && rest > 0
-      ? ` 나머지 ${rest === 4 ? "네 " : `${rest}`}칸은 맞았어요.`
-      : result.matched > 0
-        ? ` ${result.matched}칸은 맞았어요.`
-        : "";
-  return { headline, detail: `${where}${restMsg}` };
+
+  // 두 칸 이상 틀렸을 때: 몇 칸이 틀렸는지는 항상 말하고, 앞의 DETAIL_LIMIT칸(첫 칸은 위의
+  // headline·where 로 이미 말했으니 그 다음 칸부터)만 자세히 읽은 뒤 나머지는 개수로 줄인다.
+  const detailed = result.diffs.slice(0, DETAIL_LIMIT);
+  const laterSentences = detailed
+    .slice(1)
+    .map((d) => ` ${ordinalKo(d.index)} 칸은 ${diffPhrase(d)}.`)
+    .join("");
+  const omittedCount = result.diffs.length - detailed.length;
+  const summary = omittedCount > 0 ? ` 그 외 ${omittedCount}칸도 더 틀렸어요.` : "";
+  const matchedMsg = result.matched > 0 ? ` ${result.matched}칸은 맞았어요.` : "";
+
+  return {
+    headline,
+    detail: `${where} 모두 ${result.diffs.length}칸이 틀렸어요.${laterSentences}${summary}${matchedMsg}`,
+  };
 }

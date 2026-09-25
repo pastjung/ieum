@@ -33,6 +33,21 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Transactional(readOnly = true)
 public class ProblemService {
+
+  /**
+   * 한 문항에 허용하는 최대 셀 수.
+   *
+   * <p>AI의 {@code input_patterns} 상한과 같은 값이다. 여기가 더 크면 풀 수 없는 문제가 출제되고, 더 작으면 풀 수 있는 문제를 버린다. 둘은 함께
+   * 움직여야 한다.
+   */
+  private static final long MAX_ASSIGNABLE_CELLS = 12L;
+
+  /** 복습 세션에서 출제 대상으로 삼는 학습 요소 수. FastAPI가 돌려주는 {@code learningSkillIds}에서 앞에서부터 쓴다. */
+  private static final int REVIEW_SKILL_COUNT = 3;
+
+  /** 복습 세션에서 요소 하나당 뽑는 문제 수. 셋을 합쳐 12문항이 된다. */
+  private static final int REVIEW_PROBLEMS_PER_SKILL = 4;
+
   private final ProblemRepository problemRepository;
   private final LectureProblemRepository lectureProblemRepository;
   private final ProblemCellRepository problemCellRepository;
@@ -66,7 +81,12 @@ public class ProblemService {
 
     ProblemDetail problemDetail =
         new ProblemDetail(
-            problem.getId(), 1L, registerProblemRequest.targetText(), expectedPatterns, false);
+            null,
+            problem.getId(),
+            1L,
+            registerProblemRequest.targetText(),
+            expectedPatterns,
+            false);
     // TODO:수강생들에게 문제 전달
 
   }
@@ -142,19 +162,23 @@ public class ProblemService {
     LearningSession learningSession = createSession(user.userId(), curriculumStage);
     Level level = curriculumStage.getLevel();
 
+    // 오답 재출제도 같은 셀 상한을 거쳐야 한다. 오답 문제는 아래 findAssignableByLevel의 후보에서
+    // 제외될 뿐 따로 배정되므로, 여기서 거르지 않으면 13칸 이상 문제가 상한 검사를 통째로 비껴간다.
     List<UserWrongProblem> wrongProblems =
-        userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedIsNull(
-            user.userId(), level);
+        assignableOnly(
+            userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedIsNull(
+                user.userId(), level));
     int wrongCnt = Math.min(wrongProblems.size(), 4);
     Collections.shuffle(wrongProblems);
-    List<Long> wrongProblemIds =
-        wrongProblems.stream().limit(wrongCnt).map(wp -> wp.getProblem().getId()).toList();
-
-    List<Problem> problems = problemRepository.findAllByLevelAndIdNotIn(level, wrongProblemIds);
 
     // 출제할 오답 문제
     List<Problem> selectedWrongProblems =
         wrongProblems.stream().limit(wrongCnt).map(UserWrongProblem::getProblem).toList();
+
+    List<Long> wrongProblemIds = selectedWrongProblems.stream().map(Problem::getId).toList();
+
+    List<Problem> problems =
+        problemRepository.findAssignableByLevel(level, wrongProblemIds, MAX_ASSIGNABLE_CELLS);
 
     int normalCnt = 12 - wrongCnt;
 
@@ -203,6 +227,7 @@ public class ProblemService {
       Problem p = randomProblems.get(i);
       problemDetails.add(
           new ProblemDetail(
+              problemSessions.get(i).getId(),
               p.getId(),
               (long) i + 1,
               p.getTargetText(),
@@ -211,6 +236,24 @@ public class ProblemService {
     }
 
     return new ProblemsResponse(learningSession.getId(), problemDetails);
+  }
+
+  /**
+   * 오답 목록에서 출제 가능한(셀 수가 {@link #MAX_ASSIGNABLE_CELLS} 이하인) 것만 남긴다.
+   *
+   * <p>셔플 대상이므로 변경 가능한 목록으로 돌려준다.
+   */
+  private List<UserWrongProblem> assignableOnly(List<UserWrongProblem> wrongProblems) {
+    if (wrongProblems.isEmpty()) {
+      return new ArrayList<>();
+    }
+    List<Long> problemIds =
+        wrongProblems.stream().map(wp -> wp.getProblem().getId()).distinct().toList();
+    Set<Long> assignableIds =
+        new HashSet<>(problemRepository.findAssignableIdsIn(problemIds, MAX_ASSIGNABLE_CELLS));
+    return wrongProblems.stream()
+        .filter(wp -> assignableIds.contains(wp.getProblem().getId()))
+        .collect(Collectors.toCollection(ArrayList::new));
   }
 
   public ProblemsResponse studyWithOldSession(AuthenticatedUser user, Long sessionId) {
@@ -235,6 +278,7 @@ public class ProblemService {
       Problem p = s.getProblem();
       problemDetails.add(
           new ProblemDetail(
+              s.getId(),
               p.getId(),
               s.getSequence(),
               p.getTargetText(),
@@ -304,16 +348,42 @@ public class ProblemService {
 
     Level level = curUser.getLevel();
     List<Long> learningSkillIds = response.learningSkillIds();
+    // 아래 반복이 앞에서부터 REVIEW_SKILL_COUNT개를 꺼내 쓴다. 모자라면 IndexOutOfBounds로 500이
+    // 나가므로, 출제할 것이 없다는 사실을 같은 오류로 알린다.
+    if (learningSkillIds == null || learningSkillIds.size() < REVIEW_SKILL_COUNT) {
+      throw new BusinessException(ErrorCode.LEARNING_CONTENT_NOT_READY);
+    }
 
     Set<Long> selectedProblemIds = new HashSet<>();
-    ThreadLocalRandom random = ThreadLocalRandom.current();
 
-    for (int i = 1; i <= 3; i++) {
-      List<Problem> problem =
-          problemRepository.findAllByLevelAndLearningSkillId(level, learningSkillIds.get(i - 1));
-      while (selectedProblemIds.size() < i * 4) {
-        selectedProblemIds.add(problem.get(random.nextInt(problem.size())).getId());
+    // 요소마다 서로 다른 문제 4개를 뽑는다.
+    //
+    // 이전에는 HashSet 크기가 i * 4가 될 때까지 무작위 추출을 반복했다. 후보가 4개 미만이거나
+    // 이미 고른 것과 겹치면 그 while 문은 절대 끝나지 않는다 — 예외도 나지 않고 요청 스레드가
+    // CPU를 태우며 영구히 붙잡힌다. 이 브랜치가 그 조회에 셀 상한을 더해 후보 풀을 좁혔으므로
+    // learningWithNewSession과 같은 가드(LEARNING_CONTENT_NOT_READY)가 여기에도 필요하다.
+    //
+    // 반복 대신 후보를 섞어 앞에서 필요한 만큼 가져간다. 뽑는 결과는 같은 균등 무작위
+    // 부분집합이면서 시도 횟수에 상한이 생긴다.
+    for (int i = 0; i < REVIEW_SKILL_COUNT; i++) {
+      List<Long> candidateIds =
+          problemRepository
+              .findAllByLevelAndLearningSkillId(
+                  level, learningSkillIds.get(i), MAX_ASSIGNABLE_CELLS)
+              .stream()
+              .map(Problem::getId)
+              // 앞 요소에서 이미 고른 문제는 다시 셀 수 없다 — selectedProblemIds는 Set이므로
+              // 겹치는 것을 더해도 크기가 늘지 않는다. 남은 후보로만 부족 여부를 판단한다.
+              .filter(id -> !selectedProblemIds.contains(id))
+              .distinct()
+              .collect(Collectors.toCollection(ArrayList::new));
+
+      if (candidateIds.size() < REVIEW_PROBLEMS_PER_SKILL) {
+        throw new BusinessException(ErrorCode.LEARNING_CONTENT_NOT_READY);
       }
+
+      Collections.shuffle(candidateIds);
+      selectedProblemIds.addAll(candidateIds.subList(0, REVIEW_PROBLEMS_PER_SKILL));
     }
 
     List<Problem> randomProblems = problemRepository.findAllById(selectedProblemIds);
@@ -345,6 +415,7 @@ public class ProblemService {
       Problem p = randomProblems.get(i);
       problemDetails.add(
           new ProblemDetail(
+              problemSessions.get(i).getId(),
               p.getId(),
               (long) i + 1,
               p.getTargetText(),

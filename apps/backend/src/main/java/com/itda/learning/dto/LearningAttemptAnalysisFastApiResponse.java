@@ -10,6 +10,5 @@ public record LearningAttemptAnalysisFastApiResponse(
 
   public record Feedback(String tts, String detail) {}
 
-  public record SkillResult(
-      Long learningSkillId, boolean correct, Map<String, Long> errorCounts) {}
+  public record SkillResult(Long learningSkillId, boolean correct, Map<String, Long> errorCounts) {}
 }

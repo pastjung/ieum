@@ -1,0 +1,35 @@
+import type { QueryClient } from "@tanstack/react-query";
+import type { LearningSession } from "@ieum/contracts";
+import type { ServerSessionMeta, SessionKind } from "@/stores/sessionStore";
+import type { LearningThemeId } from "./mockData";
+
+/**
+ * `intro.tsx`의 세션 조회 쿼리 키. 조회 쪽과 캐시 제거 쪽이 같은 키를 쓰도록 여기 한 곳에
+ * 둔다 — 어긋나면 "시작하기"에서 지운 캐시와 다음 조회가 쓰는 캐시가 달라져, 완료된 세션이
+ * 재사용되고 서버가 재제출을 거부하는 문제가 그대로 되살아난다.
+ *
+ * `learningService.ts`(API 접근 계층)에 두지 않은 이유: 이 키는 화면(intro)의 캐시
+ * 정체성이지 API 호출의 일부가 아니다. API 계층에 화면 캐시 키가 얹히면 계층이 어색해진다.
+ */
+export function learningSessionQueryKey(themeId: LearningThemeId | undefined) {
+  return ["learningSession", themeId ?? "default"] as const;
+}
+
+/**
+ * 세션 소유권이 스토어로 넘어가는 지점. `intro.tsx`의 "시작하기"가 이 함수 하나만 부른다.
+ *
+ * `removeQueries`를 부르지 않으면 완료된 세션이 되살아난다 — `staleTime`/`gcTime`이
+ * Infinity인 쿼리는 `QueryClient`가 앱 수명 동안 하나이므로, 화면을 나갔다가 같은
+ * 주제로 다시 들어와도 캐시가 그대로 남는다. 그 상태로 다시 제출하면 백엔드가 완료된
+ * 배정을 거부한다(`LearningSessionCompletionService.validateAndIndexAttempts` →
+ * `INVALID_COMPLETION_REQUEST`).
+ */
+export function beginLearningSession(
+  queryClient: QueryClient,
+  themeId: LearningThemeId | undefined,
+  data: { session: LearningSession; meta: ServerSessionMeta },
+  start: (session: LearningSession, kind: SessionKind, meta: ServerSessionMeta) => void,
+): void {
+  start(data.session, "free", data.meta);
+  queryClient.removeQueries({ queryKey: learningSessionQueryKey(themeId) });
+}

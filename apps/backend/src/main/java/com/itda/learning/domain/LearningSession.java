@@ -48,5 +48,4 @@ public class LearningSession {
     }
     this.completedAt = completedAt;
   }
-
 }

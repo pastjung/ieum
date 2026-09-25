@@ -50,21 +50,76 @@ public class LearningSessionAnalysisService {
   private final UserJpaRepository userJpaRepository;
   private final FastApiClient fastApiClient;
 
+  /** 완성형 한글 음절의 코드 범위 (U+AC00~U+D7A3) */
+  private static final int HANGUL_SYLLABLE_FIRST = 0xAC00;
+
+  private static final int HANGUL_SYLLABLE_COUNT = 11172;
+
+  /**
+   * FastAPI 채점기가 이 문항을 다룰 수 있는지.
+   *
+   * <p>AI는 {@code target_text}를 자모로 분해해 규칙을 적용한다 ({@code apps/ai} 의 {@code
+   * kbraille.decompose}). 그 함수는 완성형 한글 음절만 받고, 낱자('ㄱ'·'ㅙ')를 만나면 {@code
+   * non-Hangul}로 거절한다 — 백엔드에는 422로 돌아오고 학습자는 "학습 결과를 분석할 수
+   * 없습니다"를 본다.
+   *
+   * <p>자음·모음 단계 문항이 전부 낱자다(자음 28개, 모음 21개). 즉 커리큘럼 1·2단계는 AI를
+   * 거치는 한 한 문제도 풀 수 없다. 그 문항들은 규칙 변환이 필요 없으므로 — 정답 점형이 이미
+   * {@code problem_cells}에 있고 어긴 규칙은 {@code problem_skills}가 가리킨다 — AI를 부르지
+   * 않고 {@link #analyzeAttemptLocally}로 채점한다.
+   */
+  public static boolean isAiGradable(String targetText) {
+    if (targetText == null || targetText.isBlank()) {
+      return false;
+    }
+    return targetText
+        .codePoints()
+        .allMatch(
+            codePoint -> {
+              int offset = codePoint - HANGUL_SYLLABLE_FIRST;
+              return offset >= 0 && offset < HANGUL_SYLLABLE_COUNT;
+            });
+  }
+
+  /**
+   * AI를 거치지 않고 채점한다. 낱자 문항 전용이다.
+   *
+   * <p>정오는 정답 셀과의 비교로, 어긴 학습요소는 {@code problem_skills}가 가리키는 요소로
+   * 정한다. AI가 이 문항에서 더할 수 있는 것은 규칙 설명 문장 하나인데, 그것은 이미 {@code
+   * learning_skills.description}에 있고 응답의 {@code violatedSkills}로 나간다.
+   *
+   * <p><b>숙련도(user_skill_memory)는 갱신하지 않는다.</b> 그 값은 AI의 BKT 추정기가 만드는데
+   * 여기엔 추정기가 없다. 그래서 낱자 문항은 세션 요약의 {@code weakSkills}에 오르지 않는다 —
+   * 결과 화면은 그때 오류 유형 집계로 물러선다. 풀이와 요소별 정오는 그대로 저장되므로 기록이
+   * 사라지지는 않는다.
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public AttemptAnalysisResult analyzeAttemptLocally(AnalysisAttempt attempt) {
+    Map<String, Long> errorCounts =
+        AttemptErrorClassifier.classify(attempt.expectedPatterns(), attempt.inputPatterns());
+    boolean correct = errorCounts.isEmpty();
+    List<SkillResult> skillResults =
+        problemSkillRepository.findAllWithSkillByProblemIdIn(List.of(attempt.problemId())).stream()
+            .map(ProblemSkill::getSkill)
+            .map(LearningSkill::getId)
+            .distinct()
+            .sorted()
+            .map(skillId -> new SkillResult(skillId, correct, errorCounts))
+            .toList();
+    return new AttemptAnalysisResult(new FeedbackResult("", ""), skillResults);
+  }
+
   @Transactional(propagation = Propagation.MANDATORY)
   public AttemptAnalysisResult analyzeAttempt(
       long userId, AnalysisAttempt attempt, LocalDateTime attemptedAt) {
     SkillStateContext context = loadSkillStateContext(userId, List.of(attempt.problemId()));
     LearningAttemptAnalysisFastApiRequest request =
-        new LearningAttemptAnalysisFastApiRequest(
-            toAttemptPayload(attempt), context.skillStates());
+        new LearningAttemptAnalysisFastApiRequest(toAttemptPayload(attempt), context.skillStates());
     LearningAttemptAnalysisFastApiResponse response = requestAttemptAnalysis(request);
 
-    LearningSessionAnalysisValidator.validateAttemptResponse(
-        response, context.relevantSkillIds());
-    Map<Long, LearningSkill> referencedSkills =
-        loadLearningSkills(referencedSkillIds(response));
-    persistUpdatedSkillStates(
-        userId, response.updatedSkillStates(), referencedSkills, attemptedAt);
+    LearningSessionAnalysisValidator.validateAttemptResponse(response, context.relevantSkillIds());
+    Map<Long, LearningSkill> referencedSkills = loadLearningSkills(referencedSkillIds(response));
+    persistUpdatedSkillStates(userId, response.updatedSkillStates(), referencedSkills, attemptedAt);
     return toAttemptAnalysisResult(response);
   }
 
@@ -78,8 +133,7 @@ public class LearningSessionAnalysisService {
             context.skillStates());
     LearningSessionSummaryFastApiResponse response = requestSessionSummary(request);
 
-    LearningSessionAnalysisValidator.validateSummaryResponse(
-        response, context.relevantSkillIds());
+    LearningSessionAnalysisValidator.validateSummaryResponse(response, context.relevantSkillIds());
     loadLearningSkills(
         response.weakSkills().stream()
             .map(LearningSessionSummaryFastApiResponse.WeakSkill::learningSkillId)
@@ -110,8 +164,7 @@ public class LearningSessionAnalysisService {
         relevantSkills.keySet().stream()
             .map(
                 skillId ->
-                    toSkillState(
-                        skillId, memoriesBySkillId.get(skillId), errorCountsByMemoryId))
+                    toSkillState(skillId, memoriesBySkillId.get(skillId), errorCountsByMemoryId))
             .toList();
     return new SkillStateContext(skillStates, Set.copyOf(relevantSkills.keySet()));
   }
@@ -150,9 +203,7 @@ public class LearningSessionAnalysisService {
   }
 
   private static LearningSkillStatePayload toSkillState(
-      Long skillId,
-      UserSkillMemory memory,
-      Map<Long, Map<String, Long>> errorCountsByMemoryId) {
+      Long skillId, UserSkillMemory memory, Map<Long, Map<String, Long>> errorCountsByMemoryId) {
     if (memory == null) {
       return new LearningSkillStatePayload(skillId, 0, 0, null, null, Map.of());
     }
@@ -198,8 +249,7 @@ public class LearningSessionAnalysisService {
     return skillsById;
   }
 
-  private static Set<Long> referencedSkillIds(
-      LearningAttemptAnalysisFastApiResponse response) {
+  private static Set<Long> referencedSkillIds(LearningAttemptAnalysisFastApiResponse response) {
     Set<Long> skillIds =
         response.updatedSkillStates().stream()
             .map(LearningSkillStatePayload::learningSkillId)
@@ -254,8 +304,7 @@ public class LearningSessionAnalysisService {
   }
 
   private void synchronizeErrorCounts(
-      List<LearningSkillStatePayload> updatedStates,
-      Map<Long, UserSkillMemory> memoriesBySkillId) {
+      List<LearningSkillStatePayload> updatedStates, Map<Long, UserSkillMemory> memoriesBySkillId) {
     List<Long> memoryIds =
         updatedStates.stream()
             .map(state -> memoriesBySkillId.get(state.learningSkillId()).getId())
@@ -303,8 +352,7 @@ public class LearningSessionAnalysisService {
       UserSkillErrorCount duplicate =
           result
               .computeIfAbsent(
-                  existing.getUserSkillMemory().getId(),
-                  ignored -> new EnumMap<>(ErrorType.class))
+                  existing.getUserSkillMemory().getId(), ignored -> new EnumMap<>(ErrorType.class))
               .put(existing.getErrorType(), existing);
       if (duplicate != null) {
         throw new IllegalStateException("학습 요소 오류 횟수가 중복 저장되어 있습니다.");
@@ -334,8 +382,7 @@ public class LearningSessionAnalysisService {
                         result.learningSkillId(), result.correct(), result.errorCounts()))
             .toList();
     return new AttemptAnalysisResult(
-        new FeedbackResult(response.feedback().tts(), response.feedback().detail()),
-        skillResults);
+        new FeedbackResult(response.feedback().tts(), response.feedback().detail()), skillResults);
   }
 
   private static SessionSummaryResult toSessionSummaryResult(
@@ -366,8 +413,7 @@ public class LearningSessionAnalysisService {
     }
   }
 
-  public record AttemptAnalysisResult(
-      FeedbackResult feedback, List<SkillResult> skillResults) {
+  public record AttemptAnalysisResult(FeedbackResult feedback, List<SkillResult> skillResults) {
     public AttemptAnalysisResult {
       skillResults = List.copyOf(skillResults);
     }
@@ -375,8 +421,7 @@ public class LearningSessionAnalysisService {
 
   public record FeedbackResult(String tts, String detail) {}
 
-  public record SkillResult(
-      Long learningSkillId, boolean correct, Map<String, Long> errorCounts) {
+  public record SkillResult(Long learningSkillId, boolean correct, Map<String, Long> errorCounts) {
     public SkillResult {
       errorCounts = Map.copyOf(errorCounts);
     }
@@ -394,6 +439,16 @@ public class LearningSessionAnalysisService {
 
     public static SessionSummaryResult notAvailable() {
       return new SessionSummaryResult(null, null, Map.of(), List.of());
+    }
+
+    /**
+     * AI를 거치지 않은 세션의 요약. 낱자 문항으로만 이루어진 세션에서 쓴다.
+     *
+     * <p>조언 문장과 약한 요소는 AI만 만들 수 있어 비운다. 오류 유형 집계는 직접 세어 채운다 —
+     * 비워 두면 결과 화면이 "눈에 띄는 실수가 없었어요"라고 잘못 말한다.
+     */
+    public static SessionSummaryResult errorCountsOnly(Map<String, Long> errorTypeCounts) {
+      return new SessionSummaryResult(null, null, errorTypeCounts, List.of());
     }
   }
 

@@ -69,7 +69,23 @@ public class LearningSessionCompletionService {
 
     List<AnalysisAttempt> analysisAttempts =
         prepareAnalysisAttempts(assignedProblems, commandsByProblemSession);
-    SessionSummaryResult summary = analysisService.summarizeSession(userId, analysisAttempts);
+    // 요약도 같은 벽에 막힌다 — 낱자 문항이 섞이면 FastAPI가 세션 전체를 422로 거절해
+    // 완료 제출이 503이 된다. 하나라도 AI가 못 받는 문항이 있으면 직접 집계한다
+    // (부분 요약은 만들 수 없다 — AI는 어절 전체를 함께 보고 규칙을 고른다)
+    boolean aiGradable =
+        analysisAttempts.stream()
+            .allMatch(attempt -> LearningSessionAnalysisService.isAiGradable(attempt.targetText()));
+    SessionSummaryResult summary =
+        aiGradable
+            ? analysisService.summarizeSession(userId, analysisAttempts)
+            : SessionSummaryResult.errorCountsOnly(
+                AttemptErrorClassifier.merge(
+                    analysisAttempts.stream()
+                        .map(
+                            attempt ->
+                                AttemptErrorClassifier.classify(
+                                    attempt.expectedPatterns(), attempt.inputPatterns()))
+                        .toList()));
 
     updateWrongProblems(userId, assignedProblems, storedAttempts);
     LocalDateTime completedAt = LocalDateTime.now(ZoneOffset.UTC);
@@ -91,8 +107,7 @@ public class LearningSessionCompletionService {
   }
 
   private List<AnalysisAttempt> prepareAnalysisAttempts(
-      List<ProblemSession> assignedProblems,
-      Map<Long, AttemptCommand> commandsByProblemSession) {
+      List<ProblemSession> assignedProblems, Map<Long, AttemptCommand> commandsByProblemSession) {
     List<AnalysisAttempt> attempts = new ArrayList<>();
     for (ProblemSession assigned : assignedProblems) {
       AttemptCommand command = commandsByProblemSession.get(assigned.getId());
@@ -270,8 +285,7 @@ public class LearningSessionCompletionService {
         problemResults.size(),
         correctProblemCount,
         problemResults,
-        summary
-    );
+        summary);
   }
 
   private static ProblemResult toProblemResult(

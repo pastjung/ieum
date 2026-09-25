@@ -10,8 +10,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.util.List;
 
-public record LearningSessionCompletionRequest(
-    @NotEmpty List<@Valid AttemptRequest> attempts) {
+public record LearningSessionCompletionRequest(@NotEmpty List<@Valid AttemptRequest> attempts) {
 
   public CompletionCommand toCommand() {
     return new CompletionCommand(attempts.stream().map(AttemptRequest::toCommand).toList());
