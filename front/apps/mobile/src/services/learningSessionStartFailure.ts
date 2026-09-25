@@ -14,7 +14,15 @@ import { ApiError } from "@ieum/api-client";
  *
  * **왜 화면·낭독을 함께 돌려주는가**: 화면에 보이는 글과 낭독되는 말이 갈라지면 어느 쪽을
  * 믿어야 할지 알 수 없다. `speech`는 `headline` + `detail`을 그대로 이은 문장이다.
+ *
+ * **왜 권하는 행동까지 돌려주는가**: 문구와 버튼이 따로 결정되면 갈라진다. 실제로 갈라졌다 —
+ * 문구는 "이 단계는 건너뛰고 다른 단계를 골라 주세요"로 바뀌었는데 주 버튼(위·primary)은
+ * "다시 시도"로 남아 있었다. TalkBack 포커스도 거기 먼저 닿으므로, 안내가 하지 말라고 한
+ * 행동이 가장 누르기 쉬운 자리에 있고 눌러도 영구 실패다 — 막으려던 무한 재시도가 그대로
+ * 남는다. 둘을 한 곳에서 정해 다시 갈라지지 않게 한다.
  */
+export type SessionStartRecovery = "retry" | "pick-other-stage";
+
 export interface SessionStartFailure {
   /** 화면 헤더 (줄바꿈 포함) */
   headline: string;
@@ -22,6 +30,11 @@ export interface SessionStartFailure {
   detail: string;
   /** 낭독 문구 — 화면에 보이는 글 전체와 같다 */
   speech: string;
+  /**
+   * 안내가 권하는 행동. 화면은 이것을 주 버튼(맨 위·`primary`)에 놓고 나머지를
+   * `secondary`로 내린다 — 낭독이 권한 것과 화면이 권한 것이 같아야 한다.
+   */
+  recovery: SessionStartRecovery;
 }
 
 const ATTEMPT_ORDINAL_KO: Record<number, string> = {
@@ -66,7 +79,13 @@ export function buildSessionStartFailure(
       errorCount <= 1
         ? "이 단계는 건너뛰고 다른 단계를 골라 주세요."
         : `${ordinal(errorCount)} 시도에도 준비되지 않았어요. 이 단계는 건너뛰고 다른 단계를 골라 주세요.`;
-    return { headline, detail, speech: `아직 문제가 준비되지 않았어요. ${detail}` };
+    return {
+      headline,
+      detail,
+      speech: `아직 문제가 준비되지 않았어요. ${detail}`,
+      // 재시도로는 절대 풀리지 않으므로 "다시 시도"를 주 버튼에 두면 안 된다
+      recovery: "pick-other-stage",
+    };
   }
 
   const headline = "학습 준비가\n안 됐어요";
@@ -74,5 +93,6 @@ export function buildSessionStartFailure(
     errorCount <= 1
       ? "잠시 후 다시 해 보세요."
       : `${ordinal(errorCount)} 시도에도 안 됐어요. 잠시 후 다시 해 보세요.`;
-  return { headline, detail, speech: `학습 준비가 안 됐어요. ${detail}` };
+  // 원인을 모르는 실패다. "잠시 후 다시 해 보세요"라고 말했으니 재시도가 주 버튼이다
+  return { headline, detail, speech: `학습 준비가 안 됐어요. ${detail}`, recovery: "retry" };
 }

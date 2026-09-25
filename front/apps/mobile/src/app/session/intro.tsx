@@ -78,9 +78,25 @@ export default function SessionIntro() {
             {failure.detail}
           </Text>
         </View>
+        {/*
+          버튼 순서와 variant를 안내가 권한 행동(`failure.recovery`)에 맞춘다. 맨 위·primary가
+          주 버튼이고 TalkBack 포커스도 거기 먼저 닿으므로, 낭독이 "다른 단계를 골라 주세요"
+          라고 해 놓고 "다시 시도"를 그 자리에 두면 안내가 하지 말라고 한 행동이 가장 누르기
+          쉬운 자리에 놓인다 — 그 경우 재시도는 영구 실패라 무한 재시도가 그대로 남는다.
+        */}
         <View style={{ gap: 12 }}>
-          <AppButton label="다시 시도" onPress={() => void refetch()} />
-          <AppButton label="다른 단계 복습" variant="secondary" onPress={() => router.replace("/(tabs)/learn")} />
+          {(failure.recovery === "retry"
+            ? ([
+                ["다시 시도", () => void refetch()],
+                ["다른 단계 복습", () => router.replace("/(tabs)/learn")],
+              ] as const)
+            : ([
+                ["다른 단계 복습", () => router.replace("/(tabs)/learn")],
+                ["다시 시도", () => void refetch()],
+              ] as const)
+          ).map(([label, onPress], order) => (
+            <AppButton key={label} label={label} variant={order === 0 ? "primary" : "secondary"} onPress={onPress} />
+          ))}
         </View>
       </ScreenShell>
     );

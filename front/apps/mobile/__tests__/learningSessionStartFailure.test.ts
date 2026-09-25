@@ -41,6 +41,12 @@ describe("세션 준비 실패 안내", () => {
       expect(failure.speech).toBe(onScreen);
     }
   });
+
+  it("원인을 모르는 실패는 재시도를 권한다", () => {
+    // "잠시 후 다시 해 보세요"라고 말했으니 주 버튼도 재시도여야 한다
+    expect(buildSessionStartFailure(1).recovery).toBe("retry");
+    expect(buildSessionStartFailure(1).speech).toContain("다시 해 보세요");
+  });
 });
 
 /**
@@ -92,6 +98,23 @@ describe("문제가 준비되지 않은 단계", () => {
     const other = new ApiError(500, "INTERNAL_ERROR", "서버 오류");
 
     expect(buildSessionStartFailure(1, other)).toEqual(buildSessionStartFailure(1));
+  });
+
+  it("권하는 행동이 '다른 단계 고르기'다 — 재시도가 아니다", () => {
+    // 화면은 이것으로 주 버튼(맨 위·primary)을 정한다. 낭독이 "다른 단계를 골라 주세요"
+    // 라고 해 놓고 "다시 시도"가 주 버튼이면, 안내가 하지 말라고 한 행동이 가장 누르기
+    // 쉬운 자리(TalkBack 포커스도 먼저 닿는 자리)에 놓인다 — 눌러도 영구 실패다
+    for (const count of [1, 2, 7]) {
+      expect(buildSessionStartFailure(count, notReady).recovery).toBe("pick-other-stage");
+    }
+  });
+
+  it("권하는 행동이 낭독 문구와 어긋나지 않는다", () => {
+    // 문구와 버튼이 따로 결정되면 갈라진다 — 실제로 갈라졌던 결함이라 함께 고정한다
+    const failure = buildSessionStartFailure(1, notReady);
+
+    expect(failure.speech).toContain("다른 단계를 골라 주세요");
+    expect(failure.recovery).toBe("pick-other-stage");
   });
 
   it("오류를 넘기지 않으면 일반 안내가 된다", () => {
