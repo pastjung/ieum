@@ -1,17 +1,19 @@
 import {
+  inProgressSessionSchema,
   problemsResponseSchema,
   completionResponseSchema,
   attemptAnalysisRequestSchema,
   attemptAnalysisResponseSchema,
   type AttemptAnalysisResponse,
   type AttemptInput,
+  type InProgressSession,
   type CompletionResponse,
   type LearningSession,
   type ProblemsResponse,
 } from "@ieum/contracts";
 import { api } from "./apiClient";
 import type { ServerSessionMeta } from "@/stores/sessionStore";
-import { homeSummary, skillLevels, type HomeSummary, type LearningThemeId } from "./mockData";
+import { skillLevels, type LearningThemeId } from "./mockData";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -122,6 +124,40 @@ export const learningService = {
     return toSession(response, undefined, "복습");
   },
 
+  /**
+   * 진행 중인 학습 세션. 없으면 null.
+   *
+   * 홈의 "이어서 학습"이 오랫동안 목 데이터("3단계 자음과 모음 · 7 / 10 문항")를 보여주고,
+   * 누르면 진행 중이던 세션이 아니라 새 자음 세션을 만들었다. 이어받을 세션의 식별자를
+   * 알 방법이 없었기 때문이다.
+   */
+  async getInProgressSession(): Promise<InProgressSession | null> {
+    const payload = await api.get<unknown>("/learning-sessions/in-progress");
+    // 204는 본문이 없다 — 진행 중인 것이 없다는 뜻이다
+    if (payload === undefined || payload === null || payload === "") {
+      return null;
+    }
+    return inProgressSessionSchema.parse(payload);
+  },
+
+  /**
+   * 중단한 세션을 이어받는다. 새 문항을 배정하지 않고 기존 배정을 그대로 가져온다.
+   *
+   * **이미 푼 문항은 뺀다.** 서버는 완료된 배정에 대한 재제출을 거부하므로
+   * (`LearningAttemptService`의 `LEARNING_PROBLEM_ALREADY_ANALYZED`), 그대로 두면 이어서
+   * 시작하자마자 막힌다.
+   */
+  async resumeSession(sessionId: number) {
+    const response = problemsResponseSchema.parse(
+      await api.get(`/learning-sessions/${sessionId}`),
+    );
+    const remaining = response.problems.filter((problem) => !problem.completed);
+    if (remaining.length === 0) {
+      throw new Error("이어서 풀 문항이 없어요");
+    }
+    return toSession({ ...response, problems: remaining }, undefined, "이어서 학습");
+  },
+
   /** 세션의 모든 답안을 한 번에 제출한다. 이 응답이 최종 채점 결과다 */
   async completeSession(
     sessionId: number,
@@ -151,11 +187,6 @@ export const learningService = {
   },
 
   /* ─── 아래는 아직 목이다. 대응 엔드포인트가 없다 ─── */
-
-  async getHomeSummary(): Promise<HomeSummary> {
-    await delay(250);
-    return homeSummary;
-  },
 
   async getSkillLevels() {
     await delay(200);

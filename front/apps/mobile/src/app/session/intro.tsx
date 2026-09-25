@@ -34,19 +34,31 @@ export default function SessionIntro() {
   const queryClient = useQueryClient();
   // `mode=review`로 들어오면 복습 세션을 만든다. 주제(theme)는 무시된다 — 복습은 서버가
   // 내 기록에서 약한 요소를 골라 출제하므로 고를 단계가 없다
-  const { theme: themeId, mode } = useLocalSearchParams<{
+  const { theme: themeId, mode, sessionId } = useLocalSearchParams<{
     theme?: LearningThemeId;
     mode?: string;
+    sessionId?: string;
   }>();
   const request: SessionRequest =
-    mode === "review" ? { kind: "review" } : { kind: "theme", themeId };
+    mode === "review"
+      ? { kind: "review" }
+      : mode === "resume" && sessionId
+        ? { kind: "resume", sessionId: Number(sessionId) }
+        : { kind: "theme", themeId };
   const start = useSessionStore((s) => s.start);
   const { data, isError, error, errorUpdateCount, refetch } = useQuery({
     queryKey: learningSessionQueryKey(request),
-    queryFn: () =>
-      request.kind === "review"
-        ? learningService.startReviewSession()
-        : learningService.startSession(themeId),
+    queryFn: () => {
+      switch (request.kind) {
+        case "review":
+          return learningService.startReviewSession();
+        // 새 문항을 배정하지 않고 기존 배정을 이어받는다
+        case "resume":
+          return learningService.resumeSession(request.sessionId);
+        default:
+          return learningService.startSession(themeId);
+      }
+    },
     // 세션 생성은 서버에 행을 만든다. 화면에 다시 들어올 때마다 새 세션이 생기면 안 된다
     staleTime: Infinity,
     gcTime: Infinity,

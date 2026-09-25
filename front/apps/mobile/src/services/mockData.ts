@@ -43,21 +43,6 @@ export const freeSessionVowel: LearningSession = {
   ],
 };
 
-export interface HomeSummary {
-  userName: string;
-  /** 진행 중 학습 (없으면 null → 복습 제안 변형) */
-  inProgress: { title: string; progressLabel: string } | null;
-  deviceConnected: boolean;
-  stepLabel: string;
-}
-
-export const homeSummary: HomeSummary = {
-  userName: "하나",
-  inProgress: { title: "3단계 자음과 모음", progressLabel: "7 / 10 문항" },
-  deviceConnected: false,
-  stepLabel: "3단계",
-};
-
 export const learningThemes = [
   { id: "consonant", label: "자음", solved: 48, correct: 43 },
   { id: "vowel", label: "모음", solved: 36, correct: 27 },

@@ -295,6 +295,21 @@ export const weakSkillSchema = z.object({
 });
 export type WeakSkill = z.infer<typeof weakSkillSchema>;
 
+/**
+ * 진행 중인 학습 세션. 홈의 "이어서 학습"이 제목·진도를 보여주고 이 `sessionId`로 이어받는다.
+ *
+ * 진행 중인 것이 없으면 서버가 `204`(본문 없음)를 준다 — 빈 객체로 다루면 "없음"과
+ * "0문항짜리 세션"을 구별할 수 없다.
+ */
+export const inProgressSessionSchema = z.object({
+  sessionId: requestIdentifierSchema,
+  /** 커리큘럼 단계 이름. 복습 세션은 "복습" */
+  stageName: z.string().min(1),
+  totalCount: z.number().int().positive(),
+  completedCount: z.number().int().nonnegative(),
+});
+export type InProgressSession = z.infer<typeof inProgressSessionSchema>;
+
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),

@@ -19,12 +19,20 @@ import type { LearningThemeId } from "./mockData";
  */
 export type SessionRequest =
   | { kind: "theme"; themeId: LearningThemeId | undefined }
-  | { kind: "review" };
+  | { kind: "review" }
+  | { kind: "resume"; sessionId: number };
 
 export function learningSessionQueryKey(request: SessionRequest) {
-  return request.kind === "review"
-    ? (["learningSession", "review"] as const)
-    : (["learningSession", request.themeId ?? "default"] as const);
+  switch (request.kind) {
+    case "review":
+      return ["learningSession", "review"] as const;
+    // 세션마다 다른 키를 쓴다. 하나로 묶으면 앞서 이어받은 세션이 캐시에 남아, 다른
+    // 세션을 이어받아도 그것이 나온다
+    case "resume":
+      return ["learningSession", "resume", request.sessionId] as const;
+    default:
+      return ["learningSession", request.themeId ?? "default"] as const;
+  }
 }
 
 /**
