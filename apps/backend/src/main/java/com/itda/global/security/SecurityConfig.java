@@ -61,6 +61,9 @@ public class SecurityConfig {
 
   private static final String WITHDRAWALS_PATH = "/users/me/withdrawals";
 
+  /** 학습 단계 설정. 내 정보를 바꾸므로 당연히 보호 대상이다 */
+  private static final String ME_LEVEL_PATH = "/users/me/level";
+
   /**
    * 학습 세션 경로. 모두 본인 세션만 다루므로 인증이 필요하다.
    *
@@ -126,6 +129,7 @@ public class SecurityConfig {
             new OrRequestMatcher(
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, ME_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, WITHDRAWALS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, ME_LEVEL_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LEARNING_SESSIONS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LEARNING_SESSION_PATH),
                 PathPatternRequestMatcher.pathPattern(
