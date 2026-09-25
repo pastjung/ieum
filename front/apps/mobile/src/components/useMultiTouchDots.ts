@@ -103,8 +103,17 @@ export function useMultiTouchDots(
   const update = (e: GestureResponderEvent) => {
     if (disabled) {
       // 낭독도 진동도 내지 않고 버린다 — 그 신호가 곧 "입력됐다"는 뜻이기 때문이다.
-      // 대신 제스처마다 한 번 지금 상태를 알린다
-      if (!blockedAnnounced.current) {
+      // 대신 제스처마다 한 번 지금 상태를 알린다.
+      //
+      // **점을 실제로 짚었을 때만 알린다.** 가로 패드(`LandscapeDotPad`)는 가운데
+      // 컨트롤("다시 듣기"·"지우기"·"다시 보내기")까지 `padHandlers` 안에 두므로, 점 밖
+      // 터치에도 알리면 `failed` 상태에서 "다시 보내기"를 누른 사용자에게 오류 진동과
+      // 함께 "지금은 입력할 수 없어요"를 먼저 들려주게 된다 — 정확히 옳은 조작을 한
+      // 사람에게 안 된다고 말하는 셈이다. 제출 롱프레스 중의 미세한 손가락 움직임
+      // (`onTouchMove`)도 마찬가지다.
+      //
+      // 잠기지 않았을 때 점 밖 터치가 아무 일도 하지 않는 것과 대칭이다.
+      if (!blockedAnnounced.current && touchesToDots(e).size > 0) {
         blockedAnnounced.current = true;
         onBlocked?.();
       }

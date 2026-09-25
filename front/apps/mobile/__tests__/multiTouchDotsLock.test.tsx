@@ -23,6 +23,12 @@ function touchEvent(points: { x: number; y: number }[]): GestureResponderEvent {
 }
 
 const DOT_1_CENTER = { x: 50, y: 50 };
+/**
+ * 점 밖. 가로 패드는 가운데 컨트롤("다시 듣기"·"다시 보내기")까지 `padHandlers` 안에
+ * 두므로, 그 버튼을 누르는 터치가 이 좌표로 들어온다. 등록한 사각형(0,0)~(100,100)에
+ * `SLOP`(12)를 더해도 닿지 않는 자리다.
+ */
+const OUTSIDE_DOTS = { x: 400, y: 400 };
 
 type Harness = ReturnType<typeof useMultiTouchDots>;
 
@@ -123,6 +129,36 @@ describe("점자 패드 잠금", () => {
     });
 
     expect(onBlocked).toHaveBeenCalledTimes(2);
+  });
+
+  it("잠겨 있어도 점 밖 터치에는 안내하지 않는다", () => {
+    // 가로 패드는 가운데 컨트롤까지 padHandlers 안에 있다. 점 밖 터치에도 안내하면
+    // `failed` 상태에서 "다시 보내기"를 누른 사용자가 오류 진동과 함께
+    // "지금은 입력할 수 없어요"를 듣는다 — 정확히 옳은 조작을 막았다고 말하는 셈이다
+    const onBlocked = jest.fn();
+    const hook = renderHook(jest.fn(), { disabled: true, onBlocked });
+
+    act(() => {
+      hook.api.padHandlers.onTouchStart(touchEvent([OUTSIDE_DOTS]));
+      hook.api.padHandlers.onTouchMove(touchEvent([OUTSIDE_DOTS]));
+      hook.api.padHandlers.onTouchEnd(touchEvent([]));
+    });
+
+    expect(onBlocked).not.toHaveBeenCalled();
+  });
+
+  it("점 밖 터치 뒤에 점을 짚으면 그때는 안내한다", () => {
+    // 점 밖 터치를 무시한 것이 그 뒤의 진짜 점 입력까지 삼키면 안 된다
+    const onBlocked = jest.fn();
+    const hook = renderHook(jest.fn(), { disabled: true, onBlocked });
+
+    act(() => {
+      hook.api.padHandlers.onTouchStart(touchEvent([OUTSIDE_DOTS]));
+      hook.api.padHandlers.onTouchEnd(touchEvent([]));
+      hook.api.padHandlers.onTouchStart(touchEvent([DOT_1_CENTER]));
+    });
+
+    expect(onBlocked).toHaveBeenCalledTimes(1);
   });
 
   it("제스처 도중에 잠기면 모아 둔 점이 나중에 확정되지 않는다", () => {
