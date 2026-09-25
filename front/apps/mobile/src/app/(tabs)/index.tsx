@@ -8,22 +8,14 @@ import { AppButton } from "@/components/AppButton";
 import { IeumFace } from "@/components/IeumFace";
 import { authService } from "@/services/authService";
 import { learningService } from "@/services/learningService";
-import { todayReview } from "@/services/mockData";
+import { LEVEL_LABEL, LEVEL_UNSET_LABEL } from "@/services/levelLabels";
+import { LevelBadge } from "@/components/LevelBadge";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useTactileStore } from "@/stores/tactileStore";
 import { announce, hapticError, hapticTap } from "@/a11y";
 import { fontSize, radius, useFontScale, useTheme } from "@/theme";
 
 /** level은 단계 번호가 아니라 학습 범주라 "3단계" 같은 문구를 만들 수 없다 */
-const LEVEL_LABEL: Record<string, string> = {
-  CONSONANT: "자음",
-  VOWEL: "모음",
-  WORD: "단어",
-  SENTENCE: "문장",
-  CONTRACTION: "약자",
-  CONTRACTION_WORD: "약어",
-};
-
 const LOAD_FAILED_TEXT = "사용자 정보를 불러오지 못했어요.";
 
 /**
@@ -74,29 +66,48 @@ function VoiceHome() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  // inProgress는 학습 세션 API가 있어야 해서 목을 그대로 쓴다
-  const { data: homeSummary } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
+  const { data: inProgress, isPending: inProgressPending } = useQuery({
+    queryKey: ["inProgressSession"],
+    queryFn: learningService.getInProgressSession,
+  });
   const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
-  const stepLabel = data?.level ? LEVEL_LABEL[data.level] : "자가 진단 전";
+  const stepLabel = data?.level ? LEVEL_LABEL[data.level] : LEVEL_UNSET_LABEL;
   // 장치 연결은 서버 요약이 아니라 실제 블루투스 상태에서 읽는다.
   const deviceConnected = useTactileStore((s) => s.connected);
 
   useEffect(() => {
-    // homeSummary(목)가 data(실제 사용자 정보)보다 먼저 도착하는 경우가 대부분이다.
-    // 둘 다 준비되기 전에는 이름·단계가 들어간 문장을 만들지 않는다 — 빈 이름이나
-    // "자가 진단 전"을 사실처럼 낭독하면 안 되고, 나중에 두 번째 낭독이 겹쳐도 안 된다
-    if (!homeSummary || !data) return;
+    // 진행 중 세션 조회가 사용자 정보보다 먼저 끝날 수 있다. 둘 다 준비되기 전에는
+    // 이름·단계가 들어간 문장을 만들지 않는다 — 빈 이름이나 "단계 미선택"을 사실처럼
+    // 낭독하면 안 되고, 나중에 두 번째 낭독이 겹쳐도 안 된다.
+    //
+    // `inProgress`는 "진행 중 없음"이 null이라 로딩과 구별되지 않는다. `isPending`으로
+    // 조회가 끝났는지를 따로 본다
+    if (inProgressPending || !data) return;
     announce(
-      homeSummary.inProgress
-        ? `홈이에요. ${userName}님, ${stepLabel}를 배우는 중이에요. 이어서 학습을 누르면 ${homeSummary.inProgress.title}을 계속해요.`
+      inProgress
+        ? `홈이에요. ${userName}님, ${stepLabel}를 배우는 중이에요. 이어서 학습을 누르면 ${inProgress.stageName}을 계속해요.`
         : `홈이에요. 진행 중인 학습이 없어요. 복습을 시작하거나 새 단계를 배울 수 있어요.`,
     );
-  }, [homeSummary, data, userName, stepLabel]);
+  }, [inProgress, inProgressPending, data, userName, stepLabel]);
 
   const goSession = () => {
     void hapticTap();
-    router.push("/session/intro");
+    // 진행 중인 세션이 있으면 이어받는다. 예전에는 언제나 새 자음 세션을 만들어
+    // "이어서 학습"이라는 이름이 거짓이었다
+    router.push(
+      inProgress
+        ? {
+            pathname: "/session/intro",
+            params: { mode: "resume", sessionId: String(inProgress.sessionId) },
+          }
+        : "/session/intro",
+    );
+  };
+
+  /** 복습은 단계를 고르지 않는다 — 서버가 내 기록에서 약한 요소를 골라 출제한다 */
+  const goReview = () => {
+    router.push({ pathname: "/session/intro", params: { mode: "review" } });
   };
 
   const bigButton = (label: string, sub: string | null, primary: boolean, onPress: () => void, flex = 1) => (
@@ -130,14 +141,17 @@ function VoiceHome() {
   return (
     <ScreenShell noBottomPadding>
       <View>
-        <Text accessibilityRole="header" style={{ fontSize: fontSize.title * fontScale, fontWeight: "900", color: theme.color.text }}>
-          홈
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <Text accessibilityRole="header" style={{ fontSize: fontSize.title * fontScale, fontWeight: "900", color: theme.color.text }}>
+            홈
+          </Text>
+          <LevelBadge level={data?.level} />
+        </View>
         <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, marginTop: 4 }}>
           {isError
             ? LOAD_FAILED_TEXT
-            : homeSummary && data
-              ? homeSummary.inProgress
+            : !inProgressPending && data
+              ? inProgress
                 ? `${userName}님, ${stepLabel}를 배우는 중이에요.`
                 : "진행 중인 학습이 없어요."
               : "불러오는 중이에요…"}
@@ -152,9 +166,21 @@ function VoiceHome() {
             onPress={retry}
           />
         )}
-        {homeSummary?.inProgress ? (
+        {inProgress ? (
           <>
-            {bigButton("이어서 학습", `${homeSummary.inProgress.title} · ${homeSummary.inProgress.progressLabel}`, true, goSession, 1.4)}
+            {bigButton(
+              inProgress.completedCount >= inProgress.totalCount ? "결과 받기" : "이어서 학습",
+              `${inProgress.stageName} · ${inProgress.totalCount}문항 중 ${inProgress.completedCount}문항 완료`,
+              true,
+              goSession,
+              1.4,
+            )}
+            {/*
+              진행 중 세션이 있어도 복습은 닿을 수 있어야 한다. 예전에는 이 가지에 복습이
+              없어서 — 그리고 목 데이터의 inProgress가 늘 값이 있어서 — 시각장애인용 홈에는
+              복습 진입점이 아예 없었다. 화면 모드에 따라 쓸 수 있는 기능이 달라지면 안 된다
+            */}
+            {bigButton("복습 시작", null, false, goReview)}
             {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
             <ListRow
               label="점자 장치"
@@ -165,7 +191,7 @@ function VoiceHome() {
           </>
         ) : (
           <>
-            {bigButton("복습 시작", null, true, goSession, 1.4)}
+            {bigButton("복습 시작", null, true, goReview, 1.4)}
             {bigButton("새 단계 학습", null, false, () => router.push("/(tabs)/learn"))}
             {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
           </>
@@ -180,11 +206,13 @@ function ScreenHome() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  // inProgress는 학습 세션 API가 있어야 해서 목을 그대로 쓴다
-  const { data: homeSummary } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
+  const { data: inProgress } = useQuery({
+    queryKey: ["inProgressSession"],
+    queryFn: learningService.getInProgressSession,
+  });
   const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
-  const stepLabel = data?.level ? LEVEL_LABEL[data.level] : "자가 진단 전";
+  const stepLabel = data?.level ? LEVEL_LABEL[data.level] : LEVEL_UNSET_LABEL;
   // 장치 연결은 서버 요약이 아니라 실제 블루투스 상태에서 읽는다.
   const deviceConnected = useTactileStore((s) => s.connected);
 
@@ -200,7 +228,10 @@ function ScreenHome() {
               {isError ? LOAD_FAILED_TEXT : data ? `${stepLabel}를 배우는 중이에요` : "불러오는 중이에요…"}
             </Text>
           </View>
-          <IeumFace size={56} />
+          <View style={{ alignItems: "flex-end", gap: 6 }}>
+            <LevelBadge level={data?.level} />
+            <IeumFace size={56} />
+          </View>
         </View>
 
         {isError && (
@@ -212,19 +243,28 @@ function ScreenHome() {
           />
         )}
 
-        {homeSummary?.inProgress && (
+        {inProgress && (
           <View
             style={[
               styles.card,
               { backgroundColor: theme.color.primary, borderRadius: radius.card },
               theme.shadow != null && { boxShadow: `0 6px 0 ${theme.shadow.primary}` },
             ]}
-            accessibilityLabel={`이어서 학습. ${homeSummary.inProgress.title}, ${homeSummary.inProgress.progressLabel}`}
+            accessibilityLabel={`이어서 학습. ${inProgress.stageName}, ${inProgress.totalCount}문항 중 ${inProgress.completedCount}문항 완료`}
           >
             <Text style={{ fontSize: 15 * fontScale, fontWeight: "800", color: theme.color.onPrimary, opacity: 0.85 }}>이어서 학습</Text>
-            <Text style={{ fontSize: 24 * fontScale, fontWeight: "900", color: theme.color.onPrimary }}>{homeSummary.inProgress.title}</Text>
-            <Text style={{ fontSize: 15 * fontScale, fontWeight: "600", color: theme.color.onPrimary }}>{homeSummary.inProgress.progressLabel}</Text>
-            <AppButton label="이어서 풀기" variant="compact" onPress={() => router.push("/session/intro")} />
+            <Text style={{ fontSize: 24 * fontScale, fontWeight: "900", color: theme.color.onPrimary }}>{inProgress.stageName}</Text>
+            <Text style={{ fontSize: 15 * fontScale, fontWeight: "600", color: theme.color.onPrimary }}>{`${inProgress.completedCount} / ${inProgress.totalCount}문항`}</Text>
+            <AppButton
+              label="이어서 풀기"
+              variant="compact"
+              onPress={() =>
+                router.push({
+                  pathname: "/session/intro",
+                  params: { mode: "resume", sessionId: String(inProgress.sessionId) },
+                })
+              }
+            />
           </View>
         )}
 
@@ -246,27 +286,19 @@ function ScreenHome() {
               전체 보기 ▸
             </Text>
           </View>
-          <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-            {todayReview.map((item) => (
-              <Text
-                key={item}
-                style={{
-                  borderWidth: 1.5,
-                  borderColor: theme.color.border,
-                  borderRadius: 99,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  fontSize: 14 * fontScale,
-                  fontWeight: "700",
-                  color: theme.color.text,
-                  overflow: "hidden",
-                }}
-              >
-                {item}
-              </Text>
-            ))}
-          </View>
-          <AppButton label="복습 시작" variant="compact" onPress={() => router.push("/session/intro")} />
+          {/*
+            무엇을 복습할지 미리 보여주던 칩 세 개(받침 ㅆ·자음 ㅅ·모음 ㅕ)는 고정값이었다.
+            내 약한 요소를 세션 밖에서 알려주는 API가 아직 없어(weakSkills는 완료 응답에만
+            실린다) 지금은 지운다. 고정값을 내 실력처럼 보여주느니 말하지 않는 편이 낫다
+          */}
+          <Text style={{ fontSize: 15 * fontScale, color: theme.color.textMuted, lineHeight: 24 }}>
+            약했던 것부터 다시 풀어요.
+          </Text>
+          <AppButton
+            label="복습 시작"
+            variant="compact"
+            onPress={() => router.push({ pathname: "/session/intro", params: { mode: "review" } })}
+          />
         </View>
 
         <ListRow

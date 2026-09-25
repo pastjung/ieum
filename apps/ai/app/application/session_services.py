@@ -84,6 +84,15 @@ class AttemptAnalysis:
 
 
 @dataclass(frozen=True)
+class SkillMastery:
+    """요소 하나의 숙련 상태. 세션 밖에서 읽는다."""
+
+    learning_skill_id: int
+    mastery_prob: float
+    label: str
+
+
+@dataclass(frozen=True)
 class WeakSkill:
     learning_skill_id: int
     mastery_prob: float
@@ -168,22 +177,55 @@ class SessionService:
     def _known_kcs(self) -> set[str]:
         return {s.kc for s in self.catalog.all()}
 
-    # ── ① 문항 하나 ────────────────────────────────────────────────────────
-    def analyze_attempt(
-        self, attempt: Attempt, skill_states: list[SkillState], now: datetime | None = None
-    ) -> AttemptAnalysis:
-        now = now or datetime.now(UTC).replace(tzinfo=None)
-        warnings: list[str] = []
-        graded = self._grade(attempt, warnings)
-        results = self._skill_results(graded)
+    # ── 숙련 상태 읽기 (점역을 거치지 않는다) ───────────────────────────────
+    def summarize_skills(
+        self, skill_states: list[SkillState], now: datetime | None = None
+    ) -> list[SkillMastery]:
+        """요소별 숙련도와 라벨. 약한 것부터 정렬해 돌려준다.
 
+        "내 실력" 화면과 홈의 복습 카드가 세션과 무관하게 "무엇이 약한지"를 보여주려면
+        이 값이 필요하다. 지금까지 숙련 라벨은 세션 완료 응답(weakSkills)에만 실려서,
+        두 화면은 고정값을 내 실력처럼 보여주고 있었다.
+
+        라벨 기준(label_of)은 여기에만 둔다 — Spring 이 문턱값을 베끼면 두 곳이 갈린다.
+
+        정렬도 여기서 한다. 앱이 하면 두 화면이 서로 다른 순서를 쓸 수 있다.
+        """
+        now = now or datetime.now(UTC).replace(tzinfo=None)
+        out: list[SkillMastery] = []
+        for state in skill_states:
+            key = str(state.learning_skill_id)
+            p = self.estimator.mastery([state.to_estimate(key)], now).get(
+                key, self.estimator.prior()
+            )
+            out.append(SkillMastery(state.learning_skill_id, round(p, 4), label_of(p)))
+        out.sort(key=lambda m: m.mastery_prob)
+        return out
+
+    # ── 숙련도 갱신 (점역을 거치지 않는다) ──────────────────────────────────
+    def apply_results(
+        self,
+        results: list[SkillResult],
+        skill_states: list[SkillState],
+        now: datetime | None = None,
+    ) -> list[SkillState]:
+        """요소별 정오만으로 학습자 상태를 갱신한다.
+
+        analyze_attempt 가 채점을 마친 뒤 쓰던 블록을 그대로 떼어냈다. 점역 결과(graded)를
+        보지 않으므로 글자가 없어도 쓸 수 있다 — 자음·모음 단계 문항은 'ㄱ'·'ㅙ' 같은
+        낱자라 점역기가 분해하지 못해 Spring 이 직접 채점하는데, 숙련도는 여기(BKT)에만
+        있어 갱신할 방법이 없었다. 그 탓에 자음·모음은 아무리 틀려도 약한 요소로 뽑히지
+        않아 복습에 영영 나오지 않았다.
+
+        catalog 를 조회하지 않는다. 옛 코드가 kc 를 꺼낸 것은 to_estimate 의 인자 때문인데
+        _decay 는 그 값을 쓰지 않는다(마지막 연습 시각과 정답 횟수만 본다).
+        """
+        now = now or datetime.now(UTC).replace(tzinfo=None)
         states = {s.learning_skill_id: s for s in skill_states}
         updated: list[SkillState] = []
         for r in results:
-            kc = self.catalog.by_id(r.learning_skill_id)
-            assert kc is not None
             s = states.get(r.learning_skill_id) or SkillState(r.learning_skill_id)
-            est_state = s.to_estimate(kc.kc)
+            est_state = s.to_estimate("")
             p = s.mastery_prob
             if p is not None and s.last_practiced_at is not None:
                 p = self.estimator._decay(p, est_state, now)  # 마지막 연습 후 망각을 먼저 반영
@@ -201,6 +243,18 @@ class SessionService:
                     error_counts=counts,
                 )
             )
+        return updated
+
+    # ── ① 문항 하나 ────────────────────────────────────────────────────────
+    def analyze_attempt(
+        self, attempt: Attempt, skill_states: list[SkillState], now: datetime | None = None
+    ) -> AttemptAnalysis:
+        now = now or datetime.now(UTC).replace(tzinfo=None)
+        warnings: list[str] = []
+        graded = self._grade(attempt, warnings)
+        results = self._skill_results(graded)
+
+        updated = self.apply_results(results, skill_states, now)
         fb = graded["feedback"]
         detail = self._detail(graded, results)
         return AttemptAnalysis(

@@ -1,7 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { LearningSession } from "@ieum/contracts";
 import type { ServerSessionMeta, SessionKind } from "@/stores/sessionStore";
-import type { LearningThemeId } from "./mockData";
 
 /**
  * `intro.tsx`의 세션 조회 쿼리 키. 조회 쪽과 캐시 제거 쪽이 같은 키를 쓰도록 여기 한 곳에
@@ -11,8 +10,28 @@ import type { LearningThemeId } from "./mockData";
  * `learningService.ts`(API 접근 계층)에 두지 않은 이유: 이 키는 화면(intro)의 캐시
  * 정체성이지 API 호출의 일부가 아니다. API 계층에 화면 캐시 키가 얹히면 계층이 어색해진다.
  */
-export function learningSessionQueryKey(themeId: LearningThemeId | undefined) {
-  return ["learningSession", themeId ?? "default"] as const;
+/**
+ * intro 화면이 만들려는 세션의 정체성.
+ *
+ * 복습은 주제를 고르지 않는다 — 서버가 내 기록에서 약한 요소를 골라 출제한다
+ * (`POST /review-sessions`). 그래서 주제 하나로는 표현할 수 없다.
+ */
+export type SessionRequest =
+  | { kind: "stage"; curriculumId: number; title: string }
+  | { kind: "review" }
+  | { kind: "resume"; sessionId: number };
+
+export function learningSessionQueryKey(request: SessionRequest) {
+  switch (request.kind) {
+    case "review":
+      return ["learningSession", "review"] as const;
+    // 세션마다 다른 키를 쓴다. 하나로 묶으면 앞서 이어받은 세션이 캐시에 남아, 다른
+    // 세션을 이어받아도 그것이 나온다
+    case "resume":
+      return ["learningSession", "resume", request.sessionId] as const;
+    default:
+      return ["learningSession", "stage", request.curriculumId] as const;
+  }
 }
 
 /**
@@ -26,10 +45,10 @@ export function learningSessionQueryKey(themeId: LearningThemeId | undefined) {
  */
 export function beginLearningSession(
   queryClient: QueryClient,
-  themeId: LearningThemeId | undefined,
+  request: SessionRequest,
   data: { session: LearningSession; meta: ServerSessionMeta },
   start: (session: LearningSession, kind: SessionKind, meta: ServerSessionMeta) => void,
 ): void {
   start(data.session, "free", data.meta);
-  queryClient.removeQueries({ queryKey: learningSessionQueryKey(themeId) });
+  queryClient.removeQueries({ queryKey: learningSessionQueryKey(request) });
 }

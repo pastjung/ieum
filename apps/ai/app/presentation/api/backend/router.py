@@ -17,7 +17,7 @@ from app.application.backend_services import (
     ReviewAnalyzeService,
     UnsupportedTextError,
 )
-from app.application.session_services import Attempt, SessionService, SkillState
+from app.application.session_services import Attempt, SessionService, SkillResult, SkillState
 from app.infrastructure.braille_core.estimate import BKTEstimator, default_estimator
 from app.infrastructure.rule_engine import get_skill_catalog
 
@@ -183,6 +183,13 @@ class SessionSummaryResponse(CamelModel):
     weak_skills: list[WeakSkillSchema]
 
 
+def _to_error_counts(schema: ErrorCountSchema | None) -> dict[str, int]:
+    """빠진 키는 0으로 채워져 오므로 0을 걷어낸다 (_to_states 와 같은 규칙)."""
+    if schema is None:
+        return {}
+    return {k: v for k, v in schema.model_dump().items() if v}
+
+
 def _to_states(items: list[SkillStateSchema]) -> list[SkillState]:
     out: list[SkillState] = []
     for s in items:
@@ -303,6 +310,86 @@ def attempt_analyze(
         ],
         updated_skill_states=[_state_out(s) for s in result.updated_skill_states],
     )
+
+
+class SkillMasterySchema(CamelModel):
+    learning_skill_id: int
+    mastery_prob: float
+    label: str
+
+
+class SkillSummaryRequest(CamelModel):
+    skill_states: list[SkillStateSchema] = Field(default_factory=list)
+
+
+class SkillSummaryResponse(CamelModel):
+    """약한 것부터 정렬된 요소별 숙련 상태."""
+
+    skills: list[SkillMasterySchema]
+
+
+@router.post(
+    "/skill-summary", response_model=SkillSummaryResponse, response_model_by_alias=True
+)
+def summarize_skills(
+    request: SkillSummaryRequest,
+    service: SessionService = Depends(get_session_service),
+) -> SkillSummaryResponse:
+    """세션 밖에서 요소별 숙련 상태를 읽는다. 상태를 바꾸지 않는다."""
+    return SkillSummaryResponse(
+        skills=[
+            SkillMasterySchema(
+                learning_skill_id=m.learning_skill_id,
+                mastery_prob=m.mastery_prob,
+                label=m.label,
+            )
+            for m in service.summarize_skills(_to_states(request.skill_states))
+        ]
+    )
+
+
+class SkillOutcomeSchema(CamelModel):
+    """요소 하나의 채점 결과. Spring 의 SkillResult 와 같은 모양이다."""
+
+    learning_skill_id: int
+    correct: bool
+    error_counts: ErrorCountSchema | None = None
+
+
+class SkillStatesRequest(CamelModel):
+    """현재 상태 + 이번 채점 결과."""
+
+    skill_states: list[SkillStateSchema] = Field(default_factory=list)
+    results: list[SkillOutcomeSchema] = Field(default_factory=list)
+
+
+class SkillStatesResponse(CamelModel):
+    """attempt-analyze 의 updatedSkillStates 와 같은 모양 — Spring 이 같은 변환기를 쓴다."""
+
+    updated_skill_states: list[SkillStateOutSchema]
+
+
+@router.post(
+    "/skill-states", response_model=SkillStatesResponse, response_model_by_alias=True
+)
+def update_skill_states(
+    request: SkillStatesRequest,
+    service: SessionService = Depends(get_session_service),
+) -> SkillStatesResponse:
+    """글자 없이 숙련도만 갱신한다.
+
+    자음·모음 단계 문항은 낱자라 점역기가 분해하지 못해(non-Hangul) Spring 이 직접
+    채점한다. 숙련도(BKT)는 여기에만 있어 그 경로에서는 갱신할 수 없었고, 그 탓에
+    자음·모음은 약한 요소로 뽑히지 않아 복습에 나오지 않았다.
+    """
+    updated = service.apply_results(
+        [
+            SkillResult(r.learning_skill_id, r.correct, _to_error_counts(r.error_counts))
+            for r in request.results
+        ],
+        _to_states(request.skill_states),
+    )
+    return SkillStatesResponse(updated_skill_states=[_state_out(s) for s in updated])
 
 
 @router.post(

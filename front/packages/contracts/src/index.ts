@@ -295,6 +295,67 @@ export const weakSkillSchema = z.object({
 });
 export type WeakSkill = z.infer<typeof weakSkillSchema>;
 
+/**
+ * 진행 중인 학습 세션. 홈의 "이어서 학습"이 제목·진도를 보여주고 이 `sessionId`로 이어받는다.
+ *
+ * 진행 중인 것이 없으면 서버가 `204`(본문 없음)를 준다 — 빈 객체로 다루면 "없음"과
+ * "0문항짜리 세션"을 구별할 수 없다.
+ */
+export const inProgressSessionSchema = z.object({
+  sessionId: requestIdentifierSchema,
+  /** 커리큘럼 단계 이름. 복습 세션은 "복습" */
+  stageName: z.string().min(1),
+  /**
+   * 복습 세션인지. 새 세션을 만들면 **같은 종류의** 미완료 세션만 닫히므로
+   * (`ProblemService.createSession`), 앱이 "이 학습을 시작하면 진행 중인 것이 닫힌다"를
+   * 판단하려면 표시용 이름이 아니라 이 값을 봐야 한다
+   */
+  review: z.boolean(),
+  totalCount: z.number().int().positive(),
+  completedCount: z.number().int().nonnegative(),
+});
+export type InProgressSession = z.infer<typeof inProgressSessionSchema>;
+
+/**
+ * 요소 하나의 숙련 상태. `label`의 기준(`label_of`)은 FastAPI에만 있다 — 앱이나 백엔드가
+ * 문턱값을 베끼면 세션 요약과 "내 실력" 화면이 서로 다른 말을 한다.
+ */
+export const skillMasterySchema = z.object({
+  learningSkillId: identifierSchema,
+  /** 규칙의 **분류**. 같은 값이 여러 행에 걸쳐 있다 — "첫소리 기본 자음"만 14행, "단독 자모"는 35행 */
+  name: z.string().min(1),
+  /** 그 분류 안에서 다루는 글자('ㄱ'·'ㄴ'…). 없으면 빈 문자열 */
+  target: z.string(),
+  /** 0~1 숙련 추정치 */
+  masteryProb: z.number().nullable(),
+  /** "익숙해요" | "배우는 중" | "더 연습해요" */
+  label: z.string().min(1),
+});
+export type SkillMastery = z.infer<typeof skillMasterySchema>;
+
+/** "내 실력" 화면과 홈 복습 카드가 읽는다. `skills`는 약한 것부터 정렬돼 온다 */
+export const skillSummarySchema = z.object({
+  totalAttemptCount: z.number().int().nonnegative(),
+  correctAttemptCount: z.number().int().nonnegative(),
+  /** FastAPI가 응답하지 않으면 비어 있다. 그때도 위 통계는 그대로 온다 */
+  skills: z.array(skillMasterySchema),
+});
+export type SkillSummary = z.infer<typeof skillSummarySchema>;
+
+/** 테마(커리큘럼 단계) 하나의 풀이 통계 */
+export const stageStatSchema = z.object({
+  curriculumStageId: requestIdentifierSchema,
+  name: z.string().min(1),
+  level: levelSchema,
+  solvedCount: z.number().int().nonnegative(),
+  correctCount: z.number().int().nonnegative(),
+});
+export type StageStat = z.infer<typeof stageStatSchema>;
+
+/** 테마 선택 화면이 읽는다. 커리큘럼 순서로 모든 단계가 들어 있고, 안 푼 단계도 0으로 온다 */
+export const stageStatsSchema = z.object({ stages: z.array(stageStatSchema) });
+export type StageStats = z.infer<typeof stageStatsSchema>;
+
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),

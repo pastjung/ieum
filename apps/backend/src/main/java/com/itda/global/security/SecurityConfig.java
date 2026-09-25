@@ -61,6 +61,9 @@ public class SecurityConfig {
 
   private static final String WITHDRAWALS_PATH = "/users/me/withdrawals";
 
+  /** 학습 단계 설정. 내 정보를 바꾸므로 당연히 보호 대상이다 */
+  private static final String ME_LEVEL_PATH = "/users/me/level";
+
   /**
    * 학습 세션 경로. 모두 본인 세션만 다루므로 인증이 필요하다.
    *
@@ -82,6 +85,26 @@ public class SecurityConfig {
    */
   private static final String LEARNING_SESSION_ATTEMPT_ANALYSIS_PATH =
       "/learning-sessions/{sessionId}/attempt-analysis";
+
+  /**
+   * 복습 세션. 학습 세션과 같은 이유로 보호 대상이다 — 둘 다 "이 사용자의" 기록으로 문항을 고른다.
+   *
+   * <p>이 두 경로도 바로 위 문항 분석과 똑같이 목록에서 빠져 있었다. 그래서 {@code POST}는 500,
+   * {@code GET}은 404로 답했다. 학습 세션 경로를 추가할 때 같은 컨트롤러의 복습 경로가 함께 딸려오지
+   * 않았기 때문이다 — 경로를 늘릴 때는 그 컨트롤러의 다른 method도 함께 본다.
+   */
+  /** 진행 중인 세션 조회. 내 학습 이력이므로 보호 대상이다 */
+  private static final String IN_PROGRESS_SESSION_PATH = "/learning-sessions/in-progress";
+
+  /** 내 숙련 상태 조회. 같은 이유로 보호 대상이다 */
+  private static final String SKILL_SUMMARY_PATH = "/learning-sessions/skill-summary";
+
+  /** 테마별 풀이 통계. 같은 이유로 보호 대상이다 */
+  private static final String STAGE_STATS_PATH = "/learning-sessions/stage-stats";
+
+  private static final String REVIEW_SESSIONS_PATH = "/review-sessions";
+
+  private static final String REVIEW_SESSION_PATH = "/review-sessions/{sessionId}";
 
   /**
    * CORS 설정 원본인 MVC 설정을 읽는 bean. Spring Security의 {@code http.cors()}도 MVC가 있으면 이 이름의 bean을 {@link
@@ -115,12 +138,19 @@ public class SecurityConfig {
             new OrRequestMatcher(
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, ME_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, WITHDRAWALS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, ME_LEVEL_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LEARNING_SESSIONS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LEARNING_SESSION_PATH),
                 PathPatternRequestMatcher.pathPattern(
                     HttpMethod.POST, LEARNING_SESSION_COMPLETION_PATH),
                 PathPatternRequestMatcher.pathPattern(
-                    HttpMethod.POST, LEARNING_SESSION_ATTEMPT_ANALYSIS_PATH)))
+                    HttpMethod.POST, LEARNING_SESSION_ATTEMPT_ANALYSIS_PATH),
+                PathPatternRequestMatcher.pathPattern(
+                    HttpMethod.GET, IN_PROGRESS_SESSION_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, SKILL_SUMMARY_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, STAGE_STATS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, REVIEW_SESSIONS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, REVIEW_SESSION_PATH)))
         .addFilterBefore(
             new AccessTokenAuthenticationFilter(accessAuthenticationService),
             AuthorizationFilter.class)

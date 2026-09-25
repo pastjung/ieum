@@ -1,44 +1,22 @@
 import {
+  inProgressSessionSchema,
   problemsResponseSchema,
+  skillSummarySchema,
+  stageStatsSchema,
   completionResponseSchema,
   attemptAnalysisRequestSchema,
   attemptAnalysisResponseSchema,
   type AttemptAnalysisResponse,
   type AttemptInput,
+  type InProgressSession,
   type CompletionResponse,
   type LearningSession,
   type ProblemsResponse,
+  type SkillSummary,
+  type StageStats,
 } from "@ieum/contracts";
 import { api } from "./apiClient";
 import type { ServerSessionMeta } from "@/stores/sessionStore";
-import { homeSummary, skillLevels, type HomeSummary, type LearningThemeId } from "./mockData";
-
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/**
- * 화면의 학습 주제를 백엔드 curriculum_stages.id로 옮긴다.
- *
- * 목록을 내려주는 엔드포인트가 없어 여기에 적어 둔다. DB의 curriculum_stages는 1~6이고
- * 이 순서가 바뀌면 사용자가 엉뚱한 단계를 배우게 된다 — 단계가 늘거나 순서가 바뀌면
- * 조회 API를 먼저 만들고 이 표를 지운다.
- */
-export const CURRICULUM_ID_BY_THEME: Record<LearningThemeId, number> = {
-  consonant: 1,
-  vowel: 2,
-  "abbrev-char": 3,
-  word: 4,
-  "abbrev-word": 5,
-  sentence: 6,
-};
-
-const THEME_LABEL: Record<LearningThemeId, string> = {
-  consonant: "자음",
-  vowel: "모음",
-  "abbrev-char": "약자",
-  word: "단어",
-  "abbrev-word": "약어",
-  sentence: "문장",
-};
 
 /**
  * 마지막 글자의 받침 유무로 "을"/"를"을 고른다.
@@ -67,12 +45,12 @@ export function particleFor(text: string): "을" | "를" {
  */
 function toSession(
   response: ProblemsResponse,
-  theme: LearningThemeId | undefined,
+  title: string,
 ): { session: LearningSession; meta: ServerSessionMeta } {
   return {
     session: {
       id: String(response.sessionId),
-      title: theme ? THEME_LABEL[theme] : "학습",
+      title,
       problems: response.problems.map((p) => ({
         id: String(p.problemId),
         prompt: `'${p.targetText}'${particleFor(p.targetText)} 점자로 입력하세요`,
@@ -91,21 +69,88 @@ export const learningService = {
   /**
    * 새 학습 세션을 만든다. 서버가 문항을 배정해 함께 돌려준다.
    *
-   * `theme` 없이 이 화면(`/session/intro`)으로 오는 진입점이 **4개 파일 8곳** 있다 —
-   * `(tabs)/index.tsx:99,227,269`("이어서 풀기"·"복습 시작"), `(tabs)/learn.tsx:76,82`의
-   * 테마 없는 버튼, `class/review.tsx:47`, `tools/skills.tsx:49,134`("약한 것부터 복습").
-   * 지금은 이 여덟 곳 전부 `theme ?? "consonant"`로 인해 조용히 **자음** 세션이 된다 — "복습 시작"을
-   * 눌러도 실제로는 자음 학습이 시작된다. 목 시절에도 이 진입점들은 구분되지 않았으니
-   * 이번 변경이 새로 만든 문제는 아니지만, 실제 API를 붙인 지금도 그대로 남아 있다.
-   * 제대로 고치려면 복습 API(`/review-sessions`) 연동이 필요하고, 그건 이번 작업
-   * 범위 밖이라 다음 작업으로 미뤄져 있다. 그 작업이 끝나면 이 fallback을 지운다.
+   * 단계를 `curriculumId`로 받는다. 예전에는 화면의 테마 id(`"consonant"` …)를 받아
+   * 앱 안의 표로 단계 번호를 찾았는데, 그 표가 DB의 `curriculum_stages`와 따로 관리돼
+   * 순서가 바뀌면 학습자가 엉뚱한 단계를 배우게 됐다. 이제 단계 목록을 서버에서 받으므로
+   * (`getStageStats`) 그 표가 필요 없다.
    */
-  async startSession(theme?: LearningThemeId) {
-    const curriculumId = CURRICULUM_ID_BY_THEME[theme ?? "consonant"];
+  async startSession(curriculumId: number, title: string) {
     const response = problemsResponseSchema.parse(
       await api.post("/learning-sessions", { curriculumId }),
     );
-    return toSession(response, theme);
+    return toSession(response, title);
+  },
+
+  /**
+   * 복습 세션을 만든다. 단계를 고르지 않는다 — 서버가 내 기록(`user_skill_memory`와 오류
+   * 횟수)을 FastAPI에 보내 약한 요소를 고르고 그 요소의 문항을 배정한다
+   * (`ProblemService.reviewWithNewSession`).
+   *
+   * 응답 모양은 `startSession`과 같은 `ProblemsResponse`라 이후 흐름(제출·채점·완료)은
+   * 자유 학습과 완전히 같다. 본문이 없는 POST다.
+   */
+  async startReviewSession() {
+    const response = problemsResponseSchema.parse(await api.post("/review-sessions"));
+    return toSession(response, "복습");
+  },
+
+  /**
+   * 진행 중인 학습 세션. 없으면 null.
+   *
+   * 홈의 "이어서 학습"이 오랫동안 목 데이터("3단계 자음과 모음 · 7 / 10 문항")를 보여주고,
+   * 누르면 진행 중이던 세션이 아니라 새 자음 세션을 만들었다. 이어받을 세션의 식별자를
+   * 알 방법이 없었기 때문이다.
+   */
+  async getInProgressSession(): Promise<InProgressSession | null> {
+    const payload = await api.get<unknown>("/learning-sessions/in-progress");
+    // 204는 본문이 없다 — 진행 중인 것이 없다는 뜻이다
+    if (payload === undefined || payload === null || payload === "") {
+      return null;
+    }
+    return inProgressSessionSchema.parse(payload);
+  },
+
+  /**
+   * 중단한 세션을 이어받는다. 새 문항을 배정하지 않고 기존 배정을 그대로 가져온다.
+   *
+   * **이미 푼 문항도 함께 가져온다.** 완료 제출은 배정 전부를 대상으로 하므로, 푼 문항을
+   * 빼면 12문항짜리 세션이 9문항이 되어 다 풀어도 완료가 거부되고 그 세션이 갇힌다 —
+   * 실제로 그렇게 됐다. 대신 안 푼 첫 문항부터 시작하도록 위치를 함께 알려준다.
+   *
+   * 모두 푼 세션은 시작 위치가 목록 끝을 가리킨다. 풀 것이 없고 완료 제출만 남은 상태다.
+   */
+  async resumeSession(sessionId: number) {
+    const response = problemsResponseSchema.parse(
+      await api.get(`/learning-sessions/${sessionId}`),
+    );
+    const firstUnsolved = response.problems.findIndex((problem) => !problem.completed);
+    const { session, meta } = toSession(response, "이어서 학습");
+    return {
+      session,
+      meta: {
+        ...meta,
+        startIndex: firstUnsolved === -1 ? response.problems.length : firstUnsolved,
+      },
+    };
+  },
+
+  /**
+   * 내 요소별 숙련 상태와 풀이 통계.
+   *
+   * 지금까지 숙련 라벨은 세션 완료 응답에만 실려서, "내 실력" 화면과 홈 복습 카드는
+   * 세션 밖에서 알 방법이 없어 고정값을 내 실력처럼 보여주고 있었다.
+   */
+  async getSkillSummary(): Promise<SkillSummary> {
+    return skillSummarySchema.parse(await api.get("/learning-sessions/skill-summary"));
+  },
+
+  /**
+   * 테마(커리큘럼 단계)별 풀이 통계.
+   *
+   * 테마 선택 화면이 고정 숫자를 진도로 보여주고 있었다.
+   */
+  async getStageStats(): Promise<StageStats> {
+    return stageStatsSchema.parse(await api.get("/learning-sessions/stage-stats"));
   },
 
   /** 세션의 모든 답안을 한 번에 제출한다. 이 응답이 최종 채점 결과다 */
@@ -138,13 +183,4 @@ export const learningService = {
 
   /* ─── 아래는 아직 목이다. 대응 엔드포인트가 없다 ─── */
 
-  async getHomeSummary(): Promise<HomeSummary> {
-    await delay(250);
-    return homeSummary;
-  },
-
-  async getSkillLevels() {
-    await delay(200);
-    return skillLevels;
-  },
 };

@@ -79,6 +79,53 @@ class LearningSessionApiIntegrationTest {
   }
 
   @Test
+  void 토큰_없이_복습_세션을_만들려_하면_401이다() {
+    // 이 경로가 보호 체인에서 빠져 있어 permitAll chain으로 떨어졌다. 그러면 토큰이 파싱되지
+    // 않아 @AuthenticationPrincipal이 null이고, reviewWithNewSession이 user.userId()에서
+    // 터져 401이 아니라 500이 된다 — 유효한 토큰을 들고도 복습을 시작할 수 없다
+    HttpResponse<String> response =
+        this.client.send("POST", "/api/v1/review-sessions", "", "Content-Type", "application/json");
+
+    assertThat(response.statusCode()).isEqualTo(401);
+  }
+
+  @Test
+  void 토큰_없이_복습_세션을_조회하면_401이다() {
+    HttpResponse<String> response =
+        this.client.send(
+            "GET", "/api/v1/review-sessions/1", null, "Content-Type", "application/json");
+
+    assertThat(response.statusCode()).isEqualTo(401);
+  }
+
+  @Test
+  void 토큰_없이_진행_중인_세션을_조회하면_401이다() {
+    HttpResponse<String> response =
+        this.client.send(
+            "GET", SESSIONS + "/in-progress", null, "Content-Type", "application/json");
+
+    assertThat(response.statusCode()).isEqualTo(401);
+  }
+
+  @Test
+  void 토큰_없이_숙련_상태를_조회하면_401이다() {
+    HttpResponse<String> response =
+        this.client.send(
+            "GET", SESSIONS + "/skill-summary", null, "Content-Type", "application/json");
+
+    assertThat(response.statusCode()).isEqualTo(401);
+  }
+
+  @Test
+  void 토큰_없이_테마별_통계를_조회하면_401이다() {
+    HttpResponse<String> response =
+        this.client.send(
+            "GET", SESSIONS + "/stage-stats", null, "Content-Type", "application/json");
+
+    assertThat(response.statusCode()).isEqualTo(401);
+  }
+
+  @Test
   void 완료_경로가_context_path를_두_번_붙이지_않는다() {
     // context-path(/api/v1)와 클래스 @RequestMapping이 겹쳐 /api/v1/api/v1/... 에 붙어 있었다.
     // 그 경로는 존재하지 않아야 한다 — 남아 있으면 문서와 다른 경로가 계속 살아 있다는 뜻이다.

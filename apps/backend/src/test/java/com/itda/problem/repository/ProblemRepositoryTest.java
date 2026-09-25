@@ -88,7 +88,7 @@ class ProblemRepositoryTest {
     entityManager.flush();
 
     List<Problem> found =
-        problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, skill.getId(), 12L);
+        problemRepository.findAssignableByLearningSkillId(skill.getId(), 12L);
 
     assertThat(found).extracting(Problem::getId).contains(shortOne.getId());
     assertThat(found).extracting(Problem::getId).doesNotContain(longOne.getId());

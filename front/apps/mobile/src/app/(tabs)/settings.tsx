@@ -1,12 +1,13 @@
 import { useEffect } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScreenShell } from "@/components/ScreenShell";
 import { ListRow } from "@/components/ListRow";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { tactileStatusLabel, useTactileStore } from "@/stores/tactileStore";
 import { authService } from "@/services/authService";
+import { LEVEL_LABEL, LEVEL_ORDER, LEVEL_UNSET_LABEL } from "@/services/levelLabels";
 import { announce, hapticError, hapticSelect, speakAsync } from "@/a11y";
 import { controlHeight, radius, useFontScale, useTheme } from "@/theme";
 
@@ -37,6 +38,20 @@ export default function Settings() {
   const fontScale = useFontScale();
   const s = useSettingsStore();
   const queryClient = useQueryClient();
+  // 홈 배지와 같은 캐시를 본다 — 여기서 바꾸면 홈도 함께 갱신된다
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: authService.getMe });
+  const changeLevel = useMutation({
+    mutationFn: authService.changeLevel,
+    onSuccess: (user) => {
+      queryClient.setQueryData(["me"], user);
+      void hapticSelect();
+      announce(`학습 단계를 ${LEVEL_LABEL[user.level!]}로 바꿨어요.`);
+    },
+    onError: () => {
+      void hapticError();
+      announce("학습 단계를 바꾸지 못했어요. 잠시 후 다시 해 주세요.");
+    },
+  });
   const tactile = useTactileStore();
 
   useEffect(() => {
@@ -118,6 +133,54 @@ export default function Settings() {
           onPress={() => router.push("/device-error")}
         />
         <ListRow label="손 캘리브레이션" chevron accessibilityHint="여섯 점 위치를 다시 익혀요" onPress={() => router.push("/calibration")} />
+        {/*
+          학습 단계. users.level은 문항 출제의 기준인데 이 값을 정하는 화면이 없어 모든 계정이
+          비어 있었고, 그 탓에 복습 출제가 후보를 한 건도 찾지 못했다.
+        */}
+        <View
+          style={[styles.levelBox, { borderColor: theme.color.border, borderRadius: radius.control }]}
+          accessibilityLabel={`학습 단계, 현재 ${me?.level ? LEVEL_LABEL[me.level] : LEVEL_UNSET_LABEL}`}
+        >
+          <Text style={{ fontSize: 19 * fontScale, fontWeight: "700", color: theme.color.text }}>
+            학습 단계
+          </Text>
+          <Text style={{ fontSize: 15 * fontScale, color: theme.color.textMuted, lineHeight: 22 }}>
+            지금 배우는 단계예요. 복습 문항도 이 단계를 기준으로 골라요.
+          </Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {LEVEL_ORDER.map((level) => {
+              const selected = me?.level === level;
+              return (
+                <Pressable
+                  key={level}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${LEVEL_LABEL[level]} 단계`}
+                  accessibilityState={{ selected, disabled: changeLevel.isPending }}
+                  disabled={changeLevel.isPending}
+                  onPress={() => changeLevel.mutate(level)}
+                  style={[
+                    styles.levelChip,
+                    { minHeight: controlHeight.row },
+                    selected
+                      ? { backgroundColor: theme.color.primary }
+                      : { borderWidth: 2, borderColor: theme.color.border },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      fontSize: 16 * fontScale,
+                      fontWeight: "800",
+                      color: selected ? theme.color.onPrimary : theme.color.text,
+                    }}
+                  >
+                    {LEVEL_LABEL[level]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
         <View
           style={[styles.themeRow, { borderColor: theme.color.border, minHeight: controlHeight.row, borderRadius: radius.control }]}
           accessibilityLabel={`화면 테마, 현재 ${s.theme === "dark" ? "다크" : "그린"}`}
@@ -169,6 +232,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  levelBox: { borderWidth: 1, padding: 16, gap: 10 },
+  levelChip: { paddingHorizontal: 18, justifyContent: "center", alignItems: "center", borderRadius: 999 },
   themeChip: {
     borderRadius: 99,
     paddingHorizontal: 14,

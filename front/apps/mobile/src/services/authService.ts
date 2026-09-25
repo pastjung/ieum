@@ -3,6 +3,7 @@ import {
   authSessionSchema,
   usernameAvailabilitySchema,
   userSummarySchema,
+  type Level,
   type SignInInput,
   type SignUpInput,
   type UsernameAvailability,
@@ -91,6 +92,15 @@ export const authService = {
   },
 
   /** 성공은 204다. 로컬 토큰까지 지워야 탈퇴가 끝난다 */
+  /**
+   * 학습 단계를 바꾼다. 서버가 갱신된 사용자 요약을 돌려주므로 호출부가 그대로 캐시에 넣으면 된다.
+   *
+   * `users.level`은 문항 출제의 기준이다. 이 값이 없으면 복습 출제가 후보를 한 건도 찾지 못한다.
+   */
+  async changeLevel(level: Level): Promise<UserSummary> {
+    return userSummarySchema.parse(await api.put("/users/me/level", { level }));
+  },
+
   async withdraw(currentPassword: string): Promise<void> {
     await api.post("/users/me/withdrawals", { currentPassword });
     await tokenStore.clear();

@@ -3,6 +3,11 @@ package com.itda.problem.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -542,7 +547,7 @@ class ProblemServiceTest {
     AuthenticatedUser learner = givenReviewLearner();
     givenReviewSkills(1L, 2L, 3L);
     // 첫 요소의 후보가 3개뿐이다 — 4개를 뽑을 수 없다
-    given(problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, 1L, 12L))
+    given(problemRepository.findAssignableByLearningSkillId(1L, 12L))
         .willReturn(List.of(problem(1L, "하나"), problem(2L, "둘"), problem(3L, "셋")));
 
     assertError(
@@ -560,9 +565,9 @@ class ProblemServiceTest {
     givenReviewSkills(1L, 2L, 3L);
     List<Problem> shared =
         List.of(problem(1L, "하나"), problem(2L, "둘"), problem(3L, "셋"), problem(4L, "넷"));
-    given(problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, 1L, 12L))
+    given(problemRepository.findAssignableByLearningSkillId(1L, 12L))
         .willReturn(shared);
-    given(problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, 2L, 12L))
+    given(problemRepository.findAssignableByLearningSkillId(2L, 12L))
         .willReturn(shared);
 
     assertError(
@@ -580,10 +585,61 @@ class ProblemServiceTest {
         () -> problemService.reviewWithNewSession(learner), ErrorCode.LEARNING_CONTENT_NOT_READY);
   }
 
+  @Test
+  @Timeout(10)
+  void 레벨이_없는_학습자도_복습할_수_있다() {
+    // users.level은 아무도 설정하지 않아 모든 계정이 NULL이다 (User.changeLevel 호출부 없음).
+    // 레벨로 후보를 거르면 `WHERE p.level = NULL`이 되어 한 건도 걸리지 않고, 기록이 충분한
+    // 학습자도 "아직 문제가 준비되지 않았어요"만 본다 — 복습이 누구에게도 열리지 않았다
+    AuthenticatedUser learner = givenReviewLearner();
+    givenReviewSkills(1L, 2L, 3L);
+    givenReviewCandidates();
+
+    assertThatNoException().isThrownBy(() -> problemService.reviewWithNewSession(learner));
+  }
+
+  @Test
+  @Timeout(10)
+  void 복습_출제는_요소마다_레벨_없이_후보를_찾는다() {
+    // 복습의 목적은 "내가 틀린 것 다시 풀기"다. 레벨로 좁히면 약한 요소의 문항이 그 단계에
+    // 없을 때 복습 자체가 불가능해진다
+    AuthenticatedUser learner = givenReviewLearner();
+    givenReviewSkills(1L, 2L, 3L);
+    givenReviewCandidates();
+
+    problemService.reviewWithNewSession(learner);
+
+    verify(problemRepository).findAssignableByLearningSkillId(1L, 12L);
+    verify(problemRepository).findAssignableByLearningSkillId(2L, 12L);
+    verify(problemRepository).findAssignableByLearningSkillId(3L, 12L);
+  }
+
+  @Test
+  @Timeout(10)
+  void 복습은_학습자의_단계를_읽는다() {
+    // 이 값으로 후보를 좁힌다. 읽지 않으면 단어 문항이 후보를 압도해 자기 단계 문항을 만날 수 없다
+    AuthenticatedUser learner = givenReviewLearner(Level.CONSONANT);
+    givenReviewSkills(1L, 2L, 3L);
+    givenPreferredCandidates();
+
+    problemService.reviewWithNewSession(learner);
+
+    verify(curriculumStageRepository).findAll();
+  }
+
   private AuthenticatedUser givenReviewLearner() {
+    return givenReviewLearner(null);
+  }
+
+  private AuthenticatedUser givenReviewLearner(Level level) {
     long learnerId = 9L;
     User learnerEntity = mock(User.class);
-    given(learnerEntity.getLevel()).willReturn(Level.WORD);
+    given(learnerEntity.getLevel()).willReturn(level);
+    if (level != null) {
+      // 목록을 먼저 만든다. given(...) 인자 안에서 mock 을 스텁하면 Mockito 가 중첩 스텁으로 본다
+      List<CurriculumStage> stages = curriculumStages();
+      given(curriculumStageRepository.findAll()).willReturn(stages);
+    }
     given(userJpaRepository.findById(learnerId)).willReturn(Optional.of(learnerEntity));
     given(
             learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(
@@ -593,6 +649,118 @@ class ProblemServiceTest {
     given(userSkillErrorCountRepository.findAllByUserSkillMemory_IdIn(List.of()))
         .willReturn(List.of());
     return new AuthenticatedUser(learnerId, UserRole.LEARNER);
+  }
+
+  /**
+   * 요소 세 개가 서로 다른 문제를 4개씩 가져갈 수 있도록 후보 12개를 준다.
+   *
+   * <p>같은 4개를 모든 요소에 돌려주면 두 번째 요소에서 앞서 뽑힌 것이 모두 걸러져 후보가 0이 된다 — 그건 별도 테스트가 지키는 다른 경우다.
+   */
+  @Test
+  @Timeout(10)
+  void 복습은_내_단계_이하_문항을_먼저_쓴다() {
+    // 약한 요소의 후보는 단어 문항이 압도한다(예: "첫소리 기본 자음"은 단어 1683개 대 자음 1개).
+    // 무작위로만 뽑으면 자음 학습자가 자기 단계 문항을 만날 확률이 1/1684다 — 실제로 복습
+    // 12문항이 전부 단어였다
+    AuthenticatedUser learner = givenReviewLearner(Level.CONSONANT);
+    givenReviewSkills(1L, 2L, 3L);
+    givenPreferredCandidates();
+
+    problemService.reviewWithNewSession(learner);
+
+    // 내 단계 이하에서 충분히 나왔으면 넓히지 않는다
+    verify(problemRepository, never()).findAssignableByLearningSkillId(anyLong(), anyLong());
+  }
+
+  @Test
+  @Timeout(10)
+  void 내_단계에서_모자라면_위_단계로_채운다() {
+    // 자음 문항은 28개뿐이라 요소당 4개를 못 채우는 일이 흔하다. 그때 거부하면 복습이 다시
+    // 막힌다 — 모자란 만큼만 넓혀 채운다
+    AuthenticatedUser learner = givenReviewLearner(Level.CONSONANT);
+    givenReviewSkills(1L, 2L, 3L);
+    given(problemRepository.findAssignableByLearningSkillIdAndLevelIn(anyLong(), any(), eq(12L)))
+        .willReturn(List.of(problem(1L, "내단계")));
+    givenReviewCandidates();
+
+    problemService.reviewWithNewSession(learner);
+
+    verify(problemRepository, atLeastOnce()).findAssignableByLearningSkillId(anyLong(), eq(12L));
+  }
+
+  @Test
+  @Timeout(10)
+  void 단계가_없으면_모든_문항에서_고른다() {
+    // users.level은 자가 진단 전이면 NULL이다. 그때 좁히면 후보가 0이 되어 복습이 막힌다
+    AuthenticatedUser learner = givenReviewLearner(null);
+    givenReviewSkills(1L, 2L, 3L);
+    givenReviewCandidates();
+
+    problemService.reviewWithNewSession(learner);
+
+    verify(problemRepository, never())
+        .findAssignableByLearningSkillIdAndLevelIn(anyLong(), any(), anyLong());
+  }
+
+  @Test
+  @Timeout(10)
+  void 넓혀도_모자라면_거부한다() {
+    AuthenticatedUser learner = givenReviewLearner(Level.CONSONANT);
+    givenReviewSkills(1L, 2L, 3L);
+    given(problemRepository.findAssignableByLearningSkillIdAndLevelIn(anyLong(), any(), eq(12L)))
+        .willReturn(List.of(problem(1L, "내단계")));
+    given(problemRepository.findAssignableByLearningSkillId(anyLong(), eq(12L)))
+        .willReturn(List.of(problem(1L, "내단계"), problem(2L, "둘")));
+
+    assertError(
+        () -> problemService.reviewWithNewSession(learner), ErrorCode.LEARNING_CONTENT_NOT_READY);
+  }
+
+  /** 내 단계 이하 후보 12개 — 요소 셋이 서로 다른 4개씩 가져갈 수 있어야 한다 */
+  private void givenPreferredCandidates() {
+    given(problemRepository.findAssignableByLearningSkillIdAndLevelIn(anyLong(), any(), eq(12L)))
+        .willReturn(reviewProblems());
+  }
+
+  private void givenReviewCandidates() {
+    given(problemRepository.findAssignableByLearningSkillId(anyLong(), eq(12L)))
+        .willReturn(reviewProblems());
+  }
+
+  private List<Problem> reviewProblems() {
+    return List.of(
+        problem(1L, "하나"),
+        problem(2L, "둘"),
+        problem(3L, "셋"),
+        problem(4L, "넷"),
+        problem(5L, "다섯"),
+        problem(6L, "여섯"),
+        problem(7L, "일곱"),
+        problem(8L, "여덟"),
+        problem(9L, "아홉"),
+        problem(10L, "열"),
+        problem(11L, "열하나"),
+        problem(12L, "열둘"));
+  }
+
+  /** curriculum_stages 의 실제 순서: 자음·모음·약자·단어·약어·문장 */
+  private List<CurriculumStage> curriculumStages() {
+    Level[] levels = {
+      Level.CONSONANT,
+      Level.VOWEL,
+      Level.CONTRACTION,
+      Level.WORD,
+      Level.CONTRACTION_WORD,
+      Level.SENTENCE
+    };
+    List<CurriculumStage> stages = new ArrayList<>();
+    for (int i = 0; i < levels.length; i++) {
+      CurriculumStage stage = mock(CurriculumStage.class);
+      given(stage.getLevel()).willReturn(levels[i]);
+      given(stage.getOrderNo()).willReturn(i + 1);
+      stages.add(stage);
+    }
+    return stages;
   }
 
   private void givenReviewSkills(Long... learningSkillIds) {

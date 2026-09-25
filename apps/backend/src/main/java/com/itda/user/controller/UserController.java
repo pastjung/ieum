@@ -1,18 +1,22 @@
 package com.itda.user.controller;
 
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.user.dto.UserLevelRequest;
 import com.itda.user.dto.UserRegistrationRequest;
 import com.itda.user.dto.UserSummaryResponse;
 import com.itda.user.dto.UserWithdrawalRequest;
+import com.itda.user.service.UserLevelService;
 import com.itda.user.service.UserRegistrationService;
 import com.itda.user.service.UserSummary;
 import com.itda.user.service.UserSummaryQueryService;
 import com.itda.user.service.UserWithdrawalService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -32,14 +36,17 @@ public class UserController {
   private final UserRegistrationService userRegistrationService;
   private final UserSummaryQueryService userSummaryQueryService;
   private final UserWithdrawalService userWithdrawalService;
+  private final UserLevelService userLevelService;
 
   public UserController(
       UserRegistrationService userRegistrationService,
       UserSummaryQueryService userSummaryQueryService,
-      UserWithdrawalService userWithdrawalService) {
+      UserWithdrawalService userWithdrawalService,
+      UserLevelService userLevelService) {
     this.userRegistrationService = userRegistrationService;
     this.userSummaryQueryService = userSummaryQueryService;
     this.userWithdrawalService = userWithdrawalService;
+    this.userLevelService = userLevelService;
   }
 
   /**
@@ -63,6 +70,24 @@ public class UserController {
    */
   @GetMapping("/me")
   public UserSummaryResponse me(@AuthenticationPrincipal AuthenticatedUser authenticatedUser) {
+    return UserSummaryResponse.from(
+        this.userSummaryQueryService.getSummary(authenticatedUser.userId()));
+  }
+
+  /**
+   * 학습 단계 설정. 성공은 {@code 200}과 갱신된 사용자 요약이다.
+   *
+   * <p>요약을 돌려주는 이유: 앱이 홈에서 이 값을 배지로 보여주고 캐시에 들고 있다. 빈 응답을 주면 곧바로 {@code GET /users/me}를 한 번 더
+   * 부르게 된다.
+   *
+   * <p>단일 값 하위 리소스의 교체라 {@code PUT}이다 — 같은 값을 두 번 보내도 결과가 같다. 대상은 인증 필터가 확인한 principal뿐이고
+   * body·path·query의 사용자 식별자를 받지 않는다.
+   */
+  @PutMapping("/me/level")
+  public UserSummaryResponse changeLevel(
+      @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+      @Valid @RequestBody UserLevelRequest request) {
+    this.userLevelService.changeLevel(authenticatedUser.userId(), request.level());
     return UserSummaryResponse.from(
         this.userSummaryQueryService.getSummary(authenticatedUser.userId()));
   }

@@ -341,12 +341,13 @@ public class ProblemService {
     ReviewAnalyzeRequest reviewAnalyzeRequest = new ReviewAnalyzeRequest(skillStates);
     ReviewAnalyzeResponse response = fastApiClient.reviewAnalyze(reviewAnalyzeRequest);
 
-    User curUser =
-        userJpaRepository
-            .findById(user.userId())
-            .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
-    Level level = curUser.getLevel();
+    // 학습자의 단계 이하 문항을 먼저 쓴다. 비어 있으면(자가 진단 전) 좁히지 않는다
+    Set<Level> preferredLevels =
+        levelsUpTo(
+            userJpaRepository
+                .findById(user.userId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND))
+                .getLevel());
     List<Long> learningSkillIds = response.learningSkillIds();
     // 아래 반복이 앞에서부터 REVIEW_SKILL_COUNT개를 꺼내 쓴다. 모자라면 IndexOutOfBounds로 500이
     // 나가므로, 출제할 것이 없다는 사실을 같은 오류로 알린다.
@@ -366,24 +367,33 @@ public class ProblemService {
     // 반복 대신 후보를 섞어 앞에서 필요한 만큼 가져간다. 뽑는 결과는 같은 균등 무작위
     // 부분집합이면서 시도 횟수에 상한이 생긴다.
     for (int i = 0; i < REVIEW_SKILL_COUNT; i++) {
-      List<Long> candidateIds =
-          problemRepository
-              .findAllByLevelAndLearningSkillId(
-                  level, learningSkillIds.get(i), MAX_ASSIGNABLE_CELLS)
-              .stream()
-              .map(Problem::getId)
-              // 앞 요소에서 이미 고른 문제는 다시 셀 수 없다 — selectedProblemIds는 Set이므로
-              // 겹치는 것을 더해도 크기가 늘지 않는다. 남은 후보로만 부족 여부를 판단한다.
-              .filter(id -> !selectedProblemIds.contains(id))
-              .distinct()
-              .collect(Collectors.toCollection(ArrayList::new));
+      long skillId = learningSkillIds.get(i);
+      // 내 단계 이하에서 먼저 채우고, 모자란 만큼만 전체에서 채운다
+      List<Long> picked =
+          pick(
+              candidateIds(
+                  preferredLevels.isEmpty()
+                      ? List.of()
+                      : problemRepository.findAssignableByLearningSkillIdAndLevelIn(
+                          skillId, preferredLevels, MAX_ASSIGNABLE_CELLS),
+                  selectedProblemIds),
+              REVIEW_PROBLEMS_PER_SKILL);
+      selectedProblemIds.addAll(picked);
 
-      if (candidateIds.size() < REVIEW_PROBLEMS_PER_SKILL) {
-        throw new BusinessException(ErrorCode.LEARNING_CONTENT_NOT_READY);
+      if (picked.size() < REVIEW_PROBLEMS_PER_SKILL) {
+        picked.addAll(
+            pick(
+                candidateIds(
+                    problemRepository.findAssignableByLearningSkillId(
+                        skillId, MAX_ASSIGNABLE_CELLS),
+                    selectedProblemIds),
+                REVIEW_PROBLEMS_PER_SKILL - picked.size()));
+        selectedProblemIds.addAll(picked);
       }
 
-      Collections.shuffle(candidateIds);
-      selectedProblemIds.addAll(candidateIds.subList(0, REVIEW_PROBLEMS_PER_SKILL));
+      if (picked.size() < REVIEW_PROBLEMS_PER_SKILL) {
+        throw new BusinessException(ErrorCode.LEARNING_CONTENT_NOT_READY);
+      }
     }
 
     List<Problem> randomProblems = problemRepository.findAllById(selectedProblemIds);
@@ -423,6 +433,48 @@ public class ProblemService {
               false));
     }
     return new ProblemsResponse(learningSession.getId(), problemDetails);
+  }
+
+  /**
+   * 이 단계와 그 아래 단계들. 단계가 없으면(자가 진단 전) 빈 집합 — 좁히지 않는다는 뜻이다.
+   *
+   * <p>순서는 {@code curriculum_stages.order_no}가 정한다. {@code Level} enum의 선언 순서는 학습 순서와 다르므로 쓰지 않는다.
+   */
+  private Set<Level> levelsUpTo(Level level) {
+    if (level == null) {
+      return Set.of();
+    }
+    List<CurriculumStage> stages = curriculumStageRepository.findAll();
+    int myOrder =
+        stages.stream()
+            .filter(stage -> stage.getLevel() == level)
+            .mapToInt(CurriculumStage::getOrderNo)
+            .min()
+            .orElse(Integer.MAX_VALUE);
+    return stages.stream()
+        .filter(stage -> stage.getOrderNo() <= myOrder)
+        .map(CurriculumStage::getLevel)
+        .collect(Collectors.toSet());
+  }
+
+  /** 이미 고른 것을 뺀 후보 id */
+  private static List<Long> candidateIds(List<Problem> problems, Set<Long> alreadySelected) {
+    return problems.stream()
+        .map(Problem::getId)
+        .filter(id -> !alreadySelected.contains(id))
+        .distinct()
+        .collect(Collectors.toCollection(ArrayList::new));
+  }
+
+  /**
+   * 후보를 섞어 앞에서 최대 {@code count}개를 가져간다.
+   *
+   * <p>예전에는 {@code HashSet} 크기가 목표치가 될 때까지 무작위 추출을 반복했다. 후보가 모자라거나 이미 고른 것과 겹치면 그 반복은 끝나지 않는다 —
+   * 예외도 나지 않고 요청 스레드가 CPU를 태우며 영구히 붙잡힌다. 뽑는 결과는 같은 균등 무작위 부분집합이면서 시도 횟수에 상한이 생긴다.
+   */
+  private static List<Long> pick(List<Long> candidateIds, int count) {
+    Collections.shuffle(candidateIds);
+    return new ArrayList<>(candidateIds.subList(0, Math.min(count, candidateIds.size())));
   }
 
   private LearningSession createSession(Long userId, CurriculumStage curriculum) {
