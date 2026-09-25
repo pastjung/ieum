@@ -342,6 +342,20 @@ export const skillSummarySchema = z.object({
 });
 export type SkillSummary = z.infer<typeof skillSummarySchema>;
 
+/** 테마(커리큘럼 단계) 하나의 풀이 통계 */
+export const stageStatSchema = z.object({
+  curriculumStageId: requestIdentifierSchema,
+  name: z.string().min(1),
+  level: levelSchema,
+  solvedCount: z.number().int().nonnegative(),
+  correctCount: z.number().int().nonnegative(),
+});
+export type StageStat = z.infer<typeof stageStatSchema>;
+
+/** 테마 선택 화면이 읽는다. 커리큘럼 순서로 모든 단계가 들어 있고, 안 푼 단계도 0으로 온다 */
+export const stageStatsSchema = z.object({ stages: z.array(stageStatSchema) });
+export type StageStats = z.infer<typeof stageStatsSchema>;
+
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),

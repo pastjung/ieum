@@ -2,6 +2,7 @@ import {
   inProgressSessionSchema,
   problemsResponseSchema,
   skillSummarySchema,
+  stageStatsSchema,
   completionResponseSchema,
   attemptAnalysisRequestSchema,
   attemptAnalysisResponseSchema,
@@ -12,37 +13,10 @@ import {
   type LearningSession,
   type ProblemsResponse,
   type SkillSummary,
+  type StageStats,
 } from "@ieum/contracts";
 import { api } from "./apiClient";
 import type { ServerSessionMeta } from "@/stores/sessionStore";
-import { type LearningThemeId } from "./mockData";
-
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/**
- * 화면의 학습 주제를 백엔드 curriculum_stages.id로 옮긴다.
- *
- * 목록을 내려주는 엔드포인트가 없어 여기에 적어 둔다. DB의 curriculum_stages는 1~6이고
- * 이 순서가 바뀌면 사용자가 엉뚱한 단계를 배우게 된다 — 단계가 늘거나 순서가 바뀌면
- * 조회 API를 먼저 만들고 이 표를 지운다.
- */
-export const CURRICULUM_ID_BY_THEME: Record<LearningThemeId, number> = {
-  consonant: 1,
-  vowel: 2,
-  "abbrev-char": 3,
-  word: 4,
-  "abbrev-word": 5,
-  sentence: 6,
-};
-
-const THEME_LABEL: Record<LearningThemeId, string> = {
-  consonant: "자음",
-  vowel: "모음",
-  "abbrev-char": "약자",
-  word: "단어",
-  "abbrev-word": "약어",
-  sentence: "문장",
-};
 
 /**
  * 마지막 글자의 받침 유무로 "을"/"를"을 고른다.
@@ -71,13 +45,12 @@ export function particleFor(text: string): "을" | "를" {
  */
 function toSession(
   response: ProblemsResponse,
-  theme: LearningThemeId | undefined,
-  title?: string,
+  title: string,
 ): { session: LearningSession; meta: ServerSessionMeta } {
   return {
     session: {
       id: String(response.sessionId),
-      title: title ?? (theme ? THEME_LABEL[theme] : "학습"),
+      title,
       problems: response.problems.map((p) => ({
         id: String(p.problemId),
         prompt: `'${p.targetText}'${particleFor(p.targetText)} 점자로 입력하세요`,
@@ -96,21 +69,16 @@ export const learningService = {
   /**
    * 새 학습 세션을 만든다. 서버가 문항을 배정해 함께 돌려준다.
    *
-   * `theme` 없이 이 화면(`/session/intro`)으로 오는 진입점이 **4개 파일 8곳** 있다 —
-   * `(tabs)/index.tsx:99,227,269`("이어서 풀기"·"복습 시작"), `(tabs)/learn.tsx:76,82`의
-   * 테마 없는 버튼, `class/review.tsx:47`, `tools/skills.tsx:49,134`("약한 것부터 복습").
-   * 지금은 이 여덟 곳 전부 `theme ?? "consonant"`로 인해 조용히 **자음** 세션이 된다 — "복습 시작"을
-   * 눌러도 실제로는 자음 학습이 시작된다. 목 시절에도 이 진입점들은 구분되지 않았으니
-   * 이번 변경이 새로 만든 문제는 아니지만, 실제 API를 붙인 지금도 그대로 남아 있다.
-   * 제대로 고치려면 복습 API(`/review-sessions`) 연동이 필요하고, 그건 이번 작업
-   * 범위 밖이라 다음 작업으로 미뤄져 있다. 그 작업이 끝나면 이 fallback을 지운다.
+   * 단계를 `curriculumId`로 받는다. 예전에는 화면의 테마 id(`"consonant"` …)를 받아
+   * 앱 안의 표로 단계 번호를 찾았는데, 그 표가 DB의 `curriculum_stages`와 따로 관리돼
+   * 순서가 바뀌면 학습자가 엉뚱한 단계를 배우게 됐다. 이제 단계 목록을 서버에서 받으므로
+   * (`getStageStats`) 그 표가 필요 없다.
    */
-  async startSession(theme?: LearningThemeId) {
-    const curriculumId = CURRICULUM_ID_BY_THEME[theme ?? "consonant"];
+  async startSession(curriculumId: number, title: string) {
     const response = problemsResponseSchema.parse(
       await api.post("/learning-sessions", { curriculumId }),
     );
-    return toSession(response, theme);
+    return toSession(response, title);
   },
 
   /**
@@ -123,7 +91,7 @@ export const learningService = {
    */
   async startReviewSession() {
     const response = problemsResponseSchema.parse(await api.post("/review-sessions"));
-    return toSession(response, undefined, "복습");
+    return toSession(response, "복습");
   },
 
   /**
@@ -157,7 +125,7 @@ export const learningService = {
     if (remaining.length === 0) {
       throw new Error("이어서 풀 문항이 없어요");
     }
-    return toSession({ ...response, problems: remaining }, undefined, "이어서 학습");
+    return toSession({ ...response, problems: remaining }, "이어서 학습");
   },
 
   /**
@@ -168,6 +136,15 @@ export const learningService = {
    */
   async getSkillSummary(): Promise<SkillSummary> {
     return skillSummarySchema.parse(await api.get("/learning-sessions/skill-summary"));
+  },
+
+  /**
+   * 테마(커리큘럼 단계)별 풀이 통계.
+   *
+   * 테마 선택 화면이 `mockData.learningThemes`의 고정 숫자를 보여주고 있었다.
+   */
+  async getStageStats(): Promise<StageStats> {
+    return stageStatsSchema.parse(await api.get("/learning-sessions/stage-stats"));
   },
 
   /** 세션의 모든 답안을 한 번에 제출한다. 이 응답이 최종 채점 결과다 */

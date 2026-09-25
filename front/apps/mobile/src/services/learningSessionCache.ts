@@ -1,7 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { LearningSession } from "@ieum/contracts";
 import type { ServerSessionMeta, SessionKind } from "@/stores/sessionStore";
-import type { LearningThemeId } from "./mockData";
 
 /**
  * `intro.tsx`의 세션 조회 쿼리 키. 조회 쪽과 캐시 제거 쪽이 같은 키를 쓰도록 여기 한 곳에
@@ -18,7 +17,7 @@ import type { LearningThemeId } from "./mockData";
  * (`POST /review-sessions`). 그래서 주제 하나로는 표현할 수 없다.
  */
 export type SessionRequest =
-  | { kind: "theme"; themeId: LearningThemeId | undefined }
+  | { kind: "stage"; curriculumId: number; title: string }
   | { kind: "review" }
   | { kind: "resume"; sessionId: number };
 
@@ -31,7 +30,7 @@ export function learningSessionQueryKey(request: SessionRequest) {
     case "resume":
       return ["learningSession", "resume", request.sessionId] as const;
     default:
-      return ["learningSession", request.themeId ?? "default"] as const;
+      return ["learningSession", "stage", request.curriculumId] as const;
   }
 }
 

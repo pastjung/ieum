@@ -35,7 +35,7 @@ describe("beginLearningSession", () => {
   }
 
   it("세션 소유권을 스토어로 넘기고, 그 주제의 조회 캐시를 비운다", () => {
-    const { queryClient, key, start } = runWith({ kind: "theme", themeId: "consonant" });
+    const { queryClient, key, start } = runWith({ kind: "stage", curriculumId: 1, title: "자음" });
 
     expect(start).toHaveBeenCalledWith(session, "free", meta);
     // 캐시가 비어 있어야, 같은 주제로 다시 들어왔을 때 서버에 새 세션을 요청한다
@@ -53,22 +53,23 @@ describe("beginLearningSession", () => {
 });
 
 describe("learningSessionQueryKey", () => {
-  it("복습과 자유 학습이 서로 다른 캐시를 쓴다", () => {
+  it("복습과 단계 학습이 서로 다른 캐시를 쓴다", () => {
     // 같은 키를 쓰면 자음 세션을 만든 뒤 복습을 눌렀을 때 자음 세션이 그대로 나온다
     expect(learningSessionQueryKey({ kind: "review" })).not.toEqual(
-      learningSessionQueryKey({ kind: "theme", themeId: "consonant" }),
+      learningSessionQueryKey({ kind: "stage", curriculumId: 1, title: "자음" }),
     );
   });
 
-  it("주제가 다르면 캐시도 다르다", () => {
-    expect(learningSessionQueryKey({ kind: "theme", themeId: "consonant" })).not.toEqual(
-      learningSessionQueryKey({ kind: "theme", themeId: "vowel" }),
+  it("단계가 다르면 캐시도 다르다", () => {
+    expect(learningSessionQueryKey({ kind: "stage", curriculumId: 1, title: "자음" })).not.toEqual(
+      learningSessionQueryKey({ kind: "stage", curriculumId: 2, title: "모음" }),
     );
   });
 
-  it("주제가 없는 자유 학습은 하나의 캐시를 쓴다", () => {
-    expect(learningSessionQueryKey({ kind: "theme", themeId: undefined })).toEqual(
-      learningSessionQueryKey({ kind: "theme", themeId: undefined }),
+  it("같은 단계는 제목과 무관하게 같은 캐시를 쓴다", () => {
+    // 제목은 표시용이다. 키에 섞이면 같은 단계인데 캐시가 갈린다
+    expect(learningSessionQueryKey({ kind: "stage", curriculumId: 1, title: "자음" })).toEqual(
+      learningSessionQueryKey({ kind: "stage", curriculumId: 1, title: "다른 이름" }),
     );
   });
 });

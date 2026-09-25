@@ -1,11 +1,13 @@
 import { useEffect } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import { ScreenShell } from "@/components/ScreenShell";
 import { BackHeader } from "@/components/BackHeader";
 import { AppButton } from "@/components/AppButton";
 import { ListRow } from "@/components/ListRow";
-import { learningThemes, type LearningThemeId } from "@/services/mockData";
+import { learningService } from "@/services/learningService";
+import { selectThemeRows, type ThemeRow } from "@/services/themeStats";
 import { announce, hapticSelect } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
@@ -19,9 +21,18 @@ export default function LearnThemes() {
     announce("테마 선택이에요. 테마별 진행률을 보고 골라 시작해요.");
   }, []);
 
-  const start = (id: LearningThemeId) => {
+  const { data: stats } = useQuery({
+    queryKey: ["stageStats"],
+    queryFn: learningService.getStageStats,
+  });
+  const rows = selectThemeRows(stats);
+
+  const start = (row: ThemeRow) => {
     void hapticSelect();
-    router.push({ pathname: "/session/intro", params: { theme: id } });
+    router.push({
+      pathname: "/session/intro",
+      params: { curriculumId: String(row.curriculumStageId), title: row.label },
+    });
   };
 
   return (
@@ -29,23 +40,17 @@ export default function LearnThemes() {
       <BackHeader title="테마 선택" />
       <Text style={{ fontSize: 16 * fontScale, color: theme.color.textMuted }}>원하는 테마를 골라 시작해요.</Text>
       <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 10 }} showsVerticalScrollIndicator={false}>
-        {learningThemes.map((t) => {
-          const percent = t.solved > 0 ? Math.round((t.correct / t.solved) * 100) : null;
-          return (
-            <ListRow
-              key={t.id}
-              label={t.label}
-              description={t.solved > 0 ? `${t.solved}문제 중 ${t.correct}개 맞힘` : "아직 안 풀었어요"}
-              value={percent != null ? `${percent}%` : "—"}
-              onPress={() => start(t.id)}
-              accessibilityHint="누르면 이 테마로 학습을 시작해요"
-            />
-          );
-        })}
+        {rows.map((row) => (
+          <ListRow
+            key={row.curriculumStageId}
+            label={row.label}
+            description={row.description}
+            value={row.percent != null ? `${row.percent}%` : "—"}
+            onPress={() => start(row)}
+            accessibilityHint="누르면 이 테마로 학습을 시작해요"
+          />
+        ))}
       </ScrollView>
-      <View style={{ marginTop: "auto" }}>
-        <AppButton label="모음 이어서 하기" onPress={() => start("vowel")} />
-      </View>
     </ScreenShell>
   );
 }

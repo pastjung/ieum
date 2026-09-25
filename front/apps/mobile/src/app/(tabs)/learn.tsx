@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import { ScreenShell } from "@/components/ScreenShell";
 import { AppButton } from "@/components/AppButton";
 import { ListRow } from "@/components/ListRow";
-import { learningThemes, type LearningThemeId } from "@/services/mockData";
+import { learningService } from "@/services/learningService";
+import { selectThemeRows, type ThemeRow } from "@/services/themeStats";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { announce, hapticSelect } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
@@ -19,9 +21,18 @@ function VoiceLearn() {
     announce("테마 선택이에요. 자음, 모음, 약자, 단어, 약어, 문장 중에 골라 시작해요.");
   }, []);
 
-  const start = (id: LearningThemeId) => {
+  const { data: stats } = useQuery({
+    queryKey: ["stageStats"],
+    queryFn: learningService.getStageStats,
+  });
+  const rows = selectThemeRows(stats);
+
+  const start = (row: ThemeRow) => {
     void hapticSelect();
-    router.push({ pathname: "/session/intro", params: { theme: id } });
+    router.push({
+      pathname: "/session/intro",
+      params: { curriculumId: String(row.curriculumStageId), title: row.label },
+    });
   };
 
   return (
@@ -31,12 +42,12 @@ function VoiceLearn() {
       </Text>
       <Text style={{ fontSize: 16 * fontScale, color: theme.color.textMuted }}>원하는 테마를 골라 시작해요.</Text>
       <View style={styles.grid}>
-        {learningThemes.map((t) => (
+        {rows.map((t) => (
           <Pressable
-            key={t.id}
+            key={t.curriculumStageId}
             accessibilityRole="button"
             accessibilityLabel={`${t.label} 학습 시작`}
-            onPress={() => start(t.id)}
+            onPress={() => start(t)}
             style={({ pressed }) => [
               styles.tile,
               { borderColor: theme.color.border, borderRadius: radius.card },
@@ -50,7 +61,6 @@ function VoiceLearn() {
       </View>
       <View style={{ paddingBottom: 14, gap: 10 }}>
         <AppButton label="점자 사전" variant="compact" onPress={() => router.push("/tools/dictionary")} accessibilityHint="단어의 점자를 찾아봐요" />
-        <AppButton label="모음 이어서 하기" onPress={() => start("vowel")} />
       </View>
     </ScreenShell>
   );
