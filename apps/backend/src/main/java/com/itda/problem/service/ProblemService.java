@@ -33,6 +33,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Transactional(readOnly = true)
 public class ProblemService {
+
+  /**
+   * 한 문항에 허용하는 최대 셀 수.
+   *
+   * <p>AI의 {@code input_patterns} 상한과 같은 값이다. 여기가 더 크면 풀 수 없는 문제가 출제되고, 더 작으면 풀 수 있는 문제를 버린다. 둘은 함께
+   * 움직여야 한다.
+   */
+  private static final long MAX_ASSIGNABLE_CELLS = 12L;
+
   private final ProblemRepository problemRepository;
   private final LectureProblemRepository lectureProblemRepository;
   private final ProblemCellRepository problemCellRepository;
@@ -155,7 +164,8 @@ public class ProblemService {
     List<Long> wrongProblemIds =
         wrongProblems.stream().limit(wrongCnt).map(wp -> wp.getProblem().getId()).toList();
 
-    List<Problem> problems = problemRepository.findAllByLevelAndIdNotIn(level, wrongProblemIds);
+    List<Problem> problems =
+        problemRepository.findAssignableByLevel(level, wrongProblemIds, MAX_ASSIGNABLE_CELLS);
 
     // 출제할 오답 문제
     List<Problem> selectedWrongProblems =

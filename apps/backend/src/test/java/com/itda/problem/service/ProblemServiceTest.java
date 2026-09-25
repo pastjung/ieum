@@ -369,7 +369,7 @@ class ProblemServiceTest {
       ReflectionTestUtils.setField(p, "id", i);
       problems.add(p);
     }
-    given(problemRepository.findAllByLevelAndIdNotIn(Level.WORD, List.of())).willReturn(problems);
+    given(problemRepository.findAssignableByLevel(Level.WORD, List.of(), 12L)).willReturn(problems);
 
     given(problemCellRepository.findAllByProblem_IdInOrderByProblem_IdAscCellIndexAsc(any()))
         .willReturn(List.of());
