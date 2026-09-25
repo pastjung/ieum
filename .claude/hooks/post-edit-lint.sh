@@ -27,6 +27,7 @@ case "$REL" in
     (cd "$ROOT/apps/backend" && ./gradlew spotlessApply -q --console=plain) >/dev/null 2>&1 || true
     ;;
   front/apps/web/*.ts|front/apps/web/*.tsx)
+    command -v pnpm >/dev/null 2>&1 || exit 0
     out=$(cd "$ROOT/front/apps/web" && pnpm exec eslint --fix "$FILE" 2>&1) || feedback "$out"
     ;;
   apps/mobile/*.ts|apps/mobile/*.tsx|apps/mobile/*.js|apps/mobile/*.jsx)

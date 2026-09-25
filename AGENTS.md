@@ -50,6 +50,6 @@ AI 오답 분석 기반 맞춤 복습, Arduino 6점 촉각 출력을 제공한�
 - ai: `cd apps/ai && pytest`
 - web: `cd front && pnpm --filter @ieum/web build` (tsc 타입체크 포함)
 - mobile: `cd apps/mobile && npm test`
-- CI와 동일한 통합 검증: `docker build --target test apps/<앱>` — MR verify 파이프라인이 이것을 실행한다
+- CI와 동일한 통합 검증: `docker build --target test apps/<앱>` — MR verify 파이프라인이 이것을 실행한다 (web/mobile이 속한 front 워크스페이스는 `docker build --target test front`)
 - 문서·설정만 변경한 경우 검증 명령 대신 diff 확인으로 대체한다
 - 검증이 실패하면 통과할 때까지 수정한다. 실패 상태로 완료를 선언하지 않는다

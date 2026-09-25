@@ -2,7 +2,7 @@
 
 ## 실행 (검증 명령의 원본은 AGENTS.md)
 
-- 로컬: 앱별 명령 (`./gradlew test`, `pytest`, `npm run build`, `npm test`)
+- 로컬: 앱별 명령 (`./gradlew test`, `pytest`, `cd front && pnpm --filter @ieum/web build`, `npm test`)
 - CI 기준: 각 앱 Dockerfile의 test 스테이지 (`docker build --target test`) — MR verify가 실행하는 것과 동일. 로컬과 CI 결과가 다르면 CI가 기준이다.
 
 ## 원칙
