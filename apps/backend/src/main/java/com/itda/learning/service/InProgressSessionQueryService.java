@@ -68,16 +68,21 @@ public class InProgressSessionQueryService {
     if (assigned.isEmpty() || completed >= assigned.size()) {
       return Optional.empty();
     }
+    boolean review = session.getCurriculumStage() == null;
     return Optional.of(
         new InProgressSession(
             session.getId(),
-            session.getCurriculumStage() == null
-                ? REVIEW_STAGE_NAME
-                : session.getCurriculumStage().getName(),
+            review ? REVIEW_STAGE_NAME : session.getCurriculumStage().getName(),
+            review,
             assigned.size(),
             Math.toIntExact(completed)));
   }
 
+  /**
+   * @param review 복습 세션인지. 새 세션을 만들면 <b>같은 종류의</b> 미완료 세션만 닫히므로({@code
+   *     ProblemService.createSession}), 앱이 "이 학습을 시작하면 진행 중인 것이 닫힌다"를 판단하려면 표시용 이름이 아니라 이 값을 봐야
+   *     한다
+   */
   public record InProgressSession(
-      Long sessionId, String stageName, int totalCount, int completedCount) {}
+      Long sessionId, String stageName, boolean review, int totalCount, int completedCount) {}
 }

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import {
   type SessionRequest,
 } from "@/services/learningSessionCache";
 import { buildSessionStartFailure } from "@/services/learningSessionStartFailure";
+import { describeSessionConflict } from "@/services/sessionStartConflict";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticError } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
@@ -46,8 +47,27 @@ export default function SessionIntro() {
         ? { kind: "resume", sessionId: Number(sessionId) }
         : { kind: "theme", themeId };
   const start = useSessionStore((s) => s.start);
+
+  /*
+    새 세션을 만들면 같은 종류의 미완료 세션이 조용히 닫힌다
+    (`ProblemService.createSession`). 행이 지워지지는 않지만 학습자는 이어서 풀 기회를
+    잃고, `/completion`을 거치지 않은 채 "완료"로 기록된다.
+
+    그래서 **세션을 만들기 전에** 묻는다. 아래 조회는 마운트 즉시 서버에 행을 만들므로
+    `enabled`로 막아 두고, 확인을 받은 뒤에야 연다. 진행 중 세션 조회가 끝나기 전에
+    열면 물어볼 기회 없이 만들어져 버린다.
+  */
+  const { data: inProgress, isPending: inProgressPending } = useQuery({
+    queryKey: ["inProgressSession"],
+    queryFn: learningService.getInProgressSession,
+  });
+  const [confirmed, setConfirmed] = useState(false);
+  const conflict = describeSessionConflict(request, inProgressPending ? undefined : inProgress);
+  const awaitingConfirm = conflict !== null && !confirmed;
+
   const { data, isError, error, errorUpdateCount, refetch } = useQuery({
     queryKey: learningSessionQueryKey(request),
+    enabled: !inProgressPending && !awaitingConfirm,
     queryFn: () => {
       switch (request.kind) {
         case "review":
@@ -71,6 +91,11 @@ export default function SessionIntro() {
   // 재시도가 또 실패하면 `isError`는 계속 true라 값이 그대로다. 실패할 때마다 증가하는
   // `errorUpdateCount`를 함께 본다.
   useEffect(() => {
+    // 확인을 기다리는 동안에는 세션 안내를 읽지 않는다 — 아직 만들어지지도 않았다
+    if (awaitingConfirm && conflict !== null) {
+      announce(conflict.speech);
+      return;
+    }
     if (isError) {
       void hapticError();
       // 시도 횟수를 문구에 담아 낭독 중복 제거(1.5초)에 걸리지 않게 한다.
@@ -84,7 +109,7 @@ export default function SessionIntro() {
     announce(
       `${session.title}. ${session.problems.length}문항이에요. 점을 동시에 짚고 손을 떼면 한 칸이 입력돼요. 시작하기를 누르면 시작해요.`,
     );
-  }, [session, isError, error, errorUpdateCount]);
+  }, [session, isError, error, errorUpdateCount, awaitingConfirm, conflict]);
 
   // V32 세션 준비 실패
   if (isError) {
@@ -123,6 +148,52 @@ export default function SessionIntro() {
           ).map(([label, onPress], order) => (
             <AppButton key={label} label={label} variant={order === 0 ? "primary" : "secondary"} onPress={onPress} />
           ))}
+        </View>
+      </ScreenShell>
+    );
+  }
+
+  if (awaitingConfirm && conflict !== null) {
+    return (
+      <ScreenShell>
+        <BackHeader title="진행 중인 학습" />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 18 }}>
+          <IeumFace size={130} accessibilityLabel="이음 캐릭터" />
+          <Text
+            accessibilityRole="header"
+            style={{ fontSize: 26 * fontScale, fontWeight: "900", lineHeight: 38, color: theme.color.text, textAlign: "center" }}
+          >
+            {conflict.headline}
+          </Text>
+          <Text
+            accessibilityLiveRegion="polite"
+            style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 30, textAlign: "center" }}
+          >
+            {conflict.detail}
+          </Text>
+        </View>
+        {/*
+          이어서 풀기를 주 버튼으로 둔다. TalkBack 포커스가 먼저 닿는 자리이고, 잃는 것이
+          없는 선택이기 때문이다 — 새로 시작하기는 되돌릴 수 없다
+        */}
+        <View style={{ gap: 12 }}>
+          <AppButton
+            label="이어서 풀기"
+            onPress={() =>
+              router.replace({
+                pathname: "/session/intro",
+                params: { mode: "resume", sessionId: String(inProgress!.sessionId) },
+              })
+            }
+          />
+          <AppButton
+            label="새로 시작하기"
+            variant="secondary"
+            requireLongPress
+            accessibilityHint="진행 중인 학습을 끝내고 새로 시작해요"
+            onShortPress={() => announce("길게 누르면 새로 시작해요.")}
+            onPress={() => setConfirmed(true)}
+          />
         </View>
       </ScreenShell>
     );

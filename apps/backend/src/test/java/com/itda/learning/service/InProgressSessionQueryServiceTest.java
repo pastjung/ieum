@@ -86,6 +86,10 @@ class InProgressSessionQueryServiceTest {
 
     assertThat(result.sessionId()).isEqualTo(7L);
     assertThat(result.stageName()).isEqualTo("단어");
+    // 종류가 필요한 이유: 새 세션을 만들면 같은 종류의 미완료 세션만 닫힌다
+    // (ProblemService.createSession). 앱이 "이 학습을 시작하면 진행 중인 것이 닫힌다"를
+    // 판단하려면 표시용 이름이 아니라 종류를 봐야 한다
+    assertThat(result.review()).isFalse();
     assertThat(result.totalCount()).isEqualTo(3);
     assertThat(result.completedCount()).isEqualTo(2);
   }
@@ -106,6 +110,7 @@ class InProgressSessionQueryServiceTest {
 
     assertThat(result.sessionId()).isEqualTo(9L);
     assertThat(result.stageName()).isEqualTo("복습");
+    assertThat(result.review()).isTrue();
   }
 
   @Test

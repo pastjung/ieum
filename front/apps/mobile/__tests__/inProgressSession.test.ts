@@ -14,6 +14,7 @@ describe("진행 중인 세션 조회", () => {
     get.mockResolvedValue({
       sessionId: 7,
       stageName: "단어",
+      review: false,
       totalCount: 12,
       completedCount: 5,
     });
@@ -27,6 +28,7 @@ describe("진행 중인 세션 조회", () => {
     get.mockResolvedValue({
       sessionId: 7,
       stageName: "단어",
+      review: false,
       totalCount: 12,
       completedCount: 5,
     });
@@ -36,6 +38,7 @@ describe("진행 중인 세션 조회", () => {
     expect(result).toEqual({
       sessionId: 7,
       stageName: "단어",
+      review: false,
       totalCount: 12,
       completedCount: 5,
     });

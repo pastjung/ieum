@@ -8,10 +8,14 @@ import com.itda.learning.service.InProgressSessionQueryService.InProgressSession
  * <p>진행 중인 것이 없으면 이 본문 대신 {@code 204}다 — 빈 객체를 보내면 "없음"과 "0문항짜리 세션"을 구별할 수 없다.
  */
 public record InProgressSessionResponse(
-    Long sessionId, String stageName, int totalCount, int completedCount) {
+    Long sessionId, String stageName, boolean review, int totalCount, int completedCount) {
 
   public static InProgressSessionResponse from(InProgressSession session) {
     return new InProgressSessionResponse(
-        session.sessionId(), session.stageName(), session.totalCount(), session.completedCount());
+        session.sessionId(),
+        session.stageName(),
+        session.review(),
+        session.totalCount(),
+        session.completedCount());
   }
 }

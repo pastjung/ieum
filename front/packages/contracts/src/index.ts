@@ -305,6 +305,12 @@ export const inProgressSessionSchema = z.object({
   sessionId: requestIdentifierSchema,
   /** 커리큘럼 단계 이름. 복습 세션은 "복습" */
   stageName: z.string().min(1),
+  /**
+   * 복습 세션인지. 새 세션을 만들면 **같은 종류의** 미완료 세션만 닫히므로
+   * (`ProblemService.createSession`), 앱이 "이 학습을 시작하면 진행 중인 것이 닫힌다"를
+   * 판단하려면 표시용 이름이 아니라 이 값을 봐야 한다
+   */
+  review: z.boolean(),
   totalCount: z.number().int().positive(),
   completedCount: z.number().int().nonnegative(),
 });
