@@ -106,10 +106,13 @@ export default function SessionIntro() {
       return;
     }
     if (!session) return;
+    const remaining = session.problems.length - (data?.meta.startIndex ?? 0);
     announce(
-      `${session.title}. ${session.problems.length}문항이에요. 점을 동시에 짚고 손을 떼면 한 칸이 입력돼요. 시작하기를 누르면 시작해요.`,
+      remaining <= 0
+        ? `${session.title}. 문제를 모두 풀었어요. 시작하기를 누르면 결과를 받아요.`
+        : `${session.title}. ${remaining}문항이에요. 점을 동시에 짚고 손을 떼면 한 칸이 입력돼요. 시작하기를 누르면 시작해요.`,
     );
-  }, [session, isError, error, errorUpdateCount, awaitingConfirm, conflict]);
+  }, [session, data, isError, error, errorUpdateCount, awaitingConfirm, conflict]);
 
   // V32 세션 준비 실패
   if (isError) {
@@ -203,7 +206,11 @@ export default function SessionIntro() {
     <ScreenShell>
       <BackHeader title={session?.title ?? "학습 준비 중"} />
       <Text style={{ fontSize: 18 * fontScale, color: theme.color.textMuted }}>
-        {session ? `${session.problems.length}문항 · 한 문제씩 천천히 풀어요` : "불러오는 중이에요…"}
+        {session
+          ? session.problems.length - (data?.meta.startIndex ?? 0) > 0
+            ? `${session.problems.length - (data?.meta.startIndex ?? 0)}문항 · 한 문제씩 천천히 풀어요`
+            : "문제를 모두 풀었어요 · 결과만 받으면 돼요"
+          : "불러오는 중이에요…"}
       </Text>
       <View style={[styles.card, { backgroundColor: theme.color.surface, borderColor: theme.color.border, borderRadius: radius.card }]}>
         {rules.map(([k, v]) => (
@@ -219,7 +226,12 @@ export default function SessionIntro() {
           onPress={() => {
             if (!data) return;
             beginLearningSession(queryClient, request, data, start);
-            router.replace("/session/play");
+            // 이어받았는데 풀 문항이 남지 않았다면 완료 제출만 남은 세션이다
+            router.replace(
+              (data.meta.startIndex ?? 0) >= data.session.problems.length
+                ? "/session/analyzing"
+                : "/session/play",
+            );
           }}
         />
       </View>

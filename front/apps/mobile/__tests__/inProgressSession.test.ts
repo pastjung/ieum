@@ -61,8 +61,8 @@ describe("진행 중인 세션 조회", () => {
 describe("세션 이어받기", () => {
   beforeEach(() => get.mockReset());
 
-  it("GET /learning-sessions/{id} 로 기존 배정을 가져온다", async () => {
-    get.mockResolvedValue({
+  function resumable() {
+    return {
       sessionId: 7,
       problems: [
         {
@@ -82,20 +82,35 @@ describe("세션 이어받기", () => {
           completed: false,
         },
       ],
-    });
+    };
+  }
+
+  it("GET /learning-sessions/{id} 로 기존 배정을 가져온다", async () => {
+    get.mockResolvedValue(resumable());
 
     const { session, meta } = await learningService.resumeSession(7);
 
     expect(get).toHaveBeenCalledWith("/learning-sessions/7");
     expect(session.title).toBe("이어서 학습");
-    // 이미 푼 문항은 빼고 남은 것만 이어 푼다 — 다시 제출하면 서버가 거부한다
-    expect(session.problems).toHaveLength(1);
-    expect(session.problems[0].target).toBe("나무");
-    expect(meta.problemSessionIds).toEqual([71]);
+    expect(meta.serverSessionId).toBe(7);
   });
 
-  it("남은 문항이 없으면 던진다", async () => {
-    // 모두 푼 세션은 이어할 것이 없다. 빈 세션으로 넘어가면 문항 0개짜리 화면을 만난다
+  it("이미 푼 문항도 함께 가져온다", async () => {
+    // 완료 제출은 배정 전부를 대상으로 한다. 푼 문항을 빼면 세션이 9문항이 되어
+    // 다 풀어도 완료가 거부되고, 그 세션이 갇힌다 — 실제로 그렇게 됐다
+    const { session, meta } = await givenResumed();
+
+    expect(session.problems).toHaveLength(2);
+    expect(meta.problemSessionIds).toEqual([70, 71]);
+  });
+
+  it("안 푼 첫 문항부터 시작한다", async () => {
+    const { meta } = await givenResumed();
+
+    expect(meta.startIndex).toBe(1);
+  });
+
+  it("모두 푼 세션은 끝을 가리킨다 — 완료 제출만 남았다", async () => {
     get.mockResolvedValue({
       sessionId: 7,
       problems: [
@@ -110,6 +125,13 @@ describe("세션 이어받기", () => {
       ],
     });
 
-    await expect(learningService.resumeSession(7)).rejects.toThrow();
+    const { meta, session } = await learningService.resumeSession(7);
+
+    expect(meta.startIndex).toBe(session.problems.length);
   });
+
+  async function givenResumed() {
+    get.mockResolvedValue(resumable());
+    return learningService.resumeSession(7);
+  }
 });

@@ -44,7 +44,9 @@ export default function ClassReview() {
       <View style={{ marginTop: "auto" }}>
         <AppButton
           label={chosen ? `${chosen.label.split(" · ")[0]}로 복습 시작` : "복습 시작"}
-          onPress={() => router.replace("/session/intro")}
+          onPress={() =>
+            router.replace({ pathname: "/session/intro", params: { mode: "review" } })
+          }
           accessibilityHint="선택한 단계의 오답으로 복습을 시작해요"
         />
       </View>

@@ -7,7 +7,11 @@ import { BackHeader } from "@/components/BackHeader";
 import { ListRow } from "@/components/ListRow";
 import { AppButton } from "@/components/AppButton";
 import { learningService } from "@/services/learningService";
-import { selectSkillDashboard, skillDisplayName } from "@/services/skillDashboard";
+import {
+  selectSkillDashboard,
+  skillDisplayName,
+  type SkillDashboard,
+} from "@/services/skillDashboard";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { announce } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
@@ -17,6 +21,14 @@ const NEEDS_PRACTICE_LABEL = "더 연습해요";
 
 /** 음성 중심 화면이 한 번에 보여줄 요소 수. 목록이 길수록 탐색이 어렵다 */
 const VOICE_SKILL_LIMIT = 3;
+
+/** 비어 있는 구역은 제목도 내지 않는다 — 제목만 있고 줄이 없으면 불러오다 만 것처럼 보인다 */
+function ruleSections(d: SkillDashboard) {
+  return [
+    { title: "더 연습할 것", rows: d.weakest },
+    { title: "잘하고 있어요", rows: d.strongest },
+  ].filter((section) => section.rows.length > 0);
+}
 
 /** V26 내 실력 (음성 중심) — 핵심 3요소만 크게 */
 function VoiceSkills() {
@@ -127,15 +139,20 @@ function ScreenSkills() {
             </View>
           ))}
         </View>
-        <Text style={{ fontSize: 15 * fontScale, fontWeight: "800", color: theme.color.textMuted }}>
-          규칙별 실력 · {d.rules.length}개 분류
-        </Text>
-        <View style={{ gap: 8 }}>
-          {d.rules.map((r) => (
+        {/*
+          요소 74개를 다 그리면 읽을 수 없고, 분류로 묶으면 "단독 자모 35개 평균 12%"처럼
+          무엇을 연습해야 할지 알 수 없는 줄이 된다. 약한 것과 잘하는 것만 몇 개씩 보여준다.
+        */}
+        {ruleSections(d).map((section) => (
+          <View key={section.title} style={{ gap: 8 }}>
+            <Text style={{ fontSize: 15 * fontScale, fontWeight: "800", color: theme.color.textMuted }}>
+              {section.title}
+            </Text>
+            {section.rows.map((r) => (
             <View
-              key={r.label}
+              key={r.learningSkillId}
               style={[styles.ruleRow, { borderColor: theme.color.border, borderRadius: radius.control }]}
-              accessibilityLabel={`${r.label} ${r.count}개, ${r.percent != null ? `${r.percent}퍼센트` : "기록 없음"}`}
+              accessibilityLabel={`${r.label}, ${r.level}, ${r.percent != null ? `${r.percent}퍼센트` : "기록 없음"}`}
             >
               <Text style={{ flex: 1, fontSize: 16 * fontScale, fontWeight: "700", color: theme.color.text }}>{r.label}</Text>
               {r.percent != null ? (
@@ -156,8 +173,9 @@ function ScreenSkills() {
                 <Text style={{ fontSize: 14 * fontScale, color: theme.color.textMuted }}>기록 없음</Text>
               )}
             </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        ))}
       </ScrollView>
       <AppButton label="약한 것부터 복습" onPress={() => router.push({ pathname: "/session/intro", params: { mode: "review" } })} />
     </ScreenShell>

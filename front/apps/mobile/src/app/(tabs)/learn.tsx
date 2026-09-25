@@ -79,23 +79,22 @@ function ScreenLearn() {
       </Text>
       <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted }}>무엇을 학습할까요</Text>
       <View style={{ gap: 12 }}>
+        {/*
+          예전에는 파라미터 없이 /session/intro 로 보내 "자유 학습"이 조용히 자음 세션이
+          됐다. 단계를 앱이 아니라 서버 목록에서 고르게 되면서 고를 단계가 없으면 세션을
+          만들 수 없다 — 테마 선택 화면으로 보낸다.
+        */}
         <ListRow
           label="자유 학습"
-          description="내 단계에 맞는 문항 세션"
+          description="테마를 골라 시작해요"
           chevron
-          onPress={() => router.push("/session/intro")}
+          onPress={() => router.push("/learn-themes")}
         />
         <ListRow
           label="복습 학습"
           description="약한 요소부터 다시 다져요"
           chevron
           onPress={() => router.push({ pathname: "/session/intro", params: { mode: "review" } })}
-        />
-        <ListRow
-          label="테마 선택"
-          description="배우고 싶은 테마로 바로 이동"
-          chevron
-          onPress={() => router.push("/learn-themes")}
         />
         <ListRow label="내 실력" description="요소별 숙련 상태 보기" chevron onPress={() => router.push("/tools/skills")} />
         <ListRow label="점자 사전" description="단어의 점자를 찾아봐요" chevron onPress={() => router.push("/tools/dictionary")} />

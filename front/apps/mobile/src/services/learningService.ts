@@ -113,19 +113,25 @@ export const learningService = {
   /**
    * 중단한 세션을 이어받는다. 새 문항을 배정하지 않고 기존 배정을 그대로 가져온다.
    *
-   * **이미 푼 문항은 뺀다.** 서버는 완료된 배정에 대한 재제출을 거부하므로
-   * (`LearningAttemptService`의 `LEARNING_PROBLEM_ALREADY_ANALYZED`), 그대로 두면 이어서
-   * 시작하자마자 막힌다.
+   * **이미 푼 문항도 함께 가져온다.** 완료 제출은 배정 전부를 대상으로 하므로, 푼 문항을
+   * 빼면 12문항짜리 세션이 9문항이 되어 다 풀어도 완료가 거부되고 그 세션이 갇힌다 —
+   * 실제로 그렇게 됐다. 대신 안 푼 첫 문항부터 시작하도록 위치를 함께 알려준다.
+   *
+   * 모두 푼 세션은 시작 위치가 목록 끝을 가리킨다. 풀 것이 없고 완료 제출만 남은 상태다.
    */
   async resumeSession(sessionId: number) {
     const response = problemsResponseSchema.parse(
       await api.get(`/learning-sessions/${sessionId}`),
     );
-    const remaining = response.problems.filter((problem) => !problem.completed);
-    if (remaining.length === 0) {
-      throw new Error("이어서 풀 문항이 없어요");
-    }
-    return toSession({ ...response, problems: remaining }, "이어서 학습");
+    const firstUnsolved = response.problems.findIndex((problem) => !problem.completed);
+    const { session, meta } = toSession(response, "이어서 학습");
+    return {
+      session,
+      meta: {
+        ...meta,
+        startIndex: firstUnsolved === -1 ? response.problems.length : firstUnsolved,
+      },
+    };
   },
 
   /**
@@ -141,7 +147,7 @@ export const learningService = {
   /**
    * 테마(커리큘럼 단계)별 풀이 통계.
    *
-   * 테마 선택 화면이 `mockData.learningThemes`의 고정 숫자를 보여주고 있었다.
+   * 테마 선택 화면이 고정 숫자를 진도로 보여주고 있었다.
    */
   async getStageStats(): Promise<StageStats> {
     return stageStatsSchema.parse(await api.get("/learning-sessions/stage-stats"));

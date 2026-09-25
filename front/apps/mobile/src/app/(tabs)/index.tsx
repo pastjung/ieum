@@ -168,7 +168,13 @@ function VoiceHome() {
         )}
         {inProgress ? (
           <>
-            {bigButton("이어서 학습", `${inProgress.stageName} · ${inProgress.totalCount}문항 중 ${inProgress.completedCount}문항 완료`, true, goSession, 1.4)}
+            {bigButton(
+              inProgress.completedCount >= inProgress.totalCount ? "결과 받기" : "이어서 학습",
+              `${inProgress.stageName} · ${inProgress.totalCount}문항 중 ${inProgress.completedCount}문항 완료`,
+              true,
+              goSession,
+              1.4,
+            )}
             {/*
               진행 중 세션이 있어도 복습은 닿을 수 있어야 한다. 예전에는 이 가지에 복습이
               없어서 — 그리고 목 데이터의 inProgress가 늘 값이 있어서 — 시각장애인용 홈에는

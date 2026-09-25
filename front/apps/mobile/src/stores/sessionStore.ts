@@ -15,6 +15,13 @@ export interface ServerSessionMeta {
   serverSessionId: number;
   /** 문항 순서와 같은 길이·같은 순서 */
   problemSessionIds: number[];
+  /**
+   * 풀기 시작할 문항의 위치. 새 세션은 0이고, 이어받기는 안 푼 첫 문항을 가리킨다.
+   *
+   * 이미 푼 문항도 목록에 있어야 한다 — 완료 제출은 배정 전부를 대상으로 하므로 빼면
+   * 세션이 짧아져 완료가 거부된다.
+   */
+  startIndex?: number;
 }
 
 interface AnswerRecord {
@@ -78,7 +85,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     set({
       session,
       kind,
-      index: 0,
+      index: meta?.startIndex ?? 0,
       answers: [],
       lastResult: null,
       lastAnalysis: null,

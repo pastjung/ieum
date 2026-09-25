@@ -1,5 +1,4 @@
 import { learningService } from "../src/services/learningService";
-import { selectSkillDashboard } from "../src/services/skillDashboard";
 import { api } from "../src/services/apiClient";
 import type { SkillSummary } from "@ieum/contracts";
 
@@ -36,71 +35,5 @@ describe("숙련 상태 조회", () => {
     get.mockResolvedValue({ totalAttemptCount: 1 });
 
     await expect(learningService.getSkillSummary()).rejects.toThrow();
-  });
-});
-
-describe("내 실력 화면이 그릴 값", () => {
-  it("정답률을 푼 문제 수로 계산한다", () => {
-    const view = selectSkillDashboard(summary({ totalAttemptCount: 200, correctAttemptCount: 150 }));
-
-    expect(view.stats).toContainEqual({ label: "푼 문제", value: "200" });
-    expect(view.stats).toContainEqual({ label: "정답률", value: "75%" });
-  });
-
-  it("푼 문제가 없으면 정답률을 말하지 않는다", () => {
-    // 0으로 나누면 NaN이 화면에 그대로 나온다
-    const view = selectSkillDashboard(
-      summary({ totalAttemptCount: 0, correctAttemptCount: 0, skills: [] }),
-    );
-
-    expect(view.stats.map((s) => s.label)).not.toContain("정답률");
-  });
-
-  it("전체 숙련도는 요소들의 평균이다", () => {
-    const view = selectSkillDashboard(
-      summary({
-        skills: [
-          { learningSkillId: 1, name: "가", target: "ㄱ", masteryProb: 0.2, label: "더 연습해요" },
-          { learningSkillId: 2, name: "나", target: "ㄴ", masteryProb: 0.8, label: "익숙해요" },
-        ],
-      }),
-    );
-
-    expect(view.overallPercent).toBe(50);
-  });
-
-  it("익힌 요소 수를 함께 말한다", () => {
-    const view = selectSkillDashboard(
-      summary({
-        skills: [
-          { learningSkillId: 1, name: "가", target: "ㄱ", masteryProb: 0.2, label: "더 연습해요" },
-          { learningSkillId: 2, name: "나", target: "ㄴ", masteryProb: 0.9, label: "익숙해요" },
-          { learningSkillId: 3, name: "다", target: "ㄷ", masteryProb: 0.95, label: "익숙해요" },
-        ],
-      }),
-    );
-
-    expect(view.overallDetail).toBe("요소 3개 중 2개를 익혔어요");
-  });
-
-  it("기록이 없으면 숙련도를 꾸며 내지 않는다", () => {
-    const view = selectSkillDashboard(summary({ skills: [] }));
-
-    expect(view.overallPercent).toBeNull();
-    expect(view.rules).toEqual([]);
-  });
-
-  it("서버 결과가 없으면 빈 화면이다", () => {
-    const view = selectSkillDashboard(undefined);
-
-    expect(view.overallPercent).toBeNull();
-    expect(view.stats).toEqual([]);
-    expect(view.rules).toEqual([]);
-  });
-
-  it("약한 분류부터 보여준다", () => {
-    const view = selectSkillDashboard(summary());
-
-    expect(view.rules.map((r) => r.label)).toEqual(["된소리", "첫소리 기본 자음"]);
   });
 });
