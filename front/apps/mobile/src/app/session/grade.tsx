@@ -80,18 +80,17 @@ export default function Grade() {
           <Text accessibilityRole="header" style={{ fontSize: 40 * fontScale, fontWeight: "900", color: theme.color.primary }}>
             {feedback.headline}
           </Text>
-          {analysis ? (
-            feedback.detail.length > 0 && (
-              <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 28, textAlign: "center" }}>
-                {feedback.detail}
-              </Text>
-            )
-          ) : (
-            problem != null && (
-              <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 28, textAlign: "center" }}>
-                '{problem.target}' {local.total}칸을 모두{"\n"}정확히 입력했어요.
-              </Text>
-            )
+          {/*
+            서버 분석 경로의 정답 화면에는 헤드라인 말고 아무것도 붙이지 않는다. 예전에는
+            규칙 설명(`feedback.tts`)을 붙였는데, 그것은 AI가 따로 채점한 결과라 서버의
+            `correct`와 갈릴 수 있다 — "정답이에요!" 아래에 "3번 점이 빠졌어요"가 붙는다
+            (`cellFeedback.ts`의 주석). `describeCells`가 정답일 때 detail을 비우므로
+            화면과 낭독이 같은 곳에서 함께 사라진다.
+          */}
+          {analysis === null && problem != null && (
+            <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 28, textAlign: "center" }}>
+              '{problem.target}' {local.total}칸을 모두{"\n"}정확히 입력했어요.
+            </Text>
           )}
         </View>
       ) : (

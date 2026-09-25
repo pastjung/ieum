@@ -53,9 +53,16 @@ export function describeCells(
   ruleText: string,
 ): { headline: string; detail: string; speech: string } {
   if (correct) {
+    // **정답에는 `ruleText`를 붙이지 않는다.** 두 값이 서로 다른 채점에서 오기 때문이다:
+    // `correct`는 백엔드가 DB 시드 셀과 비교한 결과이고(`LearningAttemptService`),
+    // `feedback.tts`는 AI가 `target_text`를 규칙 변환해 다시 채점한 결과다
+    // (`apps/ai` 의 `_grade`). 둘이 갈리면 "정답이에요! 3번 점이 빠졌어요"가 나온다 —
+    // 정답 화면에 오답 설명이 붙는 것보다 설명이 없는 편이 낫다.
+    //
+    // 이 판단은 정답 화면에도 규칙 설명을 보여주던 이전 동작을 되돌린 것이다. 되돌릴
+    // 때는 화면(`session/grade.tsx`)도 함께 맞춰 화면과 낭독이 갈라지지 않게 한다.
     const headline = "정답이에요!";
-    const detail = ruleText.trim();
-    return { headline, detail, speech: `${headline} ${detail}`.trim() };
+    return { headline, detail: "", speech: headline };
   }
 
   const headline = "오답이에요.";

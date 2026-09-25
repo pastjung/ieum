@@ -21,10 +21,23 @@ function cell(
 }
 
 describe("셀 진단을 점 수준 문장으로", () => {
-  it("정답이면 규칙 설명만 붙인다", () => {
-    const r = describeCells([cell(1, 5, 5, [], [])], true, "이 단어는 두 칸이에요.");
+  it("정답이면 규칙 설명을 붙이지 않는다", () => {
+    // `correct`(백엔드가 DB 시드 셀로 채점)와 `feedback.tts`(AI가 target_text를 규칙
+    // 변환해 다시 채점)는 서로 다른 채점에서 온다. 갈리면 "정답이에요! 3번 점이
+    // 빠졌어요"가 나온다 — 정답에 오답 설명이 붙는 것보다 설명이 없는 편이 낫다
+    const r = describeCells([cell(1, 5, 5, [], [])], true, "3번 점이 빠졌어요.");
+
     expect(r.headline).toBe("정답이에요!");
-    expect(r.speech).toContain("이 단어는 두 칸이에요.");
+    expect(r.detail).toBe("");
+    expect(r.speech).toBe("정답이에요!");
+    expect(r.speech).not.toContain("3번 점이 빠졌어요.");
+  });
+
+  it("정답 화면의 낭독 문구가 화면에 그리는 문구와 같다", () => {
+    // 규칙 설명을 낭독에서만 빼면 화면과 낭독이 갈라진다 — 둘은 같은 곳에서 사라져야 한다
+    const r = describeCells([cell(1, 5, 5, [], [])], true, "제13항");
+
+    expect(r.speech).toBe(`${r.headline} ${r.detail}`.trim());
   });
 
   it("틀린 칸의 정답 점과 틀린 점을 모두 말한다", () => {
