@@ -93,6 +93,9 @@ public class SecurityConfig {
    * {@code GET}은 404로 답했다. 학습 세션 경로를 추가할 때 같은 컨트롤러의 복습 경로가 함께 딸려오지
    * 않았기 때문이다 — 경로를 늘릴 때는 그 컨트롤러의 다른 method도 함께 본다.
    */
+  /** 진행 중인 세션 조회. 내 학습 이력이므로 보호 대상이다 */
+  private static final String IN_PROGRESS_SESSION_PATH = "/learning-sessions/in-progress";
+
   private static final String REVIEW_SESSIONS_PATH = "/review-sessions";
 
   private static final String REVIEW_SESSION_PATH = "/review-sessions/{sessionId}";
@@ -136,6 +139,8 @@ public class SecurityConfig {
                     HttpMethod.POST, LEARNING_SESSION_COMPLETION_PATH),
                 PathPatternRequestMatcher.pathPattern(
                     HttpMethod.POST, LEARNING_SESSION_ATTEMPT_ANALYSIS_PATH),
+                PathPatternRequestMatcher.pathPattern(
+                    HttpMethod.GET, IN_PROGRESS_SESSION_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, REVIEW_SESSIONS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, REVIEW_SESSION_PATH)))
         .addFilterBefore(
