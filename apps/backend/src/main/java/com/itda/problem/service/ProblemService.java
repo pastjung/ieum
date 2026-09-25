@@ -341,12 +341,8 @@ public class ProblemService {
     ReviewAnalyzeRequest reviewAnalyzeRequest = new ReviewAnalyzeRequest(skillStates);
     ReviewAnalyzeResponse response = fastApiClient.reviewAnalyze(reviewAnalyzeRequest);
 
-    User curUser =
-        userJpaRepository
-            .findById(user.userId())
-            .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
-    Level level = curUser.getLevel();
+    // 사용자는 createSession이 이미 조회하고 USER_NOT_FOUND로 검증한다. 여기서 다시 읽던
+    // 이유는 레벨 하나였는데 그 조건을 걷어냈다 (ProblemRepository.findAssignableByLearningSkillId)
     List<Long> learningSkillIds = response.learningSkillIds();
     // 아래 반복이 앞에서부터 REVIEW_SKILL_COUNT개를 꺼내 쓴다. 모자라면 IndexOutOfBounds로 500이
     // 나가므로, 출제할 것이 없다는 사실을 같은 오류로 알린다.
@@ -368,8 +364,7 @@ public class ProblemService {
     for (int i = 0; i < REVIEW_SKILL_COUNT; i++) {
       List<Long> candidateIds =
           problemRepository
-              .findAllByLevelAndLearningSkillId(
-                  level, learningSkillIds.get(i), MAX_ASSIGNABLE_CELLS)
+              .findAssignableByLearningSkillId(learningSkillIds.get(i), MAX_ASSIGNABLE_CELLS)
               .stream()
               .map(Problem::getId)
               // 앞 요소에서 이미 고른 문제는 다시 셀 수 없다 — selectedProblemIds는 Set이므로

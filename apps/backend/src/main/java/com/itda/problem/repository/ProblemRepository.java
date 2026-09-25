@@ -17,25 +17,27 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
   List<Problem> findAllByLevelAndIdNotIn(Level level, List<Long> ids);
 
   /**
-   * 복습 출제 후보를 고른다.
+   * 복습 출제용 후보. 학습요소 하나에 걸린 문제를 셀 수 상한 안에서 모두 가져온다.
    *
-   * <p>{@code maxCells}가 있는 이유는 {@link #findAssignableByLevel}과 같다 — AI가 입력을 12칸까지만 받으므로({@code
-   * apps/ai/app/presentation/api/backend/router.py} 의 {@code input_patterns}), 13칸 이상인 문제는 정답을 넣어도
-   * 분석이 거부되고 {@code ProblemSession}이 완료되지 않는다. "레벨로 후보를 뽑는다"는 본질이 같으므로 같은 상한을 적용한다.
+   * <p><b>사용자 레벨로 거르지 않는다.</b> 예전에는 {@code WHERE p.level = :level}이 있었는데, 그 레벨을 담는 {@code
+   * users.level}을 설정하는 코드가 어디에도 없어({@code User.changeLevel} 호출부가 없다) 모든 계정이 {@code NULL}이었다.
+   * SQL에서 {@code = NULL}은 참이 되지 않으므로 후보가 늘 0건이었고, 기록이 충분한 학습자도 복습을 시작할 수 없었다.
+   *
+   * <p>레벨을 채워 되살리는 대신 조건을 걷어낸다. 복습이 하는 일은 "내가 틀린 것을 다시 푸는 것"이고, 약한 요소의 문항이 마침 그 단계에 없으면
+   * 복습 자체가 막힌다 — 그 요소를 틀렸다는 사실이 이미 그 문항을 풀 이유다.
+   *
+   * <p>셀 수 상한은 그대로 둔다. FastAPI가 {@code input_patterns}를 12칸으로 제한하므로 13칸 이상인 문제는 배정돼도 분석이 거부된다.
    */
   @Query(
       """
     SELECT DISTINCT p
     FROM Problem p
     JOIN ProblemSkill ps ON ps.problem = p
-    WHERE p.level = :level
-      AND ps.skill.id = :learningSkillId
+    WHERE ps.skill.id = :learningSkillId
       AND (SELECT COUNT(c) FROM ProblemCell c WHERE c.problem = p) <= :maxCells
     """)
-  List<Problem> findAllByLevelAndLearningSkillId(
-      @Param("level") Level level,
-      @Param("learningSkillId") Long learningSkillId,
-      @Param("maxCells") long maxCells);
+  List<Problem> findAssignableByLearningSkillId(
+      @Param("learningSkillId") Long learningSkillId, @Param("maxCells") long maxCells);
 
   /**
    * 출제 후보를 고른다.

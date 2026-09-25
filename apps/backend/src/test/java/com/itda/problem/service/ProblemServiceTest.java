@@ -3,6 +3,10 @@ package com.itda.problem.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -542,7 +546,7 @@ class ProblemServiceTest {
     AuthenticatedUser learner = givenReviewLearner();
     givenReviewSkills(1L, 2L, 3L);
     // 첫 요소의 후보가 3개뿐이다 — 4개를 뽑을 수 없다
-    given(problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, 1L, 12L))
+    given(problemRepository.findAssignableByLearningSkillId(1L, 12L))
         .willReturn(List.of(problem(1L, "하나"), problem(2L, "둘"), problem(3L, "셋")));
 
     assertError(
@@ -560,9 +564,9 @@ class ProblemServiceTest {
     givenReviewSkills(1L, 2L, 3L);
     List<Problem> shared =
         List.of(problem(1L, "하나"), problem(2L, "둘"), problem(3L, "셋"), problem(4L, "넷"));
-    given(problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, 1L, 12L))
+    given(problemRepository.findAssignableByLearningSkillId(1L, 12L))
         .willReturn(shared);
-    given(problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, 2L, 12L))
+    given(problemRepository.findAssignableByLearningSkillId(2L, 12L))
         .willReturn(shared);
 
     assertError(
@@ -580,10 +584,52 @@ class ProblemServiceTest {
         () -> problemService.reviewWithNewSession(learner), ErrorCode.LEARNING_CONTENT_NOT_READY);
   }
 
+  @Test
+  @Timeout(10)
+  void 레벨이_없는_학습자도_복습할_수_있다() {
+    // users.level은 아무도 설정하지 않아 모든 계정이 NULL이다 (User.changeLevel 호출부 없음).
+    // 레벨로 후보를 거르면 `WHERE p.level = NULL`이 되어 한 건도 걸리지 않고, 기록이 충분한
+    // 학습자도 "아직 문제가 준비되지 않았어요"만 본다 — 복습이 누구에게도 열리지 않았다
+    AuthenticatedUser learner = givenReviewLearner();
+    givenReviewSkills(1L, 2L, 3L);
+    givenReviewCandidates();
+
+    assertThatNoException().isThrownBy(() -> problemService.reviewWithNewSession(learner));
+  }
+
+  @Test
+  @Timeout(10)
+  void 복습_출제는_요소마다_레벨_없이_후보를_찾는다() {
+    // 복습의 목적은 "내가 틀린 것 다시 풀기"다. 레벨로 좁히면 약한 요소의 문항이 그 단계에
+    // 없을 때 복습 자체가 불가능해진다
+    AuthenticatedUser learner = givenReviewLearner();
+    givenReviewSkills(1L, 2L, 3L);
+    givenReviewCandidates();
+
+    problemService.reviewWithNewSession(learner);
+
+    verify(problemRepository).findAssignableByLearningSkillId(1L, 12L);
+    verify(problemRepository).findAssignableByLearningSkillId(2L, 12L);
+    verify(problemRepository).findAssignableByLearningSkillId(3L, 12L);
+  }
+
+  @Test
+  @Timeout(10)
+  void 복습은_사용자를_한_번만_조회한다() {
+    // 세션을 만들 때(createSession) 이미 조회하고 USER_NOT_FOUND로 검증한다.
+    // 레벨을 읽으려고 한 번 더 조회하던 것을 걷어냈다
+    AuthenticatedUser learner = givenReviewLearner();
+    givenReviewSkills(1L, 2L, 3L);
+    givenReviewCandidates();
+
+    problemService.reviewWithNewSession(learner);
+
+    verify(userJpaRepository, times(1)).findById(anyLong());
+  }
+
   private AuthenticatedUser givenReviewLearner() {
     long learnerId = 9L;
     User learnerEntity = mock(User.class);
-    given(learnerEntity.getLevel()).willReturn(Level.WORD);
     given(userJpaRepository.findById(learnerId)).willReturn(Optional.of(learnerEntity));
     given(
             learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(
@@ -593,6 +639,29 @@ class ProblemServiceTest {
     given(userSkillErrorCountRepository.findAllByUserSkillMemory_IdIn(List.of()))
         .willReturn(List.of());
     return new AuthenticatedUser(learnerId, UserRole.LEARNER);
+  }
+
+  /**
+   * 요소 세 개가 서로 다른 문제를 4개씩 가져갈 수 있도록 후보 12개를 준다.
+   *
+   * <p>같은 4개를 모든 요소에 돌려주면 두 번째 요소에서 앞서 뽑힌 것이 모두 걸러져 후보가 0이 된다 — 그건 별도 테스트가 지키는 다른 경우다.
+   */
+  private void givenReviewCandidates() {
+    given(problemRepository.findAssignableByLearningSkillId(anyLong(), eq(12L)))
+        .willReturn(
+            List.of(
+                problem(1L, "하나"),
+                problem(2L, "둘"),
+                problem(3L, "셋"),
+                problem(4L, "넷"),
+                problem(5L, "다섯"),
+                problem(6L, "여섯"),
+                problem(7L, "일곱"),
+                problem(8L, "여덟"),
+                problem(9L, "아홉"),
+                problem(10L, "열"),
+                problem(11L, "열하나"),
+                problem(12L, "열둘")));
   }
 
   private void givenReviewSkills(Long... learningSkillIds) {
