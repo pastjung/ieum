@@ -274,6 +274,27 @@ export const attemptAnalysisResponseSchema = z.object({
 });
 export type AttemptAnalysisResponse = z.infer<typeof attemptAnalysisResponseSchema>;
 
+/**
+ * 이번 세션에서 약한 학습요소. AI가 고르고(`summarize_session`) 백엔드가 옮긴다
+ * (`LearningSessionCompletionResponse.WeakSkillResponse`).
+ *
+ * **"익숙해요"인 요소는 오지 않는다** — 약한 것만 골라 온 목록이다. 그리고 그 요소에
+ * 기록이 2건 이상이어야 판정한다(`n_attempts < 2`면 건너뛴다), 그래서 처음 몇 세션은
+ * 비어 있을 수 있다.
+ */
+export const weakSkillSchema = z.object({
+  learningSkillId: identifierSchema,
+  /** 0~1 숙련 추정치 */
+  masteryProb: z.number().nullable(),
+  /** "배우는 중" | "더 연습해요" — AI가 만든 문자열을 그대로 쓴다 */
+  label: z.string(),
+  /** 가장 잦았던 오류 유형. 오류 기록이 없으면 null */
+  dominantErrorType: z.string().nullable(),
+  /** "받침 이응에서 점 누락이 반복됐어요." 처럼 완성된 문장 */
+  explanation: z.string(),
+});
+export type WeakSkill = z.infer<typeof weakSkillSchema>;
+
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),
@@ -290,11 +311,15 @@ export const completionResponseSchema = z.object({
    */
   summary: z.string().nullable(),
   ttsText: z.string().nullable(),
+  /**
+   * 이번 세션의 오류 유형별 횟수. 키는 snake_case다 (`dot_missing`, `jamo_confusion` …) —
+   * 백엔드 `ErrorType` enum을 소문자로 옮긴 값이고, 앱이 한글 이름을 붙인다
+   */
   errorTypeCounts: z.record(z.string(), z.number().int().nonnegative()),
   /**
    * 앱이 이번에 쓰지 않는다. 모양을 지금 못 박으면 서버가 바꿀 때 앱이 먼저 깨진다.
    * 쓰게 될 때 구체화한다.
    */
-  weakSkills: z.array(z.unknown()),
+  weakSkills: z.array(weakSkillSchema).catch([]),
 });
 export type CompletionResponse = z.infer<typeof completionResponseSchema>;
