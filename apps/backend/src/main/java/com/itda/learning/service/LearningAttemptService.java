@@ -80,7 +80,7 @@ public class LearningAttemptService {
     AttemptAnalysisResult analysis =
         LearningSessionAnalysisService.isAiGradable(analysisAttempt.targetText())
             ? analysisService.analyzeAttempt(userId, analysisAttempt, attemptedAt)
-            : analysisService.analyzeAttemptLocally(analysisAttempt);
+            : analysisService.analyzeAttemptLocally(userId, analysisAttempt, attemptedAt);
 
     boolean correct = isCorrect(expectedCells, command.inputPatterns());
     ProblemAttempt attempt =

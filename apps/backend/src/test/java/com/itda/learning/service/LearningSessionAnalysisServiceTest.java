@@ -16,6 +16,7 @@ import com.itda.learning.dto.LearningAttemptAnalysisFastApiResponse;
 import com.itda.learning.dto.LearningSessionSummaryFastApiRequest;
 import com.itda.learning.dto.LearningSessionSummaryFastApiResponse;
 import com.itda.learning.dto.LearningSkillStatePayload;
+import com.itda.learning.dto.LearningSkillStatesFastApiResponse;
 import com.itda.learning.service.LearningSessionAnalysisService.AnalysisAttempt;
 import com.itda.problem.domain.LearningSkill;
 import com.itda.problem.domain.Problem;
@@ -80,6 +81,10 @@ class LearningSessionAnalysisServiceTest {
         .willReturn(List.of(skill));
   }
 
+  private LearningSkillStatePayload skillStatePayload() {
+    return new LearningSkillStatePayload(SKILL_ID, 1, 0, ATTEMPTED_AT, 0.3, Map.of("dot_missing", 1L));
+  }
+
   @Test
   void 완성형_한글만_AI로_채점할_수_있다() {
     // apps/ai 의 kbraille.decompose 가 완성형 음절(U+AC00~U+D7A3)만 받는다
@@ -99,10 +104,13 @@ class LearningSessionAnalysisServiceTest {
   void 낱자_문항은_FastAPI_없이_문항의_학습요소로_채점한다() {
     LearningSessionAnalysisService.AttemptAnalysisResult result =
         service.analyzeAttemptLocally(
+            USER_ID,
             new LearningSessionAnalysisService.AnalysisAttempt(
-                PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000001)));
+                PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000001)),
+            ATTEMPTED_AT);
 
-    verifyNoInteractions(fastApiClient);
+    // 점역 경로를 타지 않는다는 것은 아래 별도 테스트가 지킨다. 여기서는 채점 결과만 본다 —
+    // 숙련도 갱신(POST /skill-states)은 FastAPI를 부르므로 verifyNoInteractions 는 더 이상 맞지 않다
     assertThat(result.skillResults())
         .singleElement()
         .satisfies(
@@ -118,8 +126,10 @@ class LearningSessionAnalysisServiceTest {
   void 낱자_문항을_맞히면_오류_없이_정답으로_기록한다() {
     LearningSessionAnalysisService.AttemptAnalysisResult result =
         service.analyzeAttemptLocally(
+            USER_ID,
             new LearningSessionAnalysisService.AnalysisAttempt(
-                PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000101)));
+                PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000101)),
+            ATTEMPTED_AT);
 
     assertThat(result.skillResults())
         .singleElement()
@@ -131,14 +141,63 @@ class LearningSessionAnalysisServiceTest {
   }
 
   @Test
-  void 낱자_문항은_숙련도를_갱신하지_않는다() {
-    // 숙련도는 AI의 BKT 추정기가 만드는 값이라 여기서는 만들 수 없다. 꾸며 낸 값을 저장하면
-    // 이후 약한 요소 판정이 그 값을 근거로 삼는다
-    service.analyzeAttemptLocally(
-        new LearningSessionAnalysisService.AnalysisAttempt(
-            PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000001)));
+  void 낱자_문항도_숙련도를_갱신한다() {
+    // 예전에는 갱신하지 않았다. 숙련도는 AI의 BKT 추정기가 만드는 값이고 낱자는 점역기가
+    // 분해하지 못해 그 경로를 탈 수 없었기 때문이다. 그 결과 자음·모음은 아무리 틀려도
+    // 약한 요소로 뽑히지 않아 복습에 영영 나오지 않았다.
+    //
+    // 이제 글자 없이 숙련도만 갱신하는 경로(POST /skill-states)가 있다
+    given(fastApiClient.updateSkillStates(org.mockito.ArgumentMatchers.any()))
+        .willReturn(new LearningSkillStatesFastApiResponse(List.of(skillStatePayload())));
+    given(userSkillMemoryRepository.saveAllAndFlush(org.mockito.ArgumentMatchers.anyList()))
+        .willAnswer(
+            invocation -> {
+              List<UserSkillMemory> memories = invocation.getArgument(0);
+              ReflectionTestUtils.setField(memories.getFirst(), "id", 100L);
+              return memories;
+            });
+    given(userSkillErrorCountRepository.findAllByUserSkillMemory_IdIn(List.of(100L)))
+        .willReturn(List.of());
 
-    verifyNoInteractions(userSkillMemoryRepository);
+    service.analyzeAttemptLocally(
+        USER_ID,
+        new LearningSessionAnalysisService.AnalysisAttempt(
+            PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000001)),
+        ATTEMPTED_AT);
+
+    verify(userSkillMemoryRepository).saveAllAndFlush(org.mockito.ArgumentMatchers.anyList());
+  }
+
+  @Test
+  void 낱자_문항은_점역_경로를_타지_않는다() {
+    // 글자를 보내면 같은 벽(non-Hangul 422)에 다시 부딪힌다
+    given(fastApiClient.updateSkillStates(org.mockito.ArgumentMatchers.any()))
+        .willReturn(new LearningSkillStatesFastApiResponse(List.of()));
+
+    service.analyzeAttemptLocally(
+        USER_ID,
+        new LearningSessionAnalysisService.AnalysisAttempt(
+            PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000001)),
+        ATTEMPTED_AT);
+
+    verify(fastApiClient, never()).analyzeLearningAttempt(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void 숙련도_갱신이_실패해도_채점_결과는_돌려준다() {
+    // 숙련도는 복습 추천에 쓰이는 부가 정보다. 그것 때문에 문항 제출이 통째로 실패하면
+    // 학습자는 답을 냈는데도 다음 문항으로 갈 수 없다
+    given(fastApiClient.updateSkillStates(org.mockito.ArgumentMatchers.any()))
+        .willThrow(new org.springframework.web.client.ResourceAccessException("연결 실패"));
+
+    LearningSessionAnalysisService.AttemptAnalysisResult result =
+        service.analyzeAttemptLocally(
+            USER_ID,
+            new LearningSessionAnalysisService.AnalysisAttempt(
+                PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000001)),
+            ATTEMPTED_AT);
+
+    assertThat(result.skillResults()).isNotEmpty();
   }
 
   @Test

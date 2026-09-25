@@ -10,6 +10,8 @@ import com.itda.learning.dto.LearningAttemptAnalysisFastApiResponse;
 import com.itda.learning.dto.LearningSessionSummaryFastApiRequest;
 import com.itda.learning.dto.LearningSessionSummaryFastApiResponse;
 import com.itda.learning.dto.LearningSkillStatePayload;
+import com.itda.learning.dto.LearningSkillStatesFastApiResponse;
+import com.itda.learning.dto.LearningSkillStatesFastApiRequest;
 import com.itda.problem.domain.ErrorType;
 import com.itda.problem.domain.LearningSkill;
 import com.itda.problem.domain.ProblemSkill;
@@ -88,13 +90,16 @@ public class LearningSessionAnalysisService {
    * 정한다. AI가 이 문항에서 더할 수 있는 것은 규칙 설명 문장 하나인데, 그것은 이미 {@code
    * learning_skills.description}에 있고 응답의 {@code violatedSkills}로 나간다.
    *
-   * <p><b>숙련도(user_skill_memory)는 갱신하지 않는다.</b> 그 값은 AI의 BKT 추정기가 만드는데
-   * 여기엔 추정기가 없다. 그래서 낱자 문항은 세션 요약의 {@code weakSkills}에 오르지 않는다 —
-   * 결과 화면은 그때 오류 유형 집계로 물러선다. 풀이와 요소별 정오는 그대로 저장되므로 기록이
-   * 사라지지는 않는다.
+   * <p>숙련도(user_skill_memory)도 갱신한다. 그 값은 AI의 BKT 추정기가 만들지만, 점역을 거치지
+   * 않고 요소별 정오만으로 갱신하는 경로({@code POST /skill-states})가 있다. 이것이 없던 동안에는
+   * 자음·모음이 아무리 틀려도 약한 요소로 뽑히지 않아 복습에 영영 나오지 않았다.
+   *
+   * <p>그 갱신이 실패해도 채점 결과는 돌려준다. 숙련도는 복습 추천에 쓰이는 부가 정보이고, 그것
+   * 때문에 문항 제출이 통째로 실패하면 학습자는 답을 냈는데도 다음 문항으로 갈 수 없다.
    */
   @Transactional(propagation = Propagation.MANDATORY)
-  public AttemptAnalysisResult analyzeAttemptLocally(AnalysisAttempt attempt) {
+  public AttemptAnalysisResult analyzeAttemptLocally(
+      long userId, AnalysisAttempt attempt, LocalDateTime attemptedAt) {
     Map<String, Long> errorCounts =
         AttemptErrorClassifier.classify(attempt.expectedPatterns(), attempt.inputPatterns());
     boolean correct = errorCounts.isEmpty();
@@ -106,7 +111,45 @@ public class LearningSessionAnalysisService {
             .sorted()
             .map(skillId -> new SkillResult(skillId, correct, errorCounts))
             .toList();
+    updateSkillStatesQuietly(userId, attempt, skillResults, attemptedAt);
     return new AttemptAnalysisResult(new FeedbackResult("", ""), skillResults);
+  }
+
+  /** 숙련도 갱신. 실패해도 풀이 자체는 살린다 (위 javadoc 참고) */
+  private void updateSkillStatesQuietly(
+      long userId,
+      AnalysisAttempt attempt,
+      List<SkillResult> skillResults,
+      LocalDateTime attemptedAt) {
+    if (skillResults.isEmpty()) {
+      return;
+    }
+    try {
+      SkillStateContext context = loadSkillStateContext(userId, List.of(attempt.problemId()));
+      // RestClient 는 빈 응답 본문에 null 을 돌려준다 — 그대로 쓰면 풀이 저장까지 NPE 로 무너진다
+      LearningSkillStatesFastApiResponse response =
+          fastApiClient.updateSkillStates(
+              new LearningSkillStatesFastApiRequest(
+                  context.skillStates(),
+                  skillResults.stream()
+                      .map(
+                          result ->
+                              new LearningSkillStatesFastApiRequest.SkillOutcome(
+                                  result.learningSkillId(), result.correct(), result.errorCounts()))
+                      .toList()));
+      if (response == null || response.updatedSkillStates().isEmpty()) {
+        return;
+      }
+      Map<Long, LearningSkill> referencedSkills =
+          loadLearningSkills(
+              response.updatedSkillStates().stream()
+                  .map(LearningSkillStatePayload::learningSkillId)
+                  .collect(Collectors.toSet()));
+      persistUpdatedSkillStates(
+          userId, response.updatedSkillStates(), referencedSkills, attemptedAt);
+    } catch (RestClientException exception) {
+      log.warn("FastAPI skill state update failed", exception);
+    }
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
