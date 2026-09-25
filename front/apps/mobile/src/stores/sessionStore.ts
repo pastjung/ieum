@@ -73,12 +73,15 @@ interface SessionState {
  * 바꾸는 것인데 그 함수는 실시간 수업도 쓰므로 함께 다뤄야 한다 — 이번 작업 범위 밖이다
  * (설계 9절에도 적어 두었다).
  *
- * **넘치는 답은 여기까지 오면 안 된다**: `gradeAnswer`는 앞 칸이 다 맞아도 칸이 남으면 오답으로
- * 판정하므로(`actual.length > expected.length` 분기), 잘라 보내면 화면은 "틀렸어요"인데 서버는
- * 정답으로 센다. 그래서 `play.tsx`의 제출 가드(`describeTooManyCells`)가 넘치는 입력을 애초에
- * 막는다. 여기의 자르기는 그 가드를 우회하는 경로가 생겼을 때를 위한 방어선이다 — 채점이 한
- * 문항에서 어긋나는 편이 세션 12문항을 통째로 잃는 것보다 낫다는 판단이며, 여기에 걸리는 답이
- * 있다면 그것은 `play.tsx` 쪽의 버그다.
+ * **넘치는 답은 이제 흔히 여기까지 온다**: `play.tsx`의 제출 가드(`describeTooManyCells`)는 더
+ * 이상 기대 칸 수 초과를 막지 않는다 — AI 분석의 입력 상한(12칸)만 본다(설계 4.1절, dev가
+ * `validateExpectedCells`에서 길이 동등 검사를 뺐다). 그래서 기대보다 많이 입력한 답도
+ * `attempt-analysis`까지는 그대로 간다. `gradeAnswer`는 앞 칸이 다 맞아도 칸이 남으면 오답으로
+ * 판정하므로(`actual.length > expected.length` 분기) 로컬 채점은 이미 끝난 뒤이고, 여기의
+ * 자르기는 오직 `/completion`(`buildAttempts`)으로 보낼 페이로드만을 위한 것이다 — 그쪽은
+ * 여전히 `expectedCells.size() != inputPatterns.size()`이면 세션 전체를 거부하므로
+ * (`LearningSessionCompletionService.validateCellInputs`), 자르지 않으면 넘친 답 하나가 세션
+ * 12문항을 통째로 실패시킨다.
  *
  * 기대 길이를 모르면(목 세션 등) 손대지 않는다.
  */

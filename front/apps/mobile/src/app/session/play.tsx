@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useRouter } from "expo-router";
 import { cellToDots, cellsToUnicode, type Cell } from "@ieum/domain";
@@ -9,8 +9,22 @@ import { AppButton } from "@/components/AppButton";
 import { useSessionStore } from "@/stores/sessionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { describeTooManyCells } from "@/services/answerLengthGuard";
+import { submitAttempt } from "@/services/attemptSubmission";
+import { learningService } from "@/services/learningService";
 import { announce, hapticError, hapticTap, speak } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
+
+/** 제출 뒤 서버 분석을 기다리는 동안의 화면·낭독 문구 (설계 4.1절) */
+const WAITING_MESSAGE = "확인하고 있어요.";
+
+/**
+ * `LEARNING_PROBLEM_ALREADY_ANALYZED`를 받았을 때의 안내. 오류가 아니라 응답 유실(앱 재시작
+ * 등)로 서버가 이미 끝낸 문항이다 — `submitAttempt` 주석 참고. 그 문항의 서버 피드백은 만들
+ * 수 없으므로 다음으로 넘어간다고만 알린다.
+ */
+const ALREADY_MESSAGE = "이미 확인한 문제예요. 다음으로 넘어갈게요.";
+
+type Phase = "idle" | "waiting" | "failed" | "exhausted";
 
 /** V14 문제 풀이 · 세로 V패드 / V14b 가로 두 손 입력 (기기를 돌리면 전환) */
 export default function SessionPlay() {
@@ -23,31 +37,76 @@ export default function SessionPlay() {
   const index = useSessionStore((s) => s.index);
   const submit = useSessionStore((s) => s.submit);
   const problem = useSessionStore((s) => s.current)();
+  const serverSessionId = useSessionStore((s) => s.serverSessionId);
+  const problemSessionIds = useSessionStore((s) => s.problemSessionIds);
+  const setLastAnalysis = useSessionStore((s) => s.setLastAnalysis);
   const isScreenMode = useSettingsStore((s) => s.mode) === "screen";
   const [cells, setCells] = useState<Cell[]>([]);
-  // 제출이 막힌 이유. 낭독만으로는 전달되지 않는다 — 음성·진동은 설정에서 끌 수 있고
-  // (`onboarding/accessibility.tsx`), 꺼져 있으면 `announce`도 `hapticError`도 아무 일을 하지
-  // 않는다. 그러면 길게 눌러도 화면이 그대로여서 왜 제출이 안 되는지 알 방법이 없다.
-  // 이 브랜치의 다른 실패 경로(`intro.tsx`·`analyzing.tsx`)와 같은 규칙으로 화면에도 띄운다.
-  const [blockedReason, setBlockedReason] = useState<string | null>(null);
+  // 제출이 막힌 이유 / 대기 중 / 실패 안내. 낭독만으로는 전달되지 않는다 — 음성·진동은
+  // 설정에서 끌 수 있고(`onboarding/accessibility.tsx`), 꺼져 있으면 `announce`도
+  // `hapticError`도 아무 일을 하지 않는다. 그러면 길게 눌러도 화면이 그대로여서 무슨 일이
+  // 있었는지 알 방법이 없다. 이 브랜치의 다른 화면(`intro.tsx`·`analyzing.tsx`)과 같은
+  // 규칙으로 화면에도 띄운다 — 화면 문구와 낭독 문구는 같은 문자열이다.
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  // idle: 입력 가능. waiting: 서버 분석 대기, 입력·제출 잠금. failed: 재시도 대기, 입력 잠금.
+  // exhausted: MAX_ATTEMPT_TRIES 소진, 전용 화면으로 대체된다.
+  const [phase, setPhase] = useState<Phase>("idle");
+  const locked = phase !== "idle";
+  // 문항마다 재시도 횟수를 새로 센다. `submitAttempt`가 시도 횟수로 실패 문구를 바꿔
+  // `speak()`의 1.5초 중복 제거를 피한다(`attemptSubmission.ts` 주석 참고).
+  const attemptRef = useRef(0);
+  // `analyzing.tsx`의 `mountedRef`와 같은 이유: 이 화면은 뒤로 가기를 막지 않으므로
+  // (`session/_layout.tsx`가 없다) 응답을 기다리는 동안 화면을 나갈 수 있다. 그 뒤 늦게
+  // 도착한 응답이 사용자가 지금 보고 있는 다른 화면을 튕겨내면 안 된다.
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     setCells([]);
-    setBlockedReason(null);
+    setStatusMessage(null);
+    setPhase("idle");
+    attemptRef.current = 0;
     if (problem) announce(`${index + 1}번 문제. ${problem.prompt}`);
   }, [problem, index]);
 
-  const commit = useCallback((cell: Cell) => {
-    setCells((prev) => [...prev, cell]);
-    // 입력이 달라졌으니 막힌 이유도 더 이상 사실이 아니다
-    setBlockedReason(null);
-    void hapticTap();
-  }, []);
+  const commit = useCallback(
+    (cell: Cell) => {
+      if (locked) return;
+      setCells((prev) => [...prev, cell]);
+      // 입력이 달라졌으니 막힌 이유도 더 이상 사실이 아니다
+      setStatusMessage(null);
+      void hapticTap();
+    },
+    [locked],
+  );
 
   if (!session || !problem) {
     return (
       <ScreenShell style={styles.center}>
         <Text style={{ color: theme.color.text, fontSize: 20, fontWeight: "700" }}>진행 중인 학습이 없어요</Text>
+        <AppButton label="홈으로" onPress={() => router.replace("/(tabs)")} />
+      </ScreenShell>
+    );
+  }
+
+  // 시도를 소진했다 — 전용 화면으로 대체한다. 재시도해도 성공할 수 없는 실패가 실재하므로
+  // (12칸 초과 문제 등) 입력·재시도를 계속 보여 주면 사용자를 이 화면에 가둔다.
+  if (phase === "exhausted") {
+    return (
+      <ScreenShell style={styles.center}>
+        <Text
+          accessibilityRole="header"
+          accessibilityLiveRegion="polite"
+          style={{ fontSize: 22 * fontScale, fontWeight: "800", lineHeight: 32, color: theme.color.text, textAlign: "center" }}
+        >
+          {statusMessage}
+        </Text>
         <AppButton label="홈으로" onPress={() => router.replace("/(tabs)")} />
       </ScreenShell>
     );
@@ -65,30 +124,104 @@ export default function SessionPlay() {
     );
   };
 
+  /**
+   * 문항 하나를 서버로 보내고 응답에 따라 화면을 옮긴다(설계 4.1절).
+   *
+   * 로컬 기록(`submit`)은 여기서 하지 않는다 — 재시도가 다시 이 함수를 부르므로, 여기서
+   * 기록하면 같은 답이 `answers[]`에 여러 번 쌓여 `correctCount()`가 부풀려진다. 로컬 기록은
+   * 첫 제출(`submitAnswer`)에서 한 번만 한다.
+   */
+  const runAttempt = async (inputPatterns: Cell[]) => {
+    if (serverSessionId === null) return;
+    const problemSessionId = problemSessionIds[index];
+    // 정상 경로에서는 일어나지 않는다 — 서버 세션인데 배정 식별자가 없다면 이 문항은 서버가
+    // 모르는 것이니 보낼 수 없다. 결과 화면은 로컬 채점 결과를 그대로 보여 준다.
+    if (problemSessionId === undefined) {
+      router.replace("/session/grade");
+      return;
+    }
+
+    attemptRef.current += 1;
+    const attempt = attemptRef.current;
+    setPhase("waiting");
+    setStatusMessage(WAITING_MESSAGE);
+    announce(WAITING_MESSAGE);
+
+    const outcome = await submitAttempt({
+      analyze: learningService.analyzeAttempt,
+      sessionId: serverSessionId,
+      problemSessionId,
+      inputPatterns,
+      attempt,
+    });
+
+    // 화면을 떠난 뒤 도착한 응답이다 — 상태를 바꾸거나 다른 화면으로 튕겨내지 않는다
+    if (!mountedRef.current) return;
+
+    switch (outcome.kind) {
+      case "analyzed":
+        setLastAnalysis(outcome.result);
+        setPhase("idle");
+        setStatusMessage(null);
+        router.replace("/session/grade");
+        return;
+      case "already":
+        announce(ALREADY_MESSAGE);
+        setPhase("idle");
+        setStatusMessage(null);
+        router.replace("/session/grade");
+        return;
+      case "failed":
+        void hapticError();
+        setPhase("failed");
+        setStatusMessage(outcome.message);
+        announce(outcome.message);
+        return;
+      case "exhausted":
+        void hapticError();
+        setPhase("exhausted");
+        setStatusMessage(outcome.message);
+        announce(outcome.message);
+        return;
+    }
+  };
+
   const submitAnswer = () => {
+    if (locked) return;
     if (cells.length === 0) {
       announce("아직 입력한 칸이 없어요. 점을 짚고 손을 떼면 한 칸이 입력돼요.");
       return;
     }
-    // 서버는 칸 수가 정확히 맞아야 답을 받는다. 넘친 채로 보내면 `buildAttempts`가 잘라서
-    // 보내게 되는데, `gradeAnswer`는 넘친 답을 오답으로 판정하므로 화면과 서버 채점이 갈라진다
-    // — 문항마다 "틀렸어요"를 듣고 결과 화면에서는 만점을 보게 된다. 여기서 막는다.
-    // 모자란 답은 그대로 보낸다 — 빈 칸으로 채워도 양쪽 다 오답이라 어긋나지 않는다.
-    const tooMany = describeTooManyCells(cells.length, problem.expectedCells.length);
+    // AI 분석은 12칸까지만 받는다. 기대 칸 수와는 무관하다(`answerLengthGuard.ts` 주석) —
+    // 기대 칸 수 초과는 이제 막지 않고 서버가 오답으로 채점한다.
+    const tooMany = describeTooManyCells(cells.length);
     if (tooMany) {
       void hapticError();
       // 화면 문구와 낭독 문구는 같은 문자열이다 (설계 8절)
-      setBlockedReason(tooMany);
+      setStatusMessage(tooMany);
       announce(tooMany);
       return;
     }
-    setBlockedReason(null);
+    setStatusMessage(null);
+    // 수업 경로와 correctCount()가 이 로컬 기록을 쓴다. 서버 분석 성패와 무관하게 한 번만 한다
     submit(cells);
-    router.replace("/session/grade");
+
+    // 목 세션(serverSessionId === null)은 지금처럼 바로 결과 화면으로 간다 — 실시간 수업과
+    // 목 데이터 경로는 서버 분석을 받지 않는다.
+    if (serverSessionId === null) {
+      router.replace("/session/grade");
+      return;
+    }
+    void runAttempt(cells);
+  };
+
+  const retry = () => {
+    void runAttempt(cells);
   };
 
   const eraseLast = () => {
-    setBlockedReason(null);
+    if (locked) return;
+    setStatusMessage(null);
     setCells((prev) => {
       if (prev.length === 0) {
         announce("지울 칸이 없어요.");
@@ -98,6 +231,11 @@ export default function SessionPlay() {
       return prev.slice(0, -1);
     });
   };
+
+  const submitButtonProps =
+    phase === "failed"
+      ? { label: "다시 보내기", onPress: retry }
+      : { label: "길게 눌러 제출", requireLongPress: true, onPress: submitAnswer, onShortPress: readInput };
 
   // V14b 가로 두 손 입력 — 왼손 3·2·1, 오른손 6·5·4
   if (isLandscape) {
@@ -123,15 +261,15 @@ export default function SessionPlay() {
                 <AppButton label={"다시\n듣기"} variant="compact" onPress={() => speak(problem.prompt, { force: true })} />
               </View>
               <View style={{ flex: 1 }}>
-                <AppButton label="지우기" variant="compact" onPress={eraseLast} />
+                <AppButton label="지우기" variant="compact" disabled={locked} onPress={eraseLast} />
               </View>
               <View style={{ flex: 1.4 }}>
-                <AppButton label={"입력\n완료"} requireLongPress onPress={submitAnswer} onShortPress={readInput} />
+                <AppButton {...submitButtonProps} disabled={phase === "waiting"} />
               </View>
             </>
           }
         />
-        {blockedReason !== null && (
+        {statusMessage !== null && (
           <Text
             accessibilityLiveRegion="polite"
             style={{
@@ -147,7 +285,7 @@ export default function SessionPlay() {
               textAlign: "center",
             }}
           >
-            {blockedReason}
+            {statusMessage}
           </Text>
         )}
         <Text style={{ fontSize: 13, color: theme.color.textMuted, textAlign: "center" }}>
@@ -195,7 +333,7 @@ export default function SessionPlay() {
           </Text>
         </View>
       )}
-      {blockedReason !== null && (
+      {statusMessage !== null && (
         <Text
           accessibilityLiveRegion="polite"
           style={{
@@ -210,7 +348,7 @@ export default function SessionPlay() {
             paddingVertical: 10,
           }}
         >
-          {blockedReason}
+          {statusMessage}
         </Text>
       )}
       <View style={{ flexDirection: "row", gap: 10 }}>
@@ -218,11 +356,11 @@ export default function SessionPlay() {
           <AppButton label="문제 다시 듣기" variant="compact" onPress={() => speak(problem.prompt, { force: true })} />
         </View>
         <View style={{ flex: 1 }}>
-          <AppButton label="한 칸 지우기" variant="compact" accessibilityHint="마지막에 입력한 칸을 지워요" onPress={eraseLast} />
+          <AppButton label="한 칸 지우기" variant="compact" accessibilityHint="마지막에 입력한 칸을 지워요" disabled={locked} onPress={eraseLast} />
         </View>
       </View>
       <DotPad onCommitCell={commit} />
-      <AppButton label="길게 눌러 제출" requireLongPress onPress={submitAnswer} onShortPress={readInput} />
+      <AppButton {...submitButtonProps} disabled={phase === "waiting"} />
     </ScreenShell>
   );
 }
