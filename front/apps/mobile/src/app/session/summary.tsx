@@ -31,7 +31,11 @@ export default function Summary() {
   const reset = useSessionStore((s) => s.reset);
   const { data: skills } = useQuery({ queryKey: ["skills"], queryFn: learningService.getSkillLevels });
   // 서버가 세션 요약을 못 만들었거나(notAvailable) 목 세션이면 lines가 비어 있다 —
-  // 그때는 지금과 같은 화면을 그대로 보여준다
+  // 그때는 지금과 같은 화면을 그대로 보여준다.
+  //
+  // 점수 문장은 여기(앱)가 책임진다. `selectSessionSummaryFeedback`이 서버 문구에서 점수
+  // 부분을 떼고 조언만 남기므로, 한 화면에서 점수는 아래 `scoreAnnouncement` 한 번,
+  // 그것도 화면에 보이는 `correct` / `total`과 같은 숫자로만 나온다
   const summaryFeedback = selectSessionSummaryFeedback(serverResult);
 
   useEffect(() => {
