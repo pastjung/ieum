@@ -8,7 +8,6 @@ import { AppButton } from "@/components/AppButton";
 import { IeumFace } from "@/components/IeumFace";
 import { authService } from "@/services/authService";
 import { learningService } from "@/services/learningService";
-import { todayReview } from "@/services/mockData";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useTactileStore } from "@/stores/tactileStore";
 import { announce, hapticError, hapticTap } from "@/a11y";
@@ -99,6 +98,11 @@ function VoiceHome() {
     router.push("/session/intro");
   };
 
+  /** 복습은 단계를 고르지 않는다 — 서버가 내 기록에서 약한 요소를 골라 출제한다 */
+  const goReview = () => {
+    router.push({ pathname: "/session/intro", params: { mode: "review" } });
+  };
+
   const bigButton = (label: string, sub: string | null, primary: boolean, onPress: () => void, flex = 1) => (
     <Pressable
       accessibilityRole="button"
@@ -155,6 +159,12 @@ function VoiceHome() {
         {homeSummary?.inProgress ? (
           <>
             {bigButton("이어서 학습", `${homeSummary.inProgress.title} · ${homeSummary.inProgress.progressLabel}`, true, goSession, 1.4)}
+            {/*
+              진행 중 세션이 있어도 복습은 닿을 수 있어야 한다. 예전에는 이 가지에 복습이
+              없어서 — 그리고 목 데이터의 inProgress가 늘 값이 있어서 — 시각장애인용 홈에는
+              복습 진입점이 아예 없었다. 화면 모드에 따라 쓸 수 있는 기능이 달라지면 안 된다
+            */}
+            {bigButton("복습 시작", null, false, goReview)}
             {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
             <ListRow
               label="점자 장치"
@@ -165,7 +175,7 @@ function VoiceHome() {
           </>
         ) : (
           <>
-            {bigButton("복습 시작", null, true, goSession, 1.4)}
+            {bigButton("복습 시작", null, true, goReview, 1.4)}
             {bigButton("새 단계 학습", null, false, () => router.push("/(tabs)/learn"))}
             {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
           </>
@@ -246,27 +256,19 @@ function ScreenHome() {
               전체 보기 ▸
             </Text>
           </View>
-          <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-            {todayReview.map((item) => (
-              <Text
-                key={item}
-                style={{
-                  borderWidth: 1.5,
-                  borderColor: theme.color.border,
-                  borderRadius: 99,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  fontSize: 14 * fontScale,
-                  fontWeight: "700",
-                  color: theme.color.text,
-                  overflow: "hidden",
-                }}
-              >
-                {item}
-              </Text>
-            ))}
-          </View>
-          <AppButton label="복습 시작" variant="compact" onPress={() => router.push("/session/intro")} />
+          {/*
+            무엇을 복습할지 미리 보여주던 칩 세 개(받침 ㅆ·자음 ㅅ·모음 ㅕ)는 고정값이었다.
+            내 약한 요소를 세션 밖에서 알려주는 API가 아직 없어(weakSkills는 완료 응답에만
+            실린다) 지금은 지운다. 고정값을 내 실력처럼 보여주느니 말하지 않는 편이 낫다
+          */}
+          <Text style={{ fontSize: 15 * fontScale, color: theme.color.textMuted, lineHeight: 24 }}>
+            약했던 것부터 다시 풀어요.
+          </Text>
+          <AppButton
+            label="복습 시작"
+            variant="compact"
+            onPress={() => router.push({ pathname: "/session/intro", params: { mode: "review" } })}
+          />
         </View>
 
         <ListRow

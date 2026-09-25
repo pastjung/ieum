@@ -46,7 +46,7 @@ function VoiceSkills() {
         />
       ))}
       <View style={{ marginTop: "auto" }}>
-        <AppButton label="약한 것부터 복습" onPress={() => router.push("/session/intro")} accessibilityHint="더 연습이 필요한 것부터 복습을 시작해요" />
+        <AppButton label="약한 것부터 복습" onPress={() => router.push({ pathname: "/session/intro", params: { mode: "review" } })} accessibilityHint="더 연습이 필요한 것부터 복습을 시작해요" />
       </View>
     </ScreenShell>
   );
@@ -131,7 +131,7 @@ function ScreenSkills() {
           ))}
         </View>
       </ScrollView>
-      <AppButton label="약한 것부터 복습" onPress={() => router.push("/session/intro")} />
+      <AppButton label="약한 것부터 복습" onPress={() => router.push({ pathname: "/session/intro", params: { mode: "review" } })} />
     </ScreenShell>
   );
 }

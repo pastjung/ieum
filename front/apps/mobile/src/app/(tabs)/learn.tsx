@@ -77,9 +77,9 @@ function ScreenLearn() {
         />
         <ListRow
           label="복습 학습"
-          description="약한 요소부터 다시 다져요 · 받침 ㅆ 외 2"
+          description="약한 요소부터 다시 다져요"
           chevron
-          onPress={() => router.push("/session/intro")}
+          onPress={() => router.push({ pathname: "/session/intro", params: { mode: "review" } })}
         />
         <ListRow
           label="테마 선택"
