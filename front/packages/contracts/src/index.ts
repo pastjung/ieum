@@ -316,6 +316,29 @@ export const inProgressSessionSchema = z.object({
 });
 export type InProgressSession = z.infer<typeof inProgressSessionSchema>;
 
+/**
+ * 요소 하나의 숙련 상태. `label`의 기준(`label_of`)은 FastAPI에만 있다 — 앱이나 백엔드가
+ * 문턱값을 베끼면 세션 요약과 "내 실력" 화면이 서로 다른 말을 한다.
+ */
+export const skillMasterySchema = z.object({
+  learningSkillId: identifierSchema,
+  name: z.string().min(1),
+  /** 0~1 숙련 추정치 */
+  masteryProb: z.number().nullable(),
+  /** "익숙해요" | "배우는 중" | "더 연습해요" */
+  label: z.string().min(1),
+});
+export type SkillMastery = z.infer<typeof skillMasterySchema>;
+
+/** "내 실력" 화면과 홈 복습 카드가 읽는다. `skills`는 약한 것부터 정렬돼 온다 */
+export const skillSummarySchema = z.object({
+  totalAttemptCount: z.number().int().nonnegative(),
+  correctAttemptCount: z.number().int().nonnegative(),
+  /** FastAPI가 응답하지 않으면 비어 있다. 그때도 위 통계는 그대로 온다 */
+  skills: z.array(skillMasterySchema),
+});
+export type SkillSummary = z.infer<typeof skillSummarySchema>;
+
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),

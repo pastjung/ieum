@@ -1,6 +1,7 @@
 import {
   inProgressSessionSchema,
   problemsResponseSchema,
+  skillSummarySchema,
   completionResponseSchema,
   attemptAnalysisRequestSchema,
   attemptAnalysisResponseSchema,
@@ -10,10 +11,11 @@ import {
   type CompletionResponse,
   type LearningSession,
   type ProblemsResponse,
+  type SkillSummary,
 } from "@ieum/contracts";
 import { api } from "./apiClient";
 import type { ServerSessionMeta } from "@/stores/sessionStore";
-import { skillLevels, type LearningThemeId } from "./mockData";
+import { type LearningThemeId } from "./mockData";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -158,6 +160,16 @@ export const learningService = {
     return toSession({ ...response, problems: remaining }, undefined, "이어서 학습");
   },
 
+  /**
+   * 내 요소별 숙련 상태와 풀이 통계.
+   *
+   * 지금까지 숙련 라벨은 세션 완료 응답에만 실려서, "내 실력" 화면과 홈 복습 카드는
+   * 세션 밖에서 알 방법이 없어 고정값을 내 실력처럼 보여주고 있었다.
+   */
+  async getSkillSummary(): Promise<SkillSummary> {
+    return skillSummarySchema.parse(await api.get("/learning-sessions/skill-summary"));
+  },
+
   /** 세션의 모든 답안을 한 번에 제출한다. 이 응답이 최종 채점 결과다 */
   async completeSession(
     sessionId: number,
@@ -188,8 +200,4 @@ export const learningService = {
 
   /* ─── 아래는 아직 목이다. 대응 엔드포인트가 없다 ─── */
 
-  async getSkillLevels() {
-    await delay(200);
-    return skillLevels;
-  },
 };
