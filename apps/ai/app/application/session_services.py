@@ -168,22 +168,30 @@ class SessionService:
     def _known_kcs(self) -> set[str]:
         return {s.kc for s in self.catalog.all()}
 
-    # ── ① 문항 하나 ────────────────────────────────────────────────────────
-    def analyze_attempt(
-        self, attempt: Attempt, skill_states: list[SkillState], now: datetime | None = None
-    ) -> AttemptAnalysis:
-        now = now or datetime.now(UTC).replace(tzinfo=None)
-        warnings: list[str] = []
-        graded = self._grade(attempt, warnings)
-        results = self._skill_results(graded)
+    # ── 숙련도 갱신 (점역을 거치지 않는다) ──────────────────────────────────
+    def apply_results(
+        self,
+        results: list[SkillResult],
+        skill_states: list[SkillState],
+        now: datetime | None = None,
+    ) -> list[SkillState]:
+        """요소별 정오만으로 학습자 상태를 갱신한다.
 
+        analyze_attempt 가 채점을 마친 뒤 쓰던 블록을 그대로 떼어냈다. 점역 결과(graded)를
+        보지 않으므로 글자가 없어도 쓸 수 있다 — 자음·모음 단계 문항은 'ㄱ'·'ㅙ' 같은
+        낱자라 점역기가 분해하지 못해 Spring 이 직접 채점하는데, 숙련도는 여기(BKT)에만
+        있어 갱신할 방법이 없었다. 그 탓에 자음·모음은 아무리 틀려도 약한 요소로 뽑히지
+        않아 복습에 영영 나오지 않았다.
+
+        catalog 를 조회하지 않는다. 옛 코드가 kc 를 꺼낸 것은 to_estimate 의 인자 때문인데
+        _decay 는 그 값을 쓰지 않는다(마지막 연습 시각과 정답 횟수만 본다).
+        """
+        now = now or datetime.now(UTC).replace(tzinfo=None)
         states = {s.learning_skill_id: s for s in skill_states}
         updated: list[SkillState] = []
         for r in results:
-            kc = self.catalog.by_id(r.learning_skill_id)
-            assert kc is not None
             s = states.get(r.learning_skill_id) or SkillState(r.learning_skill_id)
-            est_state = s.to_estimate(kc.kc)
+            est_state = s.to_estimate("")
             p = s.mastery_prob
             if p is not None and s.last_practiced_at is not None:
                 p = self.estimator._decay(p, est_state, now)  # 마지막 연습 후 망각을 먼저 반영
@@ -201,6 +209,18 @@ class SessionService:
                     error_counts=counts,
                 )
             )
+        return updated
+
+    # ── ① 문항 하나 ────────────────────────────────────────────────────────
+    def analyze_attempt(
+        self, attempt: Attempt, skill_states: list[SkillState], now: datetime | None = None
+    ) -> AttemptAnalysis:
+        now = now or datetime.now(UTC).replace(tzinfo=None)
+        warnings: list[str] = []
+        graded = self._grade(attempt, warnings)
+        results = self._skill_results(graded)
+
+        updated = self.apply_results(results, skill_states, now)
         fb = graded["feedback"]
         detail = self._detail(graded, results)
         return AttemptAnalysis(
