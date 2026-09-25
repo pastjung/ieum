@@ -94,6 +94,26 @@ class ProblemRepositoryTest {
     assertThat(found).extracting(Problem::getId).doesNotContain(longOne.getId());
   }
 
+  /**
+   * 오답 재출제 경로가 쓰는 조회다. 오답 문제는 {@link ProblemRepository#findAssignableByLevel}의 후보에서 제외될 뿐 따로 배정되므로,
+   * 여기서 같은 셀 상한을 적용하지 않으면 13칸 이상 문제가 상한 검사를 통째로 비껴간다.
+   */
+  @Test
+  void 지정한_문제들_중_셀이_상한_이하인_것만_돌려준다() {
+    Problem shortOne = persistWithCells(Level.WORD, "가방", List.of(0b000001));
+    Problem exact =
+        persistWithCells(Level.WORD, "딱상한", List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
+    Problem longOne =
+        persistWithCells(Level.WORD, "긴문제", List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13));
+
+    List<Long> assignable =
+        problemRepository.findAssignableIdsIn(
+            List.of(shortOne.getId(), exact.getId(), longOne.getId()), 12L);
+
+    assertThat(assignable).contains(shortOne.getId(), exact.getId());
+    assertThat(assignable).doesNotContain(longOne.getId());
+  }
+
   private Problem persistWithCells(Level level, String targetText, List<Integer> expectedPatterns) {
     Problem saved = entityManager.persistFlushFind(new Problem(level, targetText));
     for (int index = 0; index < expectedPatterns.size(); index++) {

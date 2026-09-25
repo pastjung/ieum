@@ -27,10 +27,12 @@ import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.domain.ProblemSession;
 import com.itda.problem.domain.ProblemSkill;
 import com.itda.problem.domain.SkillType;
+import com.itda.problem.domain.UserWrongProblem;
 import com.itda.problem.dto.NewStudyRequest;
 import com.itda.problem.dto.ProblemAnalyzeResponse;
 import com.itda.problem.dto.ProblemsResponse;
 import com.itda.problem.dto.RegisterProblemRequest;
+import com.itda.problem.dto.ReviewAnalyzeResponse;
 import com.itda.problem.dto.SkillSet;
 import com.itda.problem.repository.LearningSkillQueryRepository;
 import com.itda.problem.repository.LearningSkillRepository;
@@ -52,6 +54,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -460,6 +463,60 @@ class ProblemServiceTest {
         ErrorCode.USER_NOT_FOUND);
   }
 
+  /**
+   * 오답 재출제 경로는 {@code findAssignableByLevel}의 후보에서 <b>제외</b>될 뿐 따로 배정되므로, 그 조회의 셀 상한을 거치지 않는다. 13칸
+   * 이상 문제를 틀린 적 있는 학습자가 그것을 다시 받으면 FastAPI가 분석을 거부해 그 문항의 {@code ProblemSession}이 완료되지 않고, 세션 전체를
+   * 끝낼 수 없다.
+   */
+  @Test
+  void 셀이_상한을_넘는_오답_문제는_다시_출제되지_않는다() {
+    long learnerId = 9L;
+    long curriculumId = 1L;
+    AuthenticatedUser learner = new AuthenticatedUser(learnerId, UserRole.LEARNER);
+
+    CurriculumStage stage = mock(CurriculumStage.class);
+    given(stage.getLevel()).willReturn(Level.WORD);
+    given(curriculumStageRepository.findById(curriculumId)).willReturn(Optional.of(stage));
+
+    User learnerEntity = mock(User.class);
+    given(userJpaRepository.findById(learnerId)).willReturn(Optional.of(learnerEntity));
+    given(
+            learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
+                learnerEntity))
+        .willReturn(List.of());
+
+    Problem shortWrong = problem(101L, "짧은오답");
+    Problem longWrong = problem(102L, "긴오답");
+    given(
+            userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedIsNull(
+                learnerId, Level.WORD))
+        .willReturn(
+            new ArrayList<>(
+                List.of(
+                    wrongProblem(learnerEntity, shortWrong),
+                    wrongProblem(learnerEntity, longWrong))));
+
+    // 셀 상한 조회는 짧은 오답만 돌려준다 — 긴 오답은 배정 후보가 아니다
+    given(problemRepository.findAssignableIdsIn(List.of(101L, 102L), 12L))
+        .willReturn(List.of(101L));
+
+    List<Problem> pool = new ArrayList<>();
+    for (long i = 1; i <= 11; i++) {
+      pool.add(problem(i, "문제" + i));
+    }
+    given(problemRepository.findAssignableByLevel(Level.WORD, List.of(101L), 12L)).willReturn(pool);
+    given(problemCellRepository.findAllByProblem_IdInOrderByProblem_IdAscCellIndexAsc(any()))
+        .willReturn(List.of());
+    given(problemSessionRepository.saveAll(any()))
+        .willAnswer(invocation -> invocation.getArgument(0));
+
+    ProblemsResponse response =
+        problemService.learningWithNewSession(learner, new NewStudyRequest(curriculumId));
+
+    assertThat(response.problems()).extracting(detail -> detail.problemId()).contains(101L);
+    assertThat(response.problems()).extracting(detail -> detail.problemId()).doesNotContain(102L);
+  }
+
   @Test
   void 출제할_문제가_부족하면_학습_세션을_생성할_수_없다() {
     com.itda.curriculum.domain.CurriculumStage curriculumStage =
@@ -472,6 +529,85 @@ class ProblemServiceTest {
     assertError(
         () -> problemService.learningWithNewSession(INSTRUCTOR, new NewStudyRequest(5L)),
         ErrorCode.LEARNING_CONTENT_NOT_READY);
+  }
+
+  /**
+   * 복습 출제는 {@code HashSet}이 {@code i * 4}가 될 때까지 무작위 추출을 반복했다. 후보가 4개 미만이면 그 반복은 절대 끝나지 않는다 — 예외도
+   * 나지 않고 요청 스레드가 CPU를 태우며 영구히 붙잡힌다. {@code @Timeout}을 두는 이유가 이것이다: 회귀하면 이 테스트는 실패가 아니라 <b>영영 끝나지
+   * 않는다</b>.
+   */
+  @Test
+  @Timeout(10)
+  void 복습_출제_후보가_모자라면_영원히_반복하지_않고_거부한다() {
+    AuthenticatedUser learner = givenReviewLearner();
+    givenReviewSkills(1L, 2L, 3L);
+    // 첫 요소의 후보가 3개뿐이다 — 4개를 뽑을 수 없다
+    given(problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, 1L, 12L))
+        .willReturn(List.of(problem(1L, "하나"), problem(2L, "둘"), problem(3L, "셋")));
+
+    assertError(
+        () -> problemService.reviewWithNewSession(learner), ErrorCode.LEARNING_CONTENT_NOT_READY);
+  }
+
+  /**
+   * 후보가 4개여도 그것이 모두 앞 요소에서 이미 뽑힌 문제라면 {@code HashSet}의 크기는 더 늘지 않는다 — 개수만 세는 가드로는 막히지 않는 두 번째 무한
+   * 반복이다.
+   */
+  @Test
+  @Timeout(10)
+  void 복습_후보가_앞_요소와_완전히_겹치면_거부한다() {
+    AuthenticatedUser learner = givenReviewLearner();
+    givenReviewSkills(1L, 2L, 3L);
+    List<Problem> shared =
+        List.of(problem(1L, "하나"), problem(2L, "둘"), problem(3L, "셋"), problem(4L, "넷"));
+    given(problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, 1L, 12L))
+        .willReturn(shared);
+    given(problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, 2L, 12L))
+        .willReturn(shared);
+
+    assertError(
+        () -> problemService.reviewWithNewSession(learner), ErrorCode.LEARNING_CONTENT_NOT_READY);
+  }
+
+  /** 분석이 요소를 세 개 채워 주지 못하면 {@code learningSkillIds.get(2)}가 {@code IndexOutOfBounds}로 500이 된다. */
+  @Test
+  @Timeout(10)
+  void 복습_분석이_학습_요소를_세_개_주지_못하면_거부한다() {
+    AuthenticatedUser learner = givenReviewLearner();
+    givenReviewSkills(1L, 2L);
+
+    assertError(
+        () -> problemService.reviewWithNewSession(learner), ErrorCode.LEARNING_CONTENT_NOT_READY);
+  }
+
+  private AuthenticatedUser givenReviewLearner() {
+    long learnerId = 9L;
+    User learnerEntity = mock(User.class);
+    given(learnerEntity.getLevel()).willReturn(Level.WORD);
+    given(userJpaRepository.findById(learnerId)).willReturn(Optional.of(learnerEntity));
+    given(
+            learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(
+                learnerEntity))
+        .willReturn(List.of());
+    given(userSkillMemoryRepository.findAllByUser_Id(learnerId)).willReturn(List.of());
+    given(userSkillErrorCountRepository.findAllByUserSkillMemory_IdIn(List.of()))
+        .willReturn(List.of());
+    return new AuthenticatedUser(learnerId, UserRole.LEARNER);
+  }
+
+  private void givenReviewSkills(Long... learningSkillIds) {
+    given(fastApiClient.reviewAnalyze(any()))
+        .willReturn(new ReviewAnalyzeResponse(List.of(learningSkillIds)));
+  }
+
+  private static Problem problem(long id, String targetText) {
+    Problem problem = new Problem(Level.WORD, targetText);
+    ReflectionTestUtils.setField(problem, "id", id);
+    return problem;
+  }
+
+  private static UserWrongProblem wrongProblem(User user, Problem problem) {
+    return new UserWrongProblem(user, problem, Level.WORD);
   }
 
   private Lecture givenLecture() {

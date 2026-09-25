@@ -56,4 +56,23 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
       @Param("level") Level level,
       @Param("excludedIds") Collection<Long> excludedIds,
       @Param("maxCells") long maxCells);
+
+  /**
+   * 주어진 문제들 중 출제 가능한(셀 수가 상한 이하인) 것의 id만 고른다.
+   *
+   * <p>오답 재출제 경로가 쓴다. 오답 문제는 {@link #findAssignableByLevel}의 후보에서 <b>제외</b>될 뿐 따로 배정되므로, 그 조회의 셀
+   * 상한을 거치지 않는다. 13칸 이상인 문제를 틀린 적 있는 학습자는 그것을 다시 배정받고, FastAPI가 분석을 거부해 그 문항의 {@code
+   * ProblemSession}이 완료되지 않아 세션 전체를 끝낼 수 없다. 상한은 두 경로에서 같은 값({@code MAX_ASSIGNABLE_CELLS})이어야 한다.
+   *
+   * <p>{@code ids}가 비어 있으면 호출하지 않는다 — 빈 {@code IN} 목록은 JPQL에서 다루지 않는 편이 안전하다.
+   */
+  @Query(
+      """
+      SELECT p.id
+      FROM Problem p
+      WHERE p.id IN :ids
+        AND (SELECT COUNT(c) FROM ProblemCell c WHERE c.problem = p) <= :maxCells
+      """)
+  List<Long> findAssignableIdsIn(
+      @Param("ids") Collection<Long> ids, @Param("maxCells") long maxCells);
 }
