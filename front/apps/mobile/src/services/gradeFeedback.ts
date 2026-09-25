@@ -66,10 +66,15 @@ export function selectGradeFeedback(
   local: GradeResult | null,
 ): GradeFeedback | null {
   if (analysis) {
+    // 규칙 설명은 `detail`이다. `tts`가 아니다 — 둘은 AI가 만드는 서로 다른 문장이다
+    // (`apps/ai` 의 `session_services._detail`). `tts`는 AI가 자체 채점한 점 수준 서술이라
+    // 우리 XOR 설명과 겹치고 백엔드 채점과 갈릴 수 있다. 학습자가 "왜 틀렸는지"를 아는
+    // 경로는 `detail` 하나뿐인데, 앱이 오랫동안 이 둘을 뒤바꿔 써서 규칙 설명이 화면에
+    // 나온 적이 없었다
     const { headline, steps } = describeCells(
       analysis.cells,
       analysis.correct,
-      analysis.feedback.tts,
+      analysis.feedback.detail,
     );
     // `describeCells`가 틀린 칸마다 단계를 만들고 그 칸 번호(`cellIndex`)를 달아 준다.
     // 그릴 칸은 그 번호로 되찾는다 — 두 곳에서 따로 "틀린 칸"을 고르면 어긋날 수 있다

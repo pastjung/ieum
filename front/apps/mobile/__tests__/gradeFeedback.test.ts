@@ -102,6 +102,45 @@ describe("서버 분석과 로컬 결과 중 무엇을 쓸지 고른다", () => 
     expect(result?.steps[1].speech).toContain("두 번째 칸");
   });
 
+  it("규칙 설명은 feedback.detail 에서 가져온다 (tts 가 아니다)", () => {
+    // AI는 두 문장을 따로 만든다 (`apps/ai` 의 `session_services._detail`):
+    //   tts    — AI가 자체 채점한 점 수준 서술. 우리 XOR 설명과 겹치고, 백엔드 채점과
+    //            갈릴 수 있어 오답 화면에 쓰면 두 채점이 한 화면에서 싸운다
+    //   detail — 규칙 설명("첫소리 이응은 점자로 적지 않습니다"). 학습자가 왜 틀렸는지
+    //            아는 유일한 경로다
+    // 앱은 오랫동안 이 둘을 뒤바꿔 써서 규칙 설명이 화면에 나온 적이 없었다
+    const cells = [cell(1, 0b000101, 0b000001, [3], [])];
+    const result = selectGradeFeedback(
+      analysis({
+        correct: false,
+        cells,
+        feedback: {
+          tts: "AI가 다시 채점한 점 수준 서술",
+          detail: "첫소리 이응은 점자로 적지 않습니다.",
+        },
+      }),
+      null,
+    );
+
+    expect(result?.steps[0].speech).toContain("첫소리 이응은 점자로 적지 않습니다.");
+    expect(result?.steps[0].speech).not.toContain("AI가 다시 채점한 점 수준 서술");
+  });
+
+  it("정답 화면에는 규칙 설명을 붙이지 않는다", () => {
+    // `correct`(백엔드가 DB 시드로 채점)와 AI 문장은 서로 다른 채점에서 온다 —
+    // 갈리면 "정답이에요!" 아래에 오답 설명이 붙는다
+    const result = selectGradeFeedback(
+      analysis({
+        correct: true,
+        cells: [cell(1, 5, 5, [], [])],
+        feedback: { tts: "점 수준 서술", detail: "규칙 설명" },
+      }),
+      null,
+    );
+
+    expect(result?.steps[0].speech).toBe("정답이에요!");
+  });
+
   it("범위 밖 점 번호(0, 7 등)는 걸러내고 나머지는 남긴다", () => {
     // 계약은 missingDots/extraDots를 1~6으로 강제하지 않는다 — 서버가 잘못된 값을 보내도
     // 응답 전체를 버리지 않고(재시도 소진 방지), 화면에 쓰는 자리에서만 방어한다
