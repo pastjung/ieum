@@ -29,6 +29,24 @@ function firstWrongCell(cells: AttemptCellAnalysis[]): AttemptCellAnalysis | nul
 }
 
 /**
+ * 서버 응답의 `missingDots`/`extraDots`는 계약(`attemptCellAnalysisSchema`,
+ * `front/packages/contracts/src/index.ts`)에서 `z.array(z.number().int())`로만 검증되고 1~6
+ * 범위를 강제하지 않는다 — 같은 셀의 `expectedPattern`/`inputPattern`이 `cellSchema`로 0~63을
+ * 검증하는 것과 다르다.
+ *
+ * **스키마를 `min(1).max(6)`으로 조이지 않는다.** 그러면 서버가 잘못된 점 번호를 하나라도
+ * 보내는 순간 응답 전체가 파싱에 실패한다. `attemptSubmission.ts`(제출 오케스트레이션)는
+ * 이걸 네트워크 실패와 구분하지 못해 그 문항을 `failed`로 돌리고, 재시도해도 같은 응답이 오니
+ * 3회 만에 소진된다 — 사용자는 세션 12문항을 처음부터 다시 풀어야 한다. 캡션에 잘못된 점
+ * 번호가 하나 보이는 것(이 함수가 막는 문제)보다 그쪽이 훨씬 나쁘다.
+ *
+ * 그래서 받는 자리(스키마)는 느슨하게 두고, 화면에 쓰는 이 자리에서 범위 밖 값을 걸러낸다.
+ */
+function toDots(values: readonly number[]): Dot[] {
+  return values.filter((d): d is Dot => Number.isInteger(d) && d >= 1 && d <= 6);
+}
+
+/**
  * 서버 분석(`analysis`)이 있으면 그것을, 없으면 로컬 채점(`local`)을 쓴다.
  *
  * 실시간 수업(`class/play.tsx`)은 서버 세션이 없어 `analysis`가 항상 null이다 — 그 경로는
@@ -51,8 +69,8 @@ export function selectGradeFeedback(
       ? {
           expected: wrong.expectedPattern,
           actual: wrong.inputPattern,
-          missingDots: wrong.missingDots as Dot[],
-          extraDots: wrong.extraDots as Dot[],
+          missingDots: toDots(wrong.missingDots),
+          extraDots: toDots(wrong.extraDots),
           index: wrong.cellIndex - 1,
         }
       : null;

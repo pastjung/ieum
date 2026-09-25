@@ -76,6 +76,19 @@ describe("서버 분석과 로컬 결과 중 무엇을 쓸지 고른다", () => 
     });
   });
 
+  it("범위 밖 점 번호(0, 7 등)는 compareCell에서 걸러내고 나머지는 남긴다", () => {
+    // 계약은 missingDots/extraDots를 1~6으로 강제하지 않는다 — 서버가 잘못된 값을 보내도
+    // 응답 전체를 버리지 않고(재시도 소진 방지), 화면에 쓰는 자리에서만 방어한다
+    const cells = [cell(1, 0b000101, 0b000001, [3, 7, 0], [-1, 2])];
+    const result = selectGradeFeedback(
+      analysis({ correct: false, cells, feedback: { tts: "", detail: "" } }),
+      null,
+    );
+
+    expect(result?.compareCell?.missingDots).toEqual([3]);
+    expect(result?.compareCell?.extraDots).toEqual([2]);
+  });
+
   it("서버가 오답인데 틀린 칸을 못 찾으면(방어적) compareCell이 null이다", () => {
     const cells = [cell(1, 5, 5, [], [])];
     const result = selectGradeFeedback(
