@@ -74,6 +74,16 @@ public class SecurityConfig {
       "/learning-sessions/{sessionId}/completion";
 
   /**
+   * 문항 하나의 제출·분석. 다른 학습 세션 경로와 같은 이유로 보호 대상이다.
+   *
+   * <p>이 경로가 목록에서 빠져 있었다. 그러면 요청이 permitAll chain으로 떨어져 {@link AccessTokenAuthenticationFilter}를
+   * 거치지 않고, {@code @AuthenticationPrincipal}이 null인 채로 서비스까지 들어가 401이 아니라 500이 된다 — 유효한 토큰을 들고도 매
+   * 문항 제출이 실패한다.
+   */
+  private static final String LEARNING_SESSION_ATTEMPT_ANALYSIS_PATH =
+      "/learning-sessions/{sessionId}/attempt-analysis";
+
+  /**
    * CORS 설정 원본인 MVC 설정을 읽는 bean. Spring Security의 {@code http.cors()}도 MVC가 있으면 이 이름의 bean을 {@link
    * CorsConfigurationSource}로 찾는다.
    *
@@ -108,7 +118,9 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LEARNING_SESSIONS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LEARNING_SESSION_PATH),
                 PathPatternRequestMatcher.pathPattern(
-                    HttpMethod.POST, LEARNING_SESSION_COMPLETION_PATH)))
+                    HttpMethod.POST, LEARNING_SESSION_COMPLETION_PATH),
+                PathPatternRequestMatcher.pathPattern(
+                    HttpMethod.POST, LEARNING_SESSION_ATTEMPT_ANALYSIS_PATH)))
         .addFilterBefore(
             new AccessTokenAuthenticationFilter(accessAuthenticationService),
             AuthorizationFilter.class)
