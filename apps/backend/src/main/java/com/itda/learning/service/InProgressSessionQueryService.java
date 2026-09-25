@@ -56,16 +56,18 @@ public class InProgressSessionQueryService {
   }
 
   /**
-   * 이어서 풀 문항이 남아 있는 세션만 내보낸다.
+   * 아직 끝나지 않은 세션.
    *
-   * <p>배정 전에 실패해 문항이 없는 세션, 그리고 마지막 문항까지 풀고 완료 제출만 실패한 세션이 남을 수 있다. 둘 다 "이어서 학습"으로 보여주면 눌러도
-   * 풀 것이 없다.
+   * <p>문항이 하나도 배정되지 않은 세션만 뺀다 — 배정 전에 실패한 잔재라 이어갈 것이 없다.
+   *
+   * <p><b>모두 푼 세션은 뺀다고 했다가 되돌렸다.</b> 마지막 문항까지 풀고 완료 제출만 실패하면 그 세션이 목록에서 사라져, 학습자가 푼 12문항이 영영
+   * 결과를 보지 못하고 갇힌다. 풀 문항이 남았는지는 {@code completedCount}와 {@code totalCount}를 견주면 호출부가 알 수 있다.
    */
   private Optional<InProgressSession> toResumable(LearningSession session) {
     List<ProblemSession> assigned =
         problemSessionRepository.findAllBySession_IdOrderBySequence(session.getId());
     long completed = assigned.stream().filter(ProblemSession::isCompleted).count();
-    if (assigned.isEmpty() || completed >= assigned.size()) {
+    if (assigned.isEmpty()) {
       return Optional.empty();
     }
     boolean review = session.getCurriculumStage() == null;

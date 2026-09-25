@@ -139,9 +139,9 @@ class InProgressSessionQueryServiceTest {
   }
 
   @Test
-  void 모두_푼_세션은_이어할_것이_없으므로_내보내지_않는다() {
-    // 마지막 문항까지 풀고 완료 제출만 실패한 경우다. "12 / 12"를 이어서 학습으로 보여주면
-    // 눌러도 풀 문항이 없다
+  void 모두_푼_세션도_내보낸다_완료_제출이_남았다() {
+    // 마지막 문항까지 풀고 완료 제출만 실패한 경우다. 빼 버리면 그 세션이 목록에서 사라져
+    // 학습자가 푼 12문항이 영영 결과를 보지 못하고 갇힌다 — 실제로 그렇게 됐다
     CurriculumStage stage = org.mockito.Mockito.mock(CurriculumStage.class);
     LearningSession learningSession = session(13L, stage);
     given(learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(user))
@@ -151,6 +151,9 @@ class InProgressSessionQueryServiceTest {
     given(problemSessionRepository.findAllBySession_IdOrderBySequence(13L))
         .willReturn(List.of(assigned(learningSession, 1L, true)));
 
-    assertThat(service.find(USER_ID)).isEmpty();
+    InProgressSessionQueryService.InProgressSession result = service.find(USER_ID).orElseThrow();
+
+    assertThat(result.totalCount()).isEqualTo(1);
+    assertThat(result.completedCount()).isEqualTo(1);
   }
 }
