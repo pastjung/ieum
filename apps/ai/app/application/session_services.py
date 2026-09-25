@@ -84,6 +84,15 @@ class AttemptAnalysis:
 
 
 @dataclass(frozen=True)
+class SkillMastery:
+    """요소 하나의 숙련 상태. 세션 밖에서 읽는다."""
+
+    learning_skill_id: int
+    mastery_prob: float
+    label: str
+
+
+@dataclass(frozen=True)
 class WeakSkill:
     learning_skill_id: int
     mastery_prob: float
@@ -167,6 +176,31 @@ class SessionService:
 
     def _known_kcs(self) -> set[str]:
         return {s.kc for s in self.catalog.all()}
+
+    # ── 숙련 상태 읽기 (점역을 거치지 않는다) ───────────────────────────────
+    def summarize_skills(
+        self, skill_states: list[SkillState], now: datetime | None = None
+    ) -> list[SkillMastery]:
+        """요소별 숙련도와 라벨. 약한 것부터 정렬해 돌려준다.
+
+        "내 실력" 화면과 홈의 복습 카드가 세션과 무관하게 "무엇이 약한지"를 보여주려면
+        이 값이 필요하다. 지금까지 숙련 라벨은 세션 완료 응답(weakSkills)에만 실려서,
+        두 화면은 고정값을 내 실력처럼 보여주고 있었다.
+
+        라벨 기준(label_of)은 여기에만 둔다 — Spring 이 문턱값을 베끼면 두 곳이 갈린다.
+
+        정렬도 여기서 한다. 앱이 하면 두 화면이 서로 다른 순서를 쓸 수 있다.
+        """
+        now = now or datetime.now(UTC).replace(tzinfo=None)
+        out: list[SkillMastery] = []
+        for state in skill_states:
+            key = str(state.learning_skill_id)
+            p = self.estimator.mastery([state.to_estimate(key)], now).get(
+                key, self.estimator.prior()
+            )
+            out.append(SkillMastery(state.learning_skill_id, round(p, 4), label_of(p)))
+        out.sort(key=lambda m: m.mastery_prob)
+        return out
 
     # ── 숙련도 갱신 (점역을 거치지 않는다) ──────────────────────────────────
     def apply_results(

@@ -312,6 +312,42 @@ def attempt_analyze(
     )
 
 
+class SkillMasterySchema(CamelModel):
+    learning_skill_id: int
+    mastery_prob: float
+    label: str
+
+
+class SkillSummaryRequest(CamelModel):
+    skill_states: list[SkillStateSchema] = Field(default_factory=list)
+
+
+class SkillSummaryResponse(CamelModel):
+    """약한 것부터 정렬된 요소별 숙련 상태."""
+
+    skills: list[SkillMasterySchema]
+
+
+@router.post(
+    "/skill-summary", response_model=SkillSummaryResponse, response_model_by_alias=True
+)
+def summarize_skills(
+    request: SkillSummaryRequest,
+    service: SessionService = Depends(get_session_service),
+) -> SkillSummaryResponse:
+    """세션 밖에서 요소별 숙련 상태를 읽는다. 상태를 바꾸지 않는다."""
+    return SkillSummaryResponse(
+        skills=[
+            SkillMasterySchema(
+                learning_skill_id=m.learning_skill_id,
+                mastery_prob=m.mastery_prob,
+                label=m.label,
+            )
+            for m in service.summarize_skills(_to_states(request.skill_states))
+        ]
+    )
+
+
 class SkillOutcomeSchema(CamelModel):
     """요소 하나의 채점 결과. Spring 의 SkillResult 와 같은 모양이다."""
 
