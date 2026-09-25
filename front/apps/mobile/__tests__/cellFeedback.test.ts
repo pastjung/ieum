@@ -82,4 +82,34 @@ describe("셀 진단을 점 수준 문장으로", () => {
     const r = describeCells([cell(1, 0b000101, 0b000001, [3], [])], false, "제13항");
     expect(r.speech).toBe(`${r.headline} ${r.detail}`.trim());
   });
+
+  it("빠진 점과 더 눌린 점이 동시에 있으면 둘 다 말한다", () => {
+    // 정답은 1·3번인데 1·2번을 눌렀다 — 가장 흔한 오답 형태. missing=[3], extra=[2]
+    const r = describeCells([cell(1, 0b000101, 0b000011, [3], [2])], false, "제13항");
+
+    expect(r.speech).toContain("3번 점이 빠지고 2번 점이 더 눌렸어요");
+  });
+
+  it("정답 칸이 빈 칸이면 '비어 있어야 한다'는 것을 말한다", () => {
+    // 문장 단계 시드는 빈 칸(expectedPattern === 0)이 섞일 수 있다
+    const r = describeCells([cell(1, 0, 0b000010, [], [2])], false, "제13항");
+
+    expect(r.speech).toContain("정답은 빈 칸이에요");
+    expect(r.speech).toContain("2번 점이 더 눌렸어요");
+  });
+
+  it("틀린 칸이 하나면 '모두'를 붙이지 않는다", () => {
+    const r = describeCells([cell(1, 0b000101, 0b000001, [3], [])], false, "제13항");
+    expect(r.speech).toContain("1칸이 틀렸어요");
+    expect(r.speech).not.toContain("모두 1칸");
+  });
+
+  it("오답인데 틀린 칸을 찾지 못해도 자기모순 문장을 만들지 않는다", () => {
+    // 정상 서버 응답에서는 없는 상태지만 방어적으로 처리한다
+    const r = describeCells([cell(1, 5, 5, [], [])], false, "제13항");
+
+    expect(r.speech).not.toContain("0칸");
+    expect(r.speech).not.toMatch(/\s{2,}/);
+    expect(r.speech).toBe(`${r.headline} ${r.detail}`.trim());
+  });
 });
