@@ -6,6 +6,7 @@ import { ScreenShell } from "@/components/ScreenShell";
 import { AppButton } from "@/components/AppButton";
 import { useSessionStore } from "@/stores/sessionStore";
 import { learningService } from "@/services/learningService";
+import { selectSessionSummaryFeedback } from "@/services/sessionSummaryFeedback";
 import { announce } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
 import type { ProficiencyLevel } from "@ieum/contracts";
@@ -29,10 +30,17 @@ export default function Summary() {
   const total = serverResult?.totalProblemCount ?? session?.problems.length ?? 0;
   const reset = useSessionStore((s) => s.reset);
   const { data: skills } = useQuery({ queryKey: ["skills"], queryFn: learningService.getSkillLevels });
+  // 서버가 세션 요약을 못 만들었거나(notAvailable) 목 세션이면 lines가 비어 있다 —
+  // 그때는 지금과 같은 화면을 그대로 보여준다
+  const summaryFeedback = selectSessionSummaryFeedback(serverResult);
 
   useEffect(() => {
-    if (total > 0) announce(`오늘의 결과예요. ${total}문제 중 ${correct}문제를 맞혔어요.`);
-  }, [correct, total]);
+    if (total === 0) return;
+    // 점수 안내와 세션 요약을 한 번에 낭독한다 — announce는 이전 낭독을 끊고 새로 시작하므로
+    // 따로 두 번 부르면 앞 문장이 사라진다
+    const scoreAnnouncement = `오늘의 결과예요. ${total}문제 중 ${correct}문제를 맞혔어요.`;
+    announce(summaryFeedback.speech ? `${scoreAnnouncement} ${summaryFeedback.speech}` : scoreAnnouncement);
+  }, [correct, total, summaryFeedback.speech]);
 
   const finish = (to: "/(tabs)" | "/(tabs)/learn") => {
     reset();
@@ -53,6 +61,15 @@ export default function Summary() {
         </Text>
         <Text style={{ fontSize: 16 * fontScale, fontWeight: "700", color: theme.color.onPrimary }}>이번 세션 정답</Text>
       </View>
+      {summaryFeedback.lines.length > 0 && (
+        <View style={[styles.summary, { backgroundColor: theme.color.surface, borderColor: theme.color.border, borderRadius: radius.card }]}>
+          {summaryFeedback.lines.map((line) => (
+            <Text key={line} style={{ fontSize: 16 * fontScale, fontWeight: "700", color: theme.color.text, lineHeight: 24 }}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      )}
       <View style={[styles.skills, { backgroundColor: theme.color.surface, borderColor: theme.color.border, borderRadius: radius.card }]}>
         <Text style={{ fontSize: 15 * fontScale, fontWeight: "800", color: theme.color.textMuted }}>지금 내 실력 (현재 기준)</Text>
         {(skills ?? []).map((skill) => (
@@ -81,6 +98,7 @@ export default function Summary() {
 
 const styles = StyleSheet.create({
   score: { padding: 22, alignItems: "center", gap: 6 },
+  summary: { borderWidth: 1, padding: 18, gap: 8 },
   skills: { borderWidth: 1, padding: 18, gap: 12 },
   skillRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 });
