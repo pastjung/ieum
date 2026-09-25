@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import type { AttemptInput, CompletionResponse, LearningSession, Problem } from "@ieum/contracts";
+import type {
+  AttemptAnalysisResponse,
+  AttemptInput,
+  CompletionResponse,
+  LearningSession,
+  Problem,
+} from "@ieum/contracts";
 import { EMPTY_CELL, gradeAnswer, type Cell, type GradeResult } from "@ieum/domain";
 
 export type SessionKind = "free" | "class";
@@ -25,6 +31,8 @@ interface SessionState {
   index: number;
   answers: AnswerRecord[];
   lastResult: GradeResult | null;
+  /** 문항별 서버 분석 결과. 실시간 수업(serverSessionId === null)은 채우지 않는다 */
+  lastAnalysis: AttemptAnalysisResponse | null;
   /** 수업 중 연결 끊김 데모를 이미 보여줬는지 (V29) */
   disconnectShown: boolean;
   serverSessionId: number | null;
@@ -40,6 +48,7 @@ interface SessionState {
   /** 완료 제출 페이로드. 목 세션이면 빈 배열이다 */
   buildAttempts: () => AttemptInput[];
   setServerResult: (result: CompletionResponse) => void;
+  setLastAnalysis: (result: AttemptAnalysisResponse | null) => void;
   reset: () => void;
 }
 
@@ -85,6 +94,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   index: 0,
   answers: [],
   lastResult: null,
+  lastAnalysis: null,
   disconnectShown: false,
   serverSessionId: null,
   problemSessionIds: [],
@@ -96,6 +106,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       index: 0,
       answers: [],
       lastResult: null,
+      lastAnalysis: null,
       disconnectShown: false,
       serverSessionId: meta?.serverSessionId ?? null,
       problemSessionIds: meta?.problemSessionIds ?? [],
@@ -131,7 +142,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     const { session, index } = get();
     if (!session) return false;
     if (index + 1 >= session.problems.length) return false;
-    set({ index: index + 1, lastResult: null });
+    set({ index: index + 1, lastResult: null, lastAnalysis: null });
     return true;
   },
   correctCount: () => get().answers.filter((a) => a.result.correct).length,
@@ -161,6 +172,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     }));
   },
   setServerResult: (result) => set({ serverResult: result }),
+  setLastAnalysis: (result) => set({ lastAnalysis: result }),
   reset: () =>
     set({
       session: null,
@@ -168,6 +180,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       index: 0,
       answers: [],
       lastResult: null,
+      lastAnalysis: null,
       disconnectShown: false,
       serverSessionId: null,
       problemSessionIds: [],

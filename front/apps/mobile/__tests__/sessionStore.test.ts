@@ -1,5 +1,5 @@
 import { useSessionStore } from "@/stores/sessionStore";
-import { completionRequestSchema } from "@ieum/contracts";
+import { completionRequestSchema, type AttemptAnalysisResponse } from "@ieum/contracts";
 import { gradeAnswer } from "@ieum/domain";
 
 const session = {
@@ -12,6 +12,27 @@ const session = {
 };
 
 const meta = { serverSessionId: 12, problemSessionIds: [101, 102] };
+
+const analysis: AttemptAnalysisResponse = {
+  problemSessionId: 101,
+  problemId: 7,
+  attemptId: 55,
+  correct: false,
+  attemptedAt: "2026-09-25T02:00:00Z",
+  cells: [
+    {
+      cellIndex: 1,
+      expectedPattern: 5,
+      inputPattern: 1,
+      diffMask: 4,
+      missingMask: 4,
+      extraMask: 0,
+      missingDots: [3],
+      extraDots: [],
+    },
+  ],
+  feedback: { tts: "첫소리 이응은 점자로 적지 않아요.", detail: "제13항" },
+};
 
 describe("세션 스토어의 완료 페이로드", () => {
   beforeEach(() => useSessionStore.getState().reset());
@@ -123,5 +144,30 @@ describe("칸 수가 다른 답안의 정규화", () => {
     expect(() =>
       completionRequestSchema.parse({ attempts: useSessionStore.getState().buildAttempts() }),
     ).not.toThrow();
+  });
+});
+
+describe("문항별 분석 결과 보관", () => {
+  beforeEach(() => useSessionStore.getState().reset());
+
+  it("문항 분석 결과를 보관하고 다음 문항에서 비운다", () => {
+    // 이전 문항의 피드백이 남아 있으면 다음 문항에서 엉뚱한 설명을 읽는다
+    const store = useSessionStore.getState();
+    store.start(session, "free", meta);
+    useSessionStore.getState().setLastAnalysis(analysis);
+    expect(useSessionStore.getState().lastAnalysis).toEqual(analysis);
+
+    useSessionStore.getState().next();
+    expect(useSessionStore.getState().lastAnalysis).toBeNull();
+  });
+
+  it("reset이 분석 결과도 지운다", () => {
+    const store = useSessionStore.getState();
+    store.start(session, "free", meta);
+    useSessionStore.getState().setLastAnalysis(analysis);
+
+    useSessionStore.getState().reset();
+
+    expect(useSessionStore.getState().lastAnalysis).toBeNull();
   });
 });
