@@ -2,6 +2,7 @@ package com.itda.learning.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.itda.learning.service.LearningSessionAnalysisService.SessionSummaryResult;
 import com.itda.learning.service.LearningSessionCompletionService.CellResult;
 import com.itda.learning.service.LearningSessionCompletionService.CompletionResult;
 import com.itda.learning.service.LearningSessionCompletionService.ProblemResult;
@@ -59,6 +60,7 @@ class LearningSessionCompletionResponseJsonTest {
         new CellResult(1, 0b100000, 0b000001, 0b100001, 0b100000, 0b000001, List.of(6), List.of(1));
     ProblemResult problem = new ProblemResult(101L, 7L, 301L, false, List.of(cell));
     return LearningSessionCompletionResponse.from(
-        new CompletionResult(12L, COMPLETED_AT, 1, 0, List.of(problem)));
+        new CompletionResult(
+            12L, COMPLETED_AT, 1, 0, List.of(problem), SessionSummaryResult.notAvailable()));
   }
 }

@@ -772,9 +772,9 @@ class UserWithdrawalMariadbTest {
                       NOW),
                   Long.class);
           this.entityManager.persist(Participant.join(attendedLectureId, this.userId, NOW));
+          User learner = this.entityManager.find(User.class, this.userId);
           Long sessionId =
-              this.entityManager.persistAndGetId(
-                  new LearningSession(this.userId, null), Long.class);
+              this.entityManager.persistAndGetId(new LearningSession(learner, null), Long.class);
           this.entityManager.persist(
               ProblemAttempt.forFreeSession(this.userId, 1L, sessionId, 1, 1L, true, NOW));
           return null;

@@ -21,11 +21,16 @@ uvicorn app.main:app --reload --port 8000
 | 메서드 | 경로 | 요청 (Java record) | 응답 (Java record) |
 | --- | --- | --- | --- |
 | POST | `/analyze` | `RegisterProblemRequest{targetText}` | `ProblemAnalyzeResponse{level, cells[], skillSets[{skillType, metadata}]}` |
-| POST | `/reviewAnalyze` | `ReviewAnalyzeRequest{skillStates[]}` | `ReviewAnalyzeResponse{level, learningSkillIds[]}` |
+| POST | `/reviewAnalyze` | `ReviewAnalyzeRequest{skillStates[]}` | `ReviewAnalyzeResponse{learningSkillIds[]}` |
+| POST | `/attempt-analyze` | `{attempt{targetText, expectedPatterns, inputPatterns}, skillStates[]}` | `{feedback{tts, detail}, skillResults[{learningSkillId, correct, errorCounts}], updatedSkillStates[]}` |
+| POST | `/session-summary` | `{attempts[], skillStates[]}` | `{summary, ttsText, weakSkills[{learningSkillId, masteryProb, label, dominantErrorType, explanation}]}` |
 
 - `level` 은 **커리큘럼 단계**(CONSONANT·VOWEL·CONTRACTION·CONTRACTION_WORD·WORD·SENTENCE) — `problems.level` 과 같은 의미.
 - `skillSets` 의 `(skillType, metadata)` 는 `learning_skills` 시드(`total_init.sql`)와 같은 파일(`app/infrastructure/data/kc_catalog.json`)에서 나온다.
-- `/reviewAnalyze` 는 요소별 지금 실력(망각 반영)을 계산해 약한 순 상위 3개를 돌려주고, 그 요소들이 포함된 문항이 12개 이상 있는 단계를 `level` 로 고른다(`level_skill_counts.json`).
+- `/reviewAnalyze` 는 요소별 지금 실력(망각 반영)을 계산해 약한 순 상위 3개 id 만 돌려준다. 어느 단계 문항 풀에서 뽑을지(사용자 레벨, 부족 시 조건 완화)는 DB 를 보는 Spring 의 몫.
+- `/attempt-analyze` 는 **문항 하나 제출 직후** 호출: 채점(칸 수가 달라도 정렬) → TTS 피드백 → 요소별 정오(`skillResults`, 이번 문항 오류만) → 학습자 상태 갱신(`updatedSkillStates`, **이번 문항에 나온 요소만**; 처음 만난 요소는 새 행). Spring 은 `attempt_skill_results` INSERT, `user_skill_memory` upsert.
+- `/session-summary` 는 **12문항 후** 결과 화면용, 읽기 전용(상태 갱신 없음). `skillStates` 는 마지막 `attempt-analyze` 의 갱신본을 반영한 현재 상태.
+- 시각은 `LocalDateTime` 형식(`Z` 없음), 값은 UTC.
 - 자세한 분석·계약: `docs/repo_analysis_2026-09-23.md`(AI 팀 문서)
 
 ```bash

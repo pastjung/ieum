@@ -52,11 +52,32 @@ public class UserSkillMemory {
   private Double masteryProbability;
 
   public UserSkillMemory(
-      User user, LearningSkill skill, int totalSeen, int totalCorrect, int totalIncorrect) {
+      User user,
+      LearningSkill skill,
+      int totalSeen,
+      int totalCorrect,
+      LocalDateTime lastPracticedAt,
+      Double masteryProbability) {
     this.user = user;
     this.skill = skill;
+    applyAnalysisSnapshot(totalSeen, totalCorrect, lastPracticedAt, masteryProbability);
+  }
+
+  public void applyAnalysisSnapshot(
+      int totalSeen, int totalCorrect, LocalDateTime lastPracticedAt, Double masteryProbability) {
+    if (totalSeen < 0 || totalCorrect < 0 || totalCorrect > totalSeen) {
+      throw new IllegalArgumentException("학습 요소 누적 횟수가 올바르지 않습니다.");
+    }
+    if (lastPracticedAt == null) {
+      throw new IllegalArgumentException("마지막 학습 시각은 필수입니다.");
+    }
+    if (masteryProbability == null || masteryProbability < 0 || masteryProbability > 1) {
+      throw new IllegalArgumentException("숙련도 확률은 0 이상 1 이하여야 합니다.");
+    }
     this.totalSeen = totalSeen;
     this.totalCorrect = totalCorrect;
-    this.totalIncorrect = totalIncorrect;
+    this.totalIncorrect = totalSeen - totalCorrect;
+    this.lastPracticedAt = lastPracticedAt;
+    this.masteryProbability = masteryProbability;
   }
 }

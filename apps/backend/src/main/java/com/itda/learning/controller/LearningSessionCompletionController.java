@@ -1,8 +1,11 @@
 package com.itda.learning.controller;
 
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.learning.dto.LearningAttemptAnalysisRequest;
+import com.itda.learning.dto.LearningAttemptAnalysisResponse;
 import com.itda.learning.dto.LearningSessionCompletionRequest;
 import com.itda.learning.dto.LearningSessionCompletionResponse;
+import com.itda.learning.service.LearningAttemptService;
 import com.itda.learning.service.LearningSessionCompletionService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -23,6 +26,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class LearningSessionCompletionController {
 
   private final LearningSessionCompletionService completionService;
+  private final LearningAttemptService attemptService;
+
+  @PostMapping("/{sessionId}/attempt-analysis")
+  public ResponseEntity<LearningAttemptAnalysisResponse> analyzeAttempt(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable @Positive Long sessionId,
+      @Valid @RequestBody LearningAttemptAnalysisRequest request) {
+    LearningAttemptService.AttemptResult result =
+        attemptService.analyze(user.userId(), sessionId, request.toCommand());
+    return ResponseEntity.ok(LearningAttemptAnalysisResponse.from(result));
+  }
 
   @PostMapping("/{sessionId}/completion")
   public ResponseEntity<LearningSessionCompletionResponse> complete(
