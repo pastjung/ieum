@@ -202,6 +202,47 @@ class LearningAttemptServiceTest {
   }
 
   @Test
+  void 낱자_문항은_FastAPI_분석을_부르지_않는다() {
+    // 자음·모음 단계 문항은 'ㄱ'·'ㅙ' 같은 낱자다. AI는 target_text를 자모로 분해해 규칙을
+    // 적용하므로 낱자를 받지 못하고 422로 거절한다 — 그대로 두면 커리큘럼 1·2단계는 한
+    // 문제도 풀 수 없다
+    ReflectionTestUtils.setField(problemSession.getProblem(), "targetText", "ㄱ");
+    given(analysisService.analyzeAttemptLocally(org.mockito.ArgumentMatchers.any()))
+        .willReturn(
+            new AttemptAnalysisResult(
+                new FeedbackResult("", ""),
+                List.of(new SkillResult(SKILL_ID, false, Map.of("dot_missing", 1L)))));
+
+    LearningAttemptService.AttemptResult result =
+        service.analyze(USER_ID, SESSION_ID, new AttemptCommand(PROBLEM_SESSION_ID, List.of(32)));
+
+    verify(analysisService)
+        .analyzeAttemptLocally(org.mockito.ArgumentMatchers.any());
+    verify(analysisService, never())
+        .analyzeAttempt(
+            org.mockito.ArgumentMatchers.anyLong(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any());
+    assertThat(result.correct()).isFalse();
+    assertThat(problemSession.isCompleted()).isTrue();
+    assertThat(result.violatedSkills()).singleElement().satisfies(s -> assertThat(s.id()).isEqualTo(SKILL_ID));
+  }
+
+  @Test
+  void 완성형_문항은_그대로_FastAPI_분석을_부른다() {
+    // 낱자 분기가 단어·약자 단계까지 가로채면 규칙 분석이 통째로 사라진다
+    service.analyze(USER_ID, SESSION_ID, new AttemptCommand(PROBLEM_SESSION_ID, List.of(32)));
+
+    verify(analysisService)
+        .analyzeAttempt(
+            org.mockito.ArgumentMatchers.eq(USER_ID),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any());
+    verify(analysisService, never())
+        .analyzeAttemptLocally(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   void 입력_셀이_비어_있어도_누락으로_저장한다() {
     LearningAttemptService.AttemptResult result =
         service.analyze(USER_ID, SESSION_ID, new AttemptCommand(PROBLEM_SESSION_ID, List.of()));

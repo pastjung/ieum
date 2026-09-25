@@ -69,15 +69,18 @@ public class LearningAttemptService {
     validateExpectedCells(expectedCells);
 
     LocalDateTime attemptedAt = LocalDateTime.now(ZoneOffset.UTC);
+    AnalysisAttempt analysisAttempt =
+        new AnalysisAttempt(
+            assigned.getProblem().getId(),
+            assigned.getProblem().getTargetText(),
+            expectedCells.stream().map(ProblemCell::getExpectedPattern).toList(),
+            command.inputPatterns());
+    // 낱자 문항(자음·모음 단계)은 AI가 받지 못한다 — 보내면 422로 거절당하고 학습자는
+    // "학습 결과를 분석할 수 없습니다"를 본다 (LearningSessionAnalysisService.isAiGradable)
     AttemptAnalysisResult analysis =
-        analysisService.analyzeAttempt(
-            userId,
-            new AnalysisAttempt(
-                assigned.getProblem().getId(),
-                assigned.getProblem().getTargetText(),
-                expectedCells.stream().map(ProblemCell::getExpectedPattern).toList(),
-                command.inputPatterns()),
-            attemptedAt);
+        LearningSessionAnalysisService.isAiGradable(analysisAttempt.targetText())
+            ? analysisService.analyzeAttempt(userId, analysisAttempt, attemptedAt)
+            : analysisService.analyzeAttemptLocally(analysisAttempt);
 
     boolean correct = isCorrect(expectedCells, command.inputPatterns());
     ProblemAttempt attempt =

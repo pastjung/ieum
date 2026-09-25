@@ -3,6 +3,7 @@ package com.itda.learning.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -77,6 +78,67 @@ class LearningSessionAnalysisServiceTest {
     given(userSkillMemoryRepository.findAllByUser_Id(USER_ID)).willReturn(List.of());
     given(learningSkillRepository.findAllById(org.mockito.ArgumentMatchers.anySet()))
         .willReturn(List.of(skill));
+  }
+
+  @Test
+  void 완성형_한글만_AI로_채점할_수_있다() {
+    // apps/ai 의 kbraille.decompose 가 완성형 음절(U+AC00~U+D7A3)만 받는다
+    assertThat(LearningSessionAnalysisService.isAiGradable("가방")).isTrue();
+    assertThat(LearningSessionAnalysisService.isAiGradable("그래서")).isTrue();
+    // 자음·모음 단계 문항 — 호환 자모라 AI가 422로 거절한다
+    assertThat(LearningSessionAnalysisService.isAiGradable("ㄱ")).isFalse();
+    assertThat(LearningSessionAnalysisService.isAiGradable("ㅙ")).isFalse();
+    // 어절 하나만 받는다
+    assertThat(LearningSessionAnalysisService.isAiGradable("가 방")).isFalse();
+    assertThat(LearningSessionAnalysisService.isAiGradable("abc")).isFalse();
+    assertThat(LearningSessionAnalysisService.isAiGradable("")).isFalse();
+    assertThat(LearningSessionAnalysisService.isAiGradable(null)).isFalse();
+  }
+
+  @Test
+  void 낱자_문항은_FastAPI_없이_문항의_학습요소로_채점한다() {
+    LearningSessionAnalysisService.AttemptAnalysisResult result =
+        service.analyzeAttemptLocally(
+            new LearningSessionAnalysisService.AnalysisAttempt(
+                PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000001)));
+
+    verifyNoInteractions(fastApiClient);
+    assertThat(result.skillResults())
+        .singleElement()
+        .satisfies(
+            skillResult -> {
+              assertThat(skillResult.learningSkillId()).isEqualTo(SKILL_ID);
+              assertThat(skillResult.correct()).isFalse();
+              // 정답 1·3번인데 1번만 눌러 3번이 빠졌다
+              assertThat(skillResult.errorCounts()).isEqualTo(Map.of("dot_missing", 1L));
+            });
+  }
+
+  @Test
+  void 낱자_문항을_맞히면_오류_없이_정답으로_기록한다() {
+    LearningSessionAnalysisService.AttemptAnalysisResult result =
+        service.analyzeAttemptLocally(
+            new LearningSessionAnalysisService.AnalysisAttempt(
+                PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000101)));
+
+    assertThat(result.skillResults())
+        .singleElement()
+        .satisfies(
+            skillResult -> {
+              assertThat(skillResult.correct()).isTrue();
+              assertThat(skillResult.errorCounts()).isEmpty();
+            });
+  }
+
+  @Test
+  void 낱자_문항은_숙련도를_갱신하지_않는다() {
+    // 숙련도는 AI의 BKT 추정기가 만드는 값이라 여기서는 만들 수 없다. 꾸며 낸 값을 저장하면
+    // 이후 약한 요소 판정이 그 값을 근거로 삼는다
+    service.analyzeAttemptLocally(
+        new LearningSessionAnalysisService.AnalysisAttempt(
+            PROBLEM_ID, "ㄱ", List.of(0b000101), List.of(0b000001)));
+
+    verifyNoInteractions(userSkillMemoryRepository);
   }
 
   @Test
