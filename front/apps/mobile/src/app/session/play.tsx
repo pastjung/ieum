@@ -239,6 +239,17 @@ export default function SessionPlay() {
     });
   };
 
+  /**
+   * 재시도 버튼의 짧은 터치. "입력 완료"의 `onShortPress`(`readInput`)와 대칭을 맞춘다 —
+   * 이 화면은 짧게 눌러 확인하고 길게 눌러 실행하는 관행을 쓰므로, 짧은 터치가 아무 반응이
+   * 없으면 사용자는 버튼이 고장난 줄 안다. 실패 문구(`statusMessage`)를 다시 읽어 줘 놓친
+   * 사용자가 왜 이 화면에 있는지 확인할 수 있게 하고, 길게 누르면 무슨 일이 일어나는지도
+   * 이어서 말한다.
+   */
+  const readRetryStatus = () => {
+    announce(`${statusMessage ?? "방금 시도가 실패했어요."} 길게 누르면 방금 입력한 답을 다시 보내요.`);
+  };
+
   // 재시도도 "입력 완료"와 같은 길게 누르기다 — MAX_ATTEMPT_TRIES(3)는 희소 자원이라 실수로
   // 누르면 세 번째에 12문항을 처음부터 다시 풀어야 한다. 같은 화면에서 어떤 버튼은 짧게, 어떤
   // 버튼은 길게 누르면 한 번 익힌 조작 모델이 깨진다.
@@ -249,6 +260,7 @@ export default function SessionPlay() {
           requireLongPress: true,
           accessibilityHint: "길게 누르면 방금 입력한 답을 다시 보내요.",
           onPress: retry,
+          onShortPress: readRetryStatus,
         }
       : { label: "길게 눌러 제출", requireLongPress: true, onPress: submitAnswer, onShortPress: readInput };
 
