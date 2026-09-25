@@ -19,14 +19,22 @@ interface Props {
   onBlockedTouch?: () => void;
 }
 
-// 와이어프레임 V14 배치: 왼쪽 위→아래 3·2·1, 오른쪽 위→아래 6·5·4
+// 점 배치: 왼쪽 위→아래 1·2·3, 오른쪽 위→아래 4·5·6 (ERD 「6점 번호」 절).
+//
+// 좌우로 벌어지는 들여쓰기(3%→10%→14%)는 손가락이 자연히 벌어지는 각도에 맞춘 것이라
+// 그대로 둔다 — 고친 것은 그 자리에 붙는 **번호**뿐이다.
+//
+// 예전에는 위→아래가 3·2·1이었다. 번호는 버튼에 찍히므로 기록되는 값은 맞았지만,
+// 같은 칸을 채점 화면(`BrailleCellView`, 위→아래 1·2·3)이 뒤집어 그려서 학습자에게는
+// 자기가 누르지 않은 점이 찍힌 것처럼 보였다. 두 배치 중 ERD를 따르는 쪽이 표시이므로
+// 패드를 맞춘다.
 const positions: Record<Dot, object> = {
-  3: { left: "3%", top: "5%" },
-  6: { right: "3%", top: "5%" },
+  1: { left: "3%", top: "5%" },
+  4: { right: "3%", top: "5%" },
   2: { left: "10%", top: "42%" },
   5: { right: "10%", top: "42%" },
-  1: { left: "14%", bottom: "3%" },
-  4: { right: "14%", bottom: "3%" },
+  3: { left: "14%", bottom: "3%" },
+  6: { right: "14%", bottom: "3%" },
 };
 
 /** 세로(V) 6점 입력 패드 — 여러 점을 동시에 짚고 손을 떼면 한 칸 입력 */
@@ -47,7 +55,7 @@ export function DotPad({ onCommitCell, highlightDots, disabled, onBlockedTouch }
           : "점자 입력 영역. 1번부터 6번까지 점이 있어요. 점을 동시에 짚고 손을 떼면 한 칸이 입력돼요."
       }
     >
-      {([3, 6, 2, 5, 1, 4] as Dot[]).map((dot) => (
+      {([1, 4, 2, 5, 3, 6] as Dot[]).map((dot) => (
         <DotButton
           key={dot}
           dot={dot}
