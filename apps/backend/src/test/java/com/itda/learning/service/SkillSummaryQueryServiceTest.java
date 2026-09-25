@@ -96,6 +96,9 @@ class SkillSummaryQueryServiceTest {
             s -> {
               assertThat(s.learningSkillId()).isEqualTo(23L);
               assertThat(s.name()).isEqualTo("받침 기본 자음");
+              // 같은 name 이 여러 행에 걸쳐 있다 — "첫소리 기본 자음"만 14행이다.
+              // 대상 글자가 없으면 화면에 같은 이름이 반복돼 학습자가 구별할 수 없다
+              assertThat(s.target()).isEqualTo("ㅇ");
               assertThat(s.masteryProb()).isEqualTo(0.42);
               assertThat(s.label()).isEqualTo("더 연습해요");
             });

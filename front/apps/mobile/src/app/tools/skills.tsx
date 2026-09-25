@@ -7,7 +7,7 @@ import { BackHeader } from "@/components/BackHeader";
 import { ListRow } from "@/components/ListRow";
 import { AppButton } from "@/components/AppButton";
 import { learningService } from "@/services/learningService";
-import { selectSkillDashboard } from "@/services/skillDashboard";
+import { selectSkillDashboard, skillDisplayName } from "@/services/skillDashboard";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { announce } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
@@ -36,7 +36,7 @@ function VoiceSkills() {
       announce("내 실력이에요. 아직 기록이 없어요. 학습을 시작하면 요소별 실력을 알려드려요.");
       return;
     }
-    const spoken = skills.map((s) => `${s.name}, ${s.label}`).join(". ");
+    const spoken = skills.map((s) => `${skillDisplayName(s)}, ${s.label}`).join(". ");
     announce(`내 실력이에요. 더 연습할 것부터 알려드려요. ${spoken}`);
   }, [isPending, skills]);
 
@@ -53,7 +53,7 @@ function VoiceSkills() {
       {skills.map((skill) => (
         <ListRow
           key={skill.learningSkillId}
-          label={skill.name}
+          label={skillDisplayName(skill)}
           value={skill.label}
           emphasizeValue={skill.label === NEEDS_PRACTICE_LABEL}
           highlighted={skill.label === NEEDS_PRACTICE_LABEL}
@@ -128,14 +128,14 @@ function ScreenSkills() {
           ))}
         </View>
         <Text style={{ fontSize: 15 * fontScale, fontWeight: "800", color: theme.color.textMuted }}>
-          규칙별 실력 · {d.rules.length}개 규칙
+          규칙별 실력 · {d.rules.length}개 분류
         </Text>
         <View style={{ gap: 8 }}>
           {d.rules.map((r) => (
             <View
               key={r.label}
               style={[styles.ruleRow, { borderColor: theme.color.border, borderRadius: radius.control }]}
-              accessibilityLabel={`${r.label}, ${r.percent != null ? `${r.percent}퍼센트` : "기록 없음"}`}
+              accessibilityLabel={`${r.label} ${r.count}개, ${r.percent != null ? `${r.percent}퍼센트` : "기록 없음"}`}
             >
               <Text style={{ flex: 1, fontSize: 16 * fontScale, fontWeight: "700", color: theme.color.text }}>{r.label}</Text>
               {r.percent != null ? (

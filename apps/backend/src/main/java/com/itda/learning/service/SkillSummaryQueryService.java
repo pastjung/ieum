@@ -89,7 +89,11 @@ public class SkillSummaryQueryService {
               return skill == null
                   ? null
                   : new SkillMasteryView(
-                      skill.getId(), skill.getName(), mastery.masteryProb(), mastery.label());
+                      skill.getId(),
+                      skill.getName(),
+                      skill.getMetadata(),
+                      mastery.masteryProb(),
+                      mastery.label());
             })
         .filter(Objects::nonNull)
         .toList();
@@ -112,6 +116,10 @@ public class SkillSummaryQueryService {
     }
   }
 
+  /**
+   * @param name 규칙의 <b>분류</b>다. 같은 값이 여러 행에 걸쳐 있다 — "첫소리 기본 자음"만 14행, "단독 자모"는 35행이다
+   * @param target 그 분류 안에서 이 행이 다루는 글자('ㄱ'·'ㄴ'…). 이것이 없으면 화면에 같은 이름이 반복돼 학습자가 구별할 수 없다
+   */
   public record SkillMasteryView(
-      Long learningSkillId, String name, Double masteryProb, String label) {}
+      Long learningSkillId, String name, String target, Double masteryProb, String label) {}
 }

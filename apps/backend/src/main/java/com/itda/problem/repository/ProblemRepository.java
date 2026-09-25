@@ -40,6 +40,29 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
       @Param("learningSkillId") Long learningSkillId, @Param("maxCells") long maxCells);
 
   /**
+   * 위와 같되 지정한 단계(level)들로만 좁힌다. 복습이 학습자의 단계 이하 문항을 먼저 쓰려고 호출한다.
+   *
+   * <p>좁히는 이유: 약한 요소의 후보는 단어 문항이 압도한다. 예컨대 "첫소리 기본 자음"은 단어 1,683개 대 자음 1개라, 무작위로만 뽑으면 자음 학습자가
+   * 자기 단계 문항을 만날 확률이 1,684분의 1이다. 실제로 복습 12문항이 전부 단어로 나왔다.
+   *
+   * <p>여기서 4개를 못 채우면 호출부가 위 메서드로 넓혀 채운다 — 자음 문항은 28개뿐이라 요소당 4개를 못 채우는 일이 흔하고, 그때 거부하면 복습이 아예
+   * 막힌다.
+   */
+  @Query(
+      """
+    SELECT DISTINCT p
+    FROM Problem p
+    JOIN ProblemSkill ps ON ps.problem = p
+    WHERE ps.skill.id = :learningSkillId
+      AND p.level IN :levels
+      AND (SELECT COUNT(c) FROM ProblemCell c WHERE c.problem = p) <= :maxCells
+    """)
+  List<Problem> findAssignableByLearningSkillIdAndLevelIn(
+      @Param("learningSkillId") Long learningSkillId,
+      @Param("levels") Collection<Level> levels,
+      @Param("maxCells") long maxCells);
+
+  /**
    * 출제 후보를 고른다.
    *
    * <p>{@code maxCells}로 셀 수를 제한하는 이유: AI가 입력을 12칸까지만 받는다 ({@code

@@ -1,4 +1,4 @@
-import type { SkillSummary } from "@ieum/contracts";
+import type { SkillMastery, SkillSummary } from "@ieum/contracts";
 
 /** 서버가 "익숙해요"로 판정한 요소만 익힌 것으로 센다. 기준은 FastAPI에만 있다 */
 const MASTERED_LABEL = "익숙해요";
@@ -8,10 +8,13 @@ export interface SkillStat {
   value: string;
 }
 
-export interface SkillRule {
+export interface SkillGroup {
+  /** 분류 이름 */
   label: string;
-  /** 0~100. 서버가 숙련도를 주지 않았으면 null */
+  /** 0~100. 그 분류의 숙련도를 하나도 모르면 null */
   percent: number | null;
+  /** 이 분류에 묶인 요소 수 */
+  count: number;
 }
 
 export interface SkillDashboard {
@@ -19,7 +22,8 @@ export interface SkillDashboard {
   overallPercent: number | null;
   overallDetail: string | null;
   stats: SkillStat[];
-  rules: SkillRule[];
+  /** 분류로 묶은 목록. 약한 분류부터 */
+  rules: SkillGroup[];
 }
 
 const EMPTY: SkillDashboard = {
@@ -28,6 +32,25 @@ const EMPTY: SkillDashboard = {
   stats: [],
   rules: [],
 };
+
+/**
+ * 요소 한 줄에 쓸 이름.
+ *
+ * <p>`learning_skills.name`은 규칙의 **분류**다. 같은 값이 여러 행에 걸쳐 있어 — "첫소리 기본
+ * 자음"만 14행, "단독 자모"는 35행 — 이름만 쓰면 화면에 같은 줄이 반복돼 학습자가 구별할 수
+ * 없다. 그 분류 안에서 다루는 글자를 붙여 구별한다.
+ */
+export function skillDisplayName(skill: SkillMastery): string {
+  const target = skill.target.trim();
+  return target ? `${skill.name} ${target}` : skill.name;
+}
+
+function percentOf(skills: SkillMastery[]): number | null {
+  const known = skills.filter((skill) => skill.masteryProb !== null);
+  // 모르는 것을 0으로 치면 평균이 떨어져 실제보다 못하는 것처럼 보인다
+  if (known.length === 0) return null;
+  return Math.round((known.reduce((sum, s) => sum + (s.masteryProb ?? 0), 0) / known.length) * 100);
+}
 
 /**
  * "내 실력" 화면이 그릴 값.
@@ -39,8 +62,9 @@ const EMPTY: SkillDashboard = {
  * **연속 학습은 보여주지 않는다.** 날짜별 학습 여부를 세는 기록이 아직 없어 계산할 수 없고,
  * 없는 것보다 지어낸 값이 나쁘다.
  *
- * 요소 순서는 서버가 준 대로 둔다 — 약한 것부터 정렬해 오고, 홈의 복습 카드도 같은 순서를
- * 쓴다. 여기서 다시 정렬하면 두 화면이 갈린다.
+ * **목록은 분류로 묶는다.** 요소 74개를 그대로 그리면 같은 이름이 반복돼 읽을 수 없다.
+ * 묶으면 17줄이 된다. 분류 안에서 개별 글자를 알아야 하는 자리(음성 중심 화면의 상위 몇 개)는
+ * `skillDisplayName`을 쓴다.
  */
 export function selectSkillDashboard(summary: SkillSummary | null | undefined): SkillDashboard {
   if (!summary) return EMPTY;
@@ -56,20 +80,28 @@ export function selectSkillDashboard(summary: SkillSummary | null | undefined): 
     return { overallPercent: null, overallDetail: null, stats, rules: [] };
   }
 
-  const known = summary.skills.filter((skill) => skill.masteryProb !== null);
-  const overallPercent =
-    known.length === 0
-      ? null
-      : Math.round((known.reduce((sum, s) => sum + (s.masteryProb ?? 0), 0) / known.length) * 100);
+  const byName = new Map<string, SkillMastery[]>();
+  for (const skill of summary.skills) {
+    const group = byName.get(skill.name);
+    if (group) group.push(skill);
+    else byName.set(skill.name, [skill]);
+  }
+
+  const rules: SkillGroup[] = [...byName].map(([label, skills]) => ({
+    label,
+    percent: percentOf(skills),
+    count: skills.length,
+  }));
+  // 약한 분류부터. 퍼센트를 모르는 분류는 끝으로 보낸다 — 약하다고 단정할 근거가 없다
+  rules.sort((a, b) => (a.percent ?? Infinity) - (b.percent ?? Infinity));
+
   const mastered = summary.skills.filter((skill) => skill.label === MASTERED_LABEL).length;
 
   return {
-    overallPercent,
+    // 분류 평균을 다시 평균하면 요소가 적은 분류가 과대평가된다 — 요소 단위로 낸다
+    overallPercent: percentOf(summary.skills),
     overallDetail: `요소 ${summary.skills.length}개 중 ${mastered}개를 익혔어요`,
     stats,
-    rules: summary.skills.map((skill) => ({
-      label: skill.name,
-      percent: skill.masteryProb === null ? null : Math.round(skill.masteryProb * 100),
-    })),
+    rules,
   };
 }

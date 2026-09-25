@@ -322,7 +322,10 @@ export type InProgressSession = z.infer<typeof inProgressSessionSchema>;
  */
 export const skillMasterySchema = z.object({
   learningSkillId: identifierSchema,
+  /** 규칙의 **분류**. 같은 값이 여러 행에 걸쳐 있다 — "첫소리 기본 자음"만 14행, "단독 자모"는 35행 */
   name: z.string().min(1),
+  /** 그 분류 안에서 다루는 글자('ㄱ'·'ㄴ'…). 없으면 빈 문자열 */
+  target: z.string(),
   /** 0~1 숙련 추정치 */
   masteryProb: z.number().nullable(),
   /** "익숙해요" | "배우는 중" | "더 연습해요" */

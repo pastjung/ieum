@@ -21,15 +21,17 @@ public record SkillSummaryResponse(
   }
 
   /**
+   * @param name 규칙의 분류. 같은 값이 여러 행에 걸쳐 있다
+   * @param target 그 분류 안에서 다루는 글자('ㄱ'·'ㄴ'…)
    * @param masteryProb 0~1 숙련 추정치
    * @param label "익숙해요" | "배우는 중" | "더 연습해요" — 기준은 FastAPI에만 있다
    */
   public record SkillMasteryResponse(
-      Long learningSkillId, String name, Double masteryProb, String label) {
+      Long learningSkillId, String name, String target, Double masteryProb, String label) {
 
     static SkillMasteryResponse from(SkillMasteryView view) {
       return new SkillMasteryResponse(
-          view.learningSkillId(), view.name(), view.masteryProb(), view.label());
+          view.learningSkillId(), view.name(), view.target(), view.masteryProb(), view.label());
     }
   }
 }

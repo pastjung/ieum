@@ -14,8 +14,8 @@ function summary(overrides: Partial<SkillSummary> = {}): SkillSummary {
     totalAttemptCount: 184,
     correctAttemptCount: 151,
     skills: [
-      { learningSkillId: 2, name: "된소리", masteryProb: 0.21, label: "더 연습해요" },
-      { learningSkillId: 1, name: "첫소리 기본 자음", masteryProb: 0.93, label: "익숙해요" },
+      { learningSkillId: 2, name: "된소리", target: "ㄲ", masteryProb: 0.21, label: "더 연습해요" },
+      { learningSkillId: 1, name: "첫소리 기본 자음", target: "ㄱ", masteryProb: 0.93, label: "익숙해요" },
     ],
     ...overrides,
   };
@@ -60,8 +60,8 @@ describe("내 실력 화면이 그릴 값", () => {
     const view = selectSkillDashboard(
       summary({
         skills: [
-          { learningSkillId: 1, name: "가", masteryProb: 0.2, label: "더 연습해요" },
-          { learningSkillId: 2, name: "나", masteryProb: 0.8, label: "익숙해요" },
+          { learningSkillId: 1, name: "가", target: "ㄱ", masteryProb: 0.2, label: "더 연습해요" },
+          { learningSkillId: 2, name: "나", target: "ㄴ", masteryProb: 0.8, label: "익숙해요" },
         ],
       }),
     );
@@ -73,9 +73,9 @@ describe("내 실력 화면이 그릴 값", () => {
     const view = selectSkillDashboard(
       summary({
         skills: [
-          { learningSkillId: 1, name: "가", masteryProb: 0.2, label: "더 연습해요" },
-          { learningSkillId: 2, name: "나", masteryProb: 0.9, label: "익숙해요" },
-          { learningSkillId: 3, name: "다", masteryProb: 0.95, label: "익숙해요" },
+          { learningSkillId: 1, name: "가", target: "ㄱ", masteryProb: 0.2, label: "더 연습해요" },
+          { learningSkillId: 2, name: "나", target: "ㄴ", masteryProb: 0.9, label: "익숙해요" },
+          { learningSkillId: 3, name: "다", target: "ㄷ", masteryProb: 0.95, label: "익숙해요" },
         ],
       }),
     );
@@ -98,8 +98,7 @@ describe("내 실력 화면이 그릴 값", () => {
     expect(view.rules).toEqual([]);
   });
 
-  it("요소 순서를 바꾸지 않는다", () => {
-    // 서버가 약한 것부터 정렬해 보낸다. 다시 정렬하면 복습 카드와 순서가 갈린다
+  it("약한 분류부터 보여준다", () => {
     const view = selectSkillDashboard(summary());
 
     expect(view.rules.map((r) => r.label)).toEqual(["된소리", "첫소리 기본 자음"]);
