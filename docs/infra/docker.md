@@ -127,7 +127,7 @@ EC2의 `.env` 작성 절차와 값의 의미는 deploy.md 6.2절을 따른다. `
 
 - 정적 파일 서빙 성능: 이벤트 기반 구조와 `sendfile` 같은 커널 수준 최적화로, 정적 콘텐츠 서빙에서 최고 수준의 처리량을 낸다. Node 기반 서버(serve, vite preview)로 같은 파일을 서빙하는 것보다 빠르고 메모리 사용량도 훨씬 적다
 - 이미지 크기: 빌드 도구(node, node_modules)를 최종 이미지에서 제외하고 nginx alpine + 산출물만 남겨 50MB 미만으로 유지된다
-- 설정의 코드화: gzip, 캐시 헤더, SPA 폴백 같은 웹 서빙 설정(`apps/web/nginx.conf`)이 소스와 함께 버전 관리되고, 배포·롤백 시 코드와 항상 함께 움직인다
+- 설정의 코드화: gzip, 캐시 헤더, SPA 폴백 같은 웹 서빙 설정(`front/apps/web/nginx.conf`)이 소스와 함께 버전 관리되고, 배포·롤백 시 코드와 항상 함께 움직인다
 
 호스트 Nginx(리버스 프록시)와 역할이 다르다는 점에 유의한다. 호스트 Nginx는 HTTPS 종료와 서비스 라우팅을, 컨테이너 내부 Nginx는 정적 파일 서빙만 담당한다.
 
@@ -165,4 +165,4 @@ EC2의 `.env` 작성 절차와 값의 의미는 deploy.md 6.2절을 따른다. `
 - [ ] web: src 수정 시 브라우저에 즉시 반영된다 (vite 핫리로드)
 - [ ] backend: java 파일 수정 시 수 초 내 자동 재시작된다 (로그에 devtools restart 확인)
 - [ ] ai: app 파일 수정 시 자동 재시작된다 (로그에 uvicorn reload 확인)
-- [ ] `docker build apps/web`, `docker build apps/backend`, `docker build apps/ai`가 각각 성공한다 (운영 이미지 전체 빌드)
+- [ ] `docker build --target web front`, `docker build apps/backend`, `docker build apps/ai`가 각각 성공한다 (운영 이미지 전체 빌드)

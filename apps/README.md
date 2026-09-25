@@ -131,9 +131,9 @@ H2 Console 접속 정보:
 Backend를 먼저 실행한 뒤 Web을 실행한다. 개발 서버는 `/api` 요청을 `http://localhost:8080`으로 전달한다.
 
 ```powershell
-cd apps/web
-npm install
-npm run dev
+cd front
+pnpm install
+pnpm dev:web
 ```
 
 브라우저에서 `http://localhost:5173`으로 접속한다.
@@ -141,10 +141,11 @@ npm run dev
 프로덕션 빌드 확인:
 
 ```powershell
-npm run build
+cd front
+pnpm --filter @ieum/web build
 ```
 
-상세한 프로젝트 구조는 [Web README](./web/README.md)를 참고한다.
+상세한 프로젝트 구조는 [Web README](../front/apps/web/README.md)를 참고한다.
 
 ## 6. Mobile 실행
 
@@ -237,8 +238,8 @@ cd apps/backend
 ### Terminal 3 — Web
 
 ```powershell
-cd apps/web
-npm run dev
+cd front
+pnpm dev:web
 ```
 
 ### Terminal 4 — Mobile

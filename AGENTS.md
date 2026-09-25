@@ -8,7 +8,7 @@ AI 오답 분석 기반 맞춤 복습, Arduino 6점 촉각 출력을 제공한�
 
 - `apps/backend` Spring Boot API 서버
 - `apps/ai` FastAPI (오답 분석·맞춤 학습)
-- `apps/web` React + Vite (교육자 웹)
+- `front/apps/web` React + Vite (교육자 웹) — pnpm 워크스페이스 `@ieum/web`
 - `apps/mobile` React Native (학습자 앱)
 - `deploy/`, `scripts/`, `Jenkinsfile*` 인프라 — 수정 전 docs/infra/README.md 필독
 
@@ -48,7 +48,7 @@ AI 오답 분석 기반 맞춤 복습, Arduino 6점 촉각 출력을 제공한�
 
 - backend: `cd apps/backend && ./gradlew test`
 - ai: `cd apps/ai && pytest`
-- web: `cd apps/web && npm run build` (tsc 타입체크 포함)
+- web: `cd front && pnpm --filter @ieum/web build` (tsc 타입체크 포함)
 - mobile: `cd apps/mobile && npm test`
 - CI와 동일한 통합 검증: `docker build --target test apps/<앱>` — MR verify 파이프라인이 이것을 실행한다
 - 문서·설정만 변경한 경우 검증 명령 대신 diff 확인으로 대체한다

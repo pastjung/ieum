@@ -26,8 +26,8 @@ case "$REL" in
   apps/backend/*.java)
     (cd "$ROOT/apps/backend" && ./gradlew spotlessApply -q --console=plain) >/dev/null 2>&1 || true
     ;;
-  apps/web/*.ts|apps/web/*.tsx)
-    out=$(cd "$ROOT/apps/web" && npx --no-install eslint --fix "$FILE" 2>&1) || feedback "$out"
+  front/apps/web/*.ts|front/apps/web/*.tsx)
+    out=$(cd "$ROOT/front/apps/web" && pnpm exec eslint --fix "$FILE" 2>&1) || feedback "$out"
     ;;
   apps/mobile/*.ts|apps/mobile/*.tsx|apps/mobile/*.js|apps/mobile/*.jsx)
     out=$(cd "$ROOT/apps/mobile" && npx --no-install eslint --fix "$FILE" 2>&1) || feedback "$out"

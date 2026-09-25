@@ -42,16 +42,6 @@ S15P21B201/
 │  │  ├─ settings.gradle
 │  │  └─ README.md
 │  │
-│  ├─ web/
-│  │  ├─ src/
-│  │  │  ├─ app/
-│  │  │  ├─ domains/
-│  │  │  ├─ pages/
-│  │  │  └─ shared/
-│  │  ├─ package.json
-│  │  ├─ package-lock.json
-│  │  └─ README.md
-│  │
 │  ├─ mobile/
 │  │  ├─ src/
 │  │  │  ├─ app/
@@ -72,6 +62,19 @@ S15P21B201/
 │     ├─ tests/
 │     ├─ requirements.txt
 │     └─ README.md
+│
+├─ front/                         # 앱과 웹을 담는 pnpm 워크스페이스
+│  ├─ apps/
+│  │  └─ web/
+│  │     ├─ src/
+│  │     │  ├─ app/
+│  │     │  ├─ domains/
+│  │     │  ├─ pages/
+│  │     │  └─ shared/
+│  │     ├─ package.json
+│  │     └─ README.md
+│  ├─ pnpm-workspace.yaml
+│  └─ Dockerfile
 │
 ├─ deploy/
 │  ├─ docker-compose.prod.yml     # 운영 서비스 정의 (blue/green 슬롯)
@@ -148,14 +151,21 @@ GitLab에서 템플릿을 인식하려면 해당 파일이 기본 브랜치에 �
 
 ### `apps/`
 
-직접 실행하거나 배포할 수 있는 애플리케이션을 저장한다.
+직접 실행하거나 배포할 수 있는 애플리케이션을 저장한다. 웹(React)은 `front/apps/web`에, 나머지 백엔드·AI·모바일은 여기에 위치한다.
 
 - `backend`: Spring Boot API 서버
-- `web`: 교육자용 React 웹 애플리케이션
 - `mobile`: 학습자용 React Native 애플리케이션
 - `ai`: 점역, 채점, 추천 등을 담당하는 Python 서비스
 
 서비스별 `Dockerfile`, 빌드 파일, 테스트, README는 해당 서비스 폴더에 둔다. 한 서비스의 빌드가 다른 서비스 폴더의 내부 구현에 직접 의존하지 않도록 한다.
+
+### `front/`
+
+교육자용 웹과 학습자용 앱 운영이 공유하는 pnpm 워크스페이스다. 둘은 별개 앱이지만 공통 UI 컴포넌트·유틸·타입을 재사용한다.
+
+- `front/apps/web`: 교육자용 React + Vite 웹 애플리케이션 (`@ieum/web` 패키지)
+- `pnpm-workspace.yaml`: 워크스페이스 정의 — 앱과 웹의 패키지 명시
+- `Dockerfile`: 웹 빌드·테스트·운영 이미지 다단계 빌드 정의 (웹-deps, web-build, web, test)
 
 ### `deploy/` 와 `scripts/`
 
