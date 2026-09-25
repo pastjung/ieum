@@ -9,6 +9,10 @@ interface Props {
   onCommitCell: (cell: Cell) => void;
   /** 가운데 세로 컨트롤 (다시 듣기·입력 완료 등) */
   center: ReactNode;
+  /** 입력 잠금 — 세로 패드(`DotPad`)의 같은 이름 prop과 같은 규칙이다 */
+  disabled?: boolean;
+  /** 잠긴 상태의 터치를 무시할 때 제스처마다 한 번 — 지금 상태를 읽어 주는 자리 */
+  onBlockedTouch?: () => void;
 }
 
 const SIZE = 96;
@@ -30,9 +34,12 @@ const rightPos: Partial<Record<Dot, object>> = {
  * 두 영역에 걸친 동시 입력을 위해 행 전체가 하나의 터치 영역으로 동작한다.
  * 가운데 버튼은 점 입력 중이 아닐 때 누른다.
  */
-export function LandscapeDotPad({ onCommitCell, center }: Props) {
+export function LandscapeDotPad({ onCommitCell, center, disabled, onBlockedTouch }: Props) {
   const theme = useTheme();
-  const { active, padHandlers, onMeasureDot } = useMultiTouchDots(onCommitCell);
+  const { active, padHandlers, onMeasureDot } = useMultiTouchDots(onCommitCell, {
+    disabled,
+    onBlocked: onBlockedTouch,
+  });
 
   const zone = (dots: Dot[], pos: Partial<Record<Dot, object>>, label: string) => (
     <View
@@ -47,9 +54,17 @@ export function LandscapeDotPad({ onCommitCell, center }: Props) {
 
   return (
     <View {...padHandlers} style={styles.row}>
-      {zone([3, 2, 1], leftPos, "왼손 입력 영역. 위에서부터 3번, 2번, 1번 점이에요.")}
+      {zone(
+        [3, 2, 1],
+        leftPos,
+        disabled ? "왼손 입력 영역. 지금은 입력할 수 없어요." : "왼손 입력 영역. 위에서부터 3번, 2번, 1번 점이에요.",
+      )}
       <View style={styles.center}>{center}</View>
-      {zone([6, 5, 4], rightPos, "오른손 입력 영역. 위에서부터 6번, 5번, 4번 점이에요.")}
+      {zone(
+        [6, 5, 4],
+        rightPos,
+        disabled ? "오른손 입력 영역. 지금은 입력할 수 없어요." : "오른손 입력 영역. 위에서부터 6번, 5번, 4번 점이에요.",
+      )}
     </View>
   );
 }

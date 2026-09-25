@@ -24,6 +24,14 @@ const WAITING_MESSAGE = "확인하고 있어요.";
  */
 const ALREADY_MESSAGE = "이미 확인한 문제예요. 다음으로 넘어갈게요.";
 
+/**
+ * 잠긴 동안(대기·실패) 점자 패드를 만졌을 때 상태 문구 뒤에 붙는 말.
+ *
+ * 패드가 입력을 버리면서 침묵하면 그것도 "아무 일도 없었다"와 구별되지 않는다. 화면에 이미
+ * 떠 있는 상태 문구에 이 말을 이어 붙여 **화면과 낭독이 같은 한 문자열**이 되게 한다.
+ */
+const INPUT_BLOCKED_SUFFIX = "지금은 입력할 수 없어요.";
+
 type Phase = "idle" | "waiting" | "failed" | "exhausted";
 
 /** V14 문제 풀이 · 세로 V패드 / V14b 가로 두 손 입력 (기기를 돌리면 전환) */
@@ -52,6 +60,9 @@ export default function SessionPlay() {
   // exhausted: MAX_ATTEMPT_TRIES 소진, 전용 화면으로 대체된다.
   const [phase, setPhase] = useState<Phase>("idle");
   const locked = phase !== "idle";
+  // 잠긴 동안 패드를 만졌는지. 켜지면 상태 문구에 INPUT_BLOCKED_SUFFIX가 붙어 화면과 낭독에
+  // 함께 나간다. 상태(phase)가 바뀌면 그 사실도 더 이상 지금의 것이 아니므로 아래 effect가 끈다
+  const [inputBlocked, setInputBlocked] = useState(false);
   // 문항마다 재시도 횟수를 새로 센다. `submitAttempt`가 시도 횟수로 실패 문구를 바꿔
   // `speak()`의 1.5초 중복 제거를 피한다(`attemptSubmission.ts` 주석 참고).
   const attemptRef = useRef(0);
@@ -75,16 +86,49 @@ export default function SessionPlay() {
     if (problem) announce(`${index + 1}번 문제. ${problem.prompt}`);
   }, [problem, index]);
 
-  const commit = useCallback(
-    (cell: Cell) => {
-      if (locked) return;
-      setCells((prev) => [...prev, cell]);
-      // 입력이 달라졌으니 막힌 이유도 더 이상 사실이 아니다
-      setStatusMessage(null);
-      void hapticTap();
-    },
-    [locked],
-  );
+  // 상태가 바뀌면 "입력이 무시됐다"는 안내도 지금의 사실이 아니다
+  useEffect(() => {
+    setInputBlocked(false);
+  }, [phase]);
+
+  const commit = useCallback((cell: Cell) => {
+    setCells((prev) => [...prev, cell]);
+    // 입력이 달라졌으니 막힌 이유도 더 이상 사실이 아니다
+    setStatusMessage(null);
+    void hapticTap();
+  }, []);
+
+  // 화면에 그리는 문구 = 낭독하는 문구. 잠긴 동안 패드를 만졌으면 그 사실을 상태 문구에
+  // 이어 붙인다 (설계 8절 — 두 채널이 한 문자열을 공유한다)
+  const displayedStatus =
+    statusMessage === null
+      ? inputBlocked
+        ? INPUT_BLOCKED_SUFFIX
+        : null
+      : inputBlocked
+        ? `${statusMessage} ${INPUT_BLOCKED_SUFFIX}`
+        : statusMessage;
+
+  /**
+   * 잠긴 동안 점자 패드를 만졌다.
+   *
+   * 예전에는 `commit`이 `if (locked) return;`으로 조용히 버렸는데, 패드에는 잠금 개념이
+   * 없어서 `useMultiTouchDots`가 점마다 진동을 내고 확정 시 "3번 입력"까지 낭독했다.
+   * 시각장애인 사용자는 그 신호를 입력이 기록됐다는 뜻으로 읽는다 — 실패 상태에서 답을
+   * 고치려던 사용자가 고쳤다고 믿고 "다시 보내기"를 누르면 **옛 답이 전송된다.**
+   *
+   * 이제 잠금을 패드까지 내려보내 터치 자체를 무시하고, 무시했다는 사실과 그 이유를
+   * 화면·낭독에 같은 문자열로 한 번 내보낸다.
+   */
+  const onBlockedTouch = useCallback(() => {
+    setInputBlocked(true);
+    void hapticError();
+    announce(
+      statusMessage === null
+        ? INPUT_BLOCKED_SUFFIX
+        : `${statusMessage} ${INPUT_BLOCKED_SUFFIX}`,
+    );
+  }, [statusMessage]);
 
   if (!session || !problem) {
     return (
@@ -105,7 +149,7 @@ export default function SessionPlay() {
           accessibilityLiveRegion="polite"
           style={{ fontSize: 22 * fontScale, fontWeight: "800", lineHeight: 32, color: theme.color.text, textAlign: "center" }}
         >
-          {statusMessage}
+          {displayedStatus}
         </Text>
         <AppButton label="홈으로" onPress={() => router.replace("/(tabs)")} />
       </ScreenShell>
@@ -282,6 +326,8 @@ export default function SessionPlay() {
         </View>
         <LandscapeDotPad
           onCommitCell={commit}
+          disabled={locked}
+          onBlockedTouch={onBlockedTouch}
           center={
             <>
               <View style={{ flex: 1 }}>
@@ -296,7 +342,7 @@ export default function SessionPlay() {
             </>
           }
         />
-        {statusMessage !== null && (
+        {displayedStatus !== null && (
           <Text
             accessibilityLiveRegion="polite"
             style={{
@@ -312,7 +358,7 @@ export default function SessionPlay() {
               textAlign: "center",
             }}
           >
-            {statusMessage}
+            {displayedStatus}
           </Text>
         )}
         <Text style={{ fontSize: 13, color: theme.color.textMuted, textAlign: "center" }}>
@@ -360,7 +406,7 @@ export default function SessionPlay() {
           </Text>
         </View>
       )}
-      {statusMessage !== null && (
+      {displayedStatus !== null && (
         <Text
           accessibilityLiveRegion="polite"
           style={{
@@ -375,7 +421,7 @@ export default function SessionPlay() {
             paddingVertical: 10,
           }}
         >
-          {statusMessage}
+          {displayedStatus}
         </Text>
       )}
       <View style={{ flexDirection: "row", gap: 10 }}>
@@ -386,7 +432,7 @@ export default function SessionPlay() {
           <AppButton label="한 칸 지우기" variant="compact" accessibilityHint="마지막에 입력한 칸을 지워요" disabled={locked} onPress={eraseLast} />
         </View>
       </View>
-      <DotPad onCommitCell={commit} />
+      <DotPad onCommitCell={commit} disabled={locked} onBlockedTouch={onBlockedTouch} />
       <AppButton {...submitButtonProps} disabled={phase === "waiting"} />
     </ScreenShell>
   );

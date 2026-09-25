@@ -15,6 +15,25 @@ const SLOP = 12;
 /** 확정된 점 하이라이트(잔상)를 유지하는 시간 — 저시력 사용자가 방금 짚은 점을 눈으로 확인할 여유(약 1초) */
 const AFTERGLOW_MS = 1000;
 
+export interface MultiTouchDotsOptions {
+  /**
+   * 잠금. 화면이 입력을 받을 수 없는 상태(서버 응답 대기·제출 실패 등)에서 켠다.
+   *
+   * **잠금이 여기까지 내려와야 하는 이유**: 호출부에서 `onCommitCell`을 조용히 버리면
+   * 사용자는 확정 낭독("3번 입력")과 점마다의 진동을 그대로 받는다. 시각장애인 사용자는
+   * 그 신호를 입력이 기록됐다는 뜻으로 읽는다 — 실패 상태에서 답을 고치려던 사용자가
+   * 고쳤다고 믿고 재시도를 누르면 **옛 답이 그대로 전송된다.**
+   */
+  disabled?: boolean;
+  /**
+   * 잠긴 상태에서 터치를 무시할 때 제스처마다 한 번 불린다.
+   *
+   * 무시하면서 침묵하면 그것도 "아무 일도 없었다"와 구별되지 않는다. 호출부가 지금 화면에
+   * 떠 있는 상태 문구를 그대로 읽어 준다.
+   */
+  onBlocked?: () => void;
+}
+
 /**
  * 6점 입력 멀티터치 제스처.
  *
@@ -23,12 +42,19 @@ const AFTERGLOW_MS = 1000;
  * 하나가 모든 터치를 받아 창(window) 좌표로 어느 점을 짚었는지 판정한다.
  * 점을 동시에 짚었다가 모든 손가락을 떼면 한 칸이 확정된다.
  */
-export function useMultiTouchDots(onCommitCell: (cell: Cell) => void) {
+export function useMultiTouchDots(
+  onCommitCell: (cell: Cell) => void,
+  options?: MultiTouchDotsOptions,
+) {
+  const disabled = options?.disabled ?? false;
+  const onBlocked = options?.onBlocked;
   const rects = useRef(new Map<Dot, DotRect>());
   const gathered = useRef(new Set<Dot>());
   const prev = useRef(new Set<Dot>());
   const [active, setActive] = useState<Set<Dot>>(new Set());
   const afterglowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 이번 제스처에서 이미 안내했는지. 손가락을 모두 떼면 풀린다 */
+  const blockedAnnounced = useRef(false);
 
   const clearAfterglowTimer = () => {
     if (afterglowTimer.current !== null) {
@@ -41,6 +67,20 @@ export function useMultiTouchDots(onCommitCell: (cell: Cell) => void) {
   useEffect(() => {
     return clearAfterglowTimer;
   }, []);
+
+  // 제스처 도중에 잠기면(예: 다른 손으로 제출을 눌렀을 때) 모아 둔 점과 잔상이 남는다.
+  // 잠기는 순간 걷어내야 잠금이 풀린 뒤 엉뚱한 칸이 확정되지 않는다
+  useEffect(() => {
+    if (!disabled) return;
+    if (afterglowTimer.current !== null) {
+      clearTimeout(afterglowTimer.current);
+      afterglowTimer.current = null;
+    }
+    gathered.current = new Set();
+    prev.current = new Set();
+    blockedAnnounced.current = false;
+    setActive(new Set());
+  }, [disabled]);
 
   /** DotButton이 배치될 때 창 기준 위치를 등록 */
   const onMeasureDot = (dot: Dot, rect: DotRect) => {
@@ -61,6 +101,15 @@ export function useMultiTouchDots(onCommitCell: (cell: Cell) => void) {
   };
 
   const update = (e: GestureResponderEvent) => {
+    if (disabled) {
+      // 낭독도 진동도 내지 않고 버린다 — 그 신호가 곧 "입력됐다"는 뜻이기 때문이다.
+      // 대신 제스처마다 한 번 지금 상태를 알린다
+      if (!blockedAnnounced.current) {
+        blockedAnnounced.current = true;
+        onBlocked?.();
+      }
+      return;
+    }
     // 새 터치가 시작되면 이전 칸의 잔상 위에 겹쳐 보이지 않도록 즉시 걷어낸다
     clearAfterglowTimer();
     const now = touchesToDots(e);
@@ -76,6 +125,11 @@ export function useMultiTouchDots(onCommitCell: (cell: Cell) => void) {
   };
 
   const end = (e: GestureResponderEvent) => {
+    if (disabled) {
+      // 손가락을 모두 떼면 다음 제스처에서 다시 안내한다
+      blockedAnnounced.current = e.nativeEvent.touches.length > 0;
+      return;
+    }
     if (e.nativeEvent.touches.length > 0) {
       update(e);
       return;
