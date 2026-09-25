@@ -1,11 +1,11 @@
-# 학습자 앱 모노레포(pnpm workspace)의 검증 이미지.
+# 프론트 모노레포(pnpm workspace) 이미지.
 #
-# MR 검증 파이프라인이 `docker build --target test front`로 이 파일을 쓴다 (Jenkinsfile.mr).
-# 이 파일이 없으면 front/ 를 건드린 모든 MR이 코드 품질과 무관하게 빨간불이 된다.
+# - test     : MR 검증 파이프라인이 `docker build --target test front`로 쓴다 (Jenkinsfile.mr).
+#              이 파일이 없으면 front/ 를 건드린 모든 MR이 코드 품질과 무관하게 빨간불이 된다.
+# - web      : 강사 웹 운영 이미지. 배포 단계가 `docker build --target web front`로 쓴다 (Jenkinsfile).
+# - web-deps : 로컬 개발 compose가 vite dev 서버를 띄우는 스테이지 (루트 docker-compose.yml).
 #
-# 운영 이미지는 여기 없다. front/ 에는 앱(Expo)만 있고 웹 서비스는 저장소 루트 apps/web 이
-# 자기 Dockerfile로 갖고 있다. Jenkinsfile의 배포 단계가 `--target web front`를 부르는 것은
-# 저장소 구조와 어긋난 부분이며, 배포 작업에서 apps/web 을 가리키도록 함께 정리해야 한다.
+# 학습자 앱(Expo)의 운영 산출물은 여기서 만들지 않는다.
 
 # ---------- base: 의존성 레이어 ----------
 FROM node:22-alpine AS base
@@ -30,6 +30,9 @@ RUN --mount=type=cache,target=/pnpm-store \
 
 RUN pnpm -r typecheck
 
+# 웹은 예전 apps/web 검증과 같은 범위(lint + tsc -b + vite build)를 유지한다.
+RUN pnpm --filter @ieum/web lint && pnpm --filter @ieum/web build
+
 # `pnpm -r test`만 쓰면 test 스크립트를 가진 패키지가 하나도 없어도 성공한다.
 # "테스트가 통과했다"가 아무것도 보장하지 않는 상태를 만들지 않기 위해, 실제 스위트를
 # 명시적으로 돌리고 실행 건수가 0이 아닌지 확인한다.
@@ -43,3 +46,26 @@ RUN pnpm -r test \
         } \
         console.log('jest 통과: ' + r.numPassedTests + '/' + r.numTotalTests); \
       "
+
+# ---------- web-deps: 웹 의존성 설치 (로컬 개발 compose가 여기서 vite dev를 띄운다) ----------
+FROM base AS web-deps
+
+COPY . .
+
+# 웹과 그 워크스페이스 의존성만 설치한다. 앱(Expo) 의존성까지 받으면 이미지가 수 배로 커진다.
+RUN --mount=type=cache,target=/pnpm-store \
+    pnpm config set store-dir /pnpm-store \
+    && pnpm install --frozen-lockfile --filter "@ieum/web..."
+
+# ---------- web-build ----------
+FROM web-deps AS web-build
+
+RUN pnpm --filter @ieum/web build
+
+# ---------- web: 운영 런타임 ----------
+FROM nginx:stable-alpine AS web
+
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=web-build /workspace/apps/web/dist /usr/share/nginx/html
+
+EXPOSE 80
