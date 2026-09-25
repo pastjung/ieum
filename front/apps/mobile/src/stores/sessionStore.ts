@@ -33,6 +33,15 @@ interface SessionState {
   lastResult: GradeResult | null;
   /** 문항별 서버 분석 결과. 실시간 수업(serverSessionId === null)은 채우지 않는다 */
   lastAnalysis: AttemptAnalysisResponse | null;
+  /**
+   * 이번 문항에 서버 설명이 없는 이유. 지금은 `LEARNING_PROBLEM_ALREADY_ANALYZED` 하나다 —
+   * 응답 유실이나 앱 재시작으로 서버가 이미 끝낸 문항이라 분석을 다시 받을 수 없다.
+   *
+   * 화면(`session/grade.tsx`)이 이 문자열 하나를 화면에도 그리고 낭독도 한다. `play.tsx`에
+   * 띄워 봐야 바로 다음 줄의 `router.replace`가 화면을 치우고, 낭독도 `grade.tsx`의
+   * `announce`가 `Speech.stop()`으로 끊는다 — 그래서 안내를 화면 간에 실어 나른다.
+   */
+  lastAttemptNotice: string | null;
   /** 수업 중 연결 끊김 데모를 이미 보여줬는지 (V29) */
   disconnectShown: boolean;
   serverSessionId: number | null;
@@ -49,6 +58,7 @@ interface SessionState {
   buildAttempts: () => AttemptInput[];
   setServerResult: (result: CompletionResponse) => void;
   setLastAnalysis: (result: AttemptAnalysisResponse | null) => void;
+  setLastAttemptNotice: (message: string | null) => void;
   reset: () => void;
 }
 
@@ -59,6 +69,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   answers: [],
   lastResult: null,
   lastAnalysis: null,
+  lastAttemptNotice: null,
   disconnectShown: false,
   serverSessionId: null,
   problemSessionIds: [],
@@ -71,6 +82,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       answers: [],
       lastResult: null,
       lastAnalysis: null,
+      lastAttemptNotice: null,
       disconnectShown: false,
       serverSessionId: meta?.serverSessionId ?? null,
       problemSessionIds: meta?.problemSessionIds ?? [],
@@ -100,8 +112,10 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       ],
       lastResult: result,
       // 새 답은 이전 분석을 무효로 만든다 — 서버 응답을 기다리는 동안(setLastAnalysis 호출
-      // 전까지) 이전 문항·이전 시도의 분석이 남아 있으면 그 사이 화면이 무관한 설명을 읽는다
+      // 전까지) 이전 문항·이전 시도의 분석이 남아 있으면 그 사이 화면이 무관한 설명을 읽는다.
+      // 안내(lastAttemptNotice)도 같은 이유로 같이 비운다
       lastAnalysis: null,
+      lastAttemptNotice: null,
     }));
     return result;
   },
@@ -109,7 +123,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     const { session, index } = get();
     if (!session) return false;
     if (index + 1 >= session.problems.length) return false;
-    set({ index: index + 1, lastResult: null, lastAnalysis: null });
+    set({ index: index + 1, lastResult: null, lastAnalysis: null, lastAttemptNotice: null });
     return true;
   },
   correctCount: () => get().answers.filter((a) => a.result.correct).length,
@@ -147,6 +161,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   },
   setServerResult: (result) => set({ serverResult: result }),
   setLastAnalysis: (result) => set({ lastAnalysis: result }),
+  setLastAttemptNotice: (message) => set({ lastAttemptNotice: message }),
   reset: () =>
     set({
       session: null,
@@ -155,6 +170,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       answers: [],
       lastResult: null,
       lastAnalysis: null,
+      lastAttemptNotice: null,
       disconnectShown: false,
       serverSessionId: null,
       problemSessionIds: [],

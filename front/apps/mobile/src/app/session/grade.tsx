@@ -8,7 +8,7 @@ import { AppButton } from "@/components/AppButton";
 import { BrailleCellView } from "@/components/BrailleCellView";
 import { useSessionStore } from "@/stores/sessionStore";
 import { selectGradeFeedback } from "@/services/gradeFeedback";
-import { announce, hapticError, hapticSuccess } from "@/a11y";
+import { announce, hapticError, hapticSuccess, hapticTap } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
 
 /** V15 채점 정답 · V16 채점 오답+차이 · V17 서버 분석(문항별 칸 진단) */
@@ -19,6 +19,7 @@ export default function Grade() {
   const session = useSessionStore((s) => s.session);
   const index = useSessionStore((s) => s.index);
   const analysis = useSessionStore((s) => s.lastAnalysis);
+  const notice = useSessionStore((s) => s.lastAttemptNotice);
   const local = useSessionStore((s) => s.lastResult);
   const next = useSessionStore((s) => s.next);
   const answers = useSessionStore((s) => s.answers);
@@ -32,6 +33,14 @@ export default function Grade() {
   const feedback = selectGradeFeedback(analysis, local);
 
   useEffect(() => {
+    // 서버가 이미 끝낸 문항이라 이번 설명이 없다. 정오 진동도 내지 않는다 — 그 판정은
+    // 로컬 채점에서만 나오고, 설계 3절이 정답 여부는 더 이상 로컬이 정하지 않는다고
+    // 못 박았다. 대신 중립적인 촉각 신호로 "무언가 일어났다"는 것만 알린다
+    if (notice !== null) {
+      void hapticTap();
+      announce(notice);
+      return;
+    }
     if (!feedback) return;
     if (feedback.correct) {
       void hapticSuccess();
@@ -41,7 +50,7 @@ export default function Grade() {
     // 화면 문구와 같은 문자열을 낭독한다 (서버 분석 경로는 describeCells의 불변식이 보장하고,
     // 로컬 경로는 기존 V16 낭독 문구를 그대로 유지한다)
     announce(feedback.speech);
-  }, [feedback]);
+  }, [feedback, notice]);
 
   if (!session || !local || !feedback) {
     return (
@@ -67,6 +76,33 @@ export default function Grade() {
       router.replace(kind === "class" ? "/class/end" : "/session/analyzing");
     }
   };
+
+  // 서버가 이미 끝낸 문항(LEARNING_PROBLEM_ALREADY_ANALYZED). 이 경로는 lastAnalysis가
+  // null이라 feedback이 로컬 분기로 떨어지는데, 그 정오 판정을 헤드라인으로 쓰면 서버가
+  // 기록한 결과와 다른 것을 사실처럼 크게 보여줄 수 있다. 안내 한 문장만 내보낸다 —
+  // 화면에 그리는 문자열과 위 effect가 낭독하는 문자열이 같은 값이다.
+  if (notice !== null) {
+    return (
+      <ScreenShell>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: theme.color.textMuted, fontVariant: ["tabular-nums"] }}>
+          {progress}
+        </Text>
+        <View style={styles.center}>
+          <IeumFace size={130} accessibilityLabel="이음 캐릭터" />
+          <Text
+            accessibilityRole="header"
+            accessibilityLiveRegion="polite"
+            style={{ fontSize: 26 * fontScale, fontWeight: "800", lineHeight: 38, color: theme.color.text, textAlign: "center" }}
+          >
+            {notice}
+          </Text>
+        </View>
+        <View style={{ marginTop: "auto" }}>
+          <AppButton label={index + 1 >= session.problems.length ? "결과 보기" : "다음 문항"} onPress={goNext} />
+        </View>
+      </ScreenShell>
+    );
+  }
 
   return (
     <ScreenShell>

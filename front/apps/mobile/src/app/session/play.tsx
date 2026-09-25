@@ -22,7 +22,7 @@ const WAITING_MESSAGE = "확인하고 있어요.";
  * 등)로 서버가 이미 끝낸 문항이다 — `submitAttempt` 주석 참고. 그 문항의 서버 피드백은 만들
  * 수 없으므로 다음으로 넘어간다고만 알린다.
  */
-const ALREADY_MESSAGE = "이미 확인한 문제예요. 다음으로 넘어갈게요.";
+const ALREADY_MESSAGE = "이미 확인한 문제라 이번 설명은 없어요. 다음으로 넘어갈게요.";
 
 /**
  * 잠긴 동안(대기·실패) 점자 패드를 만졌을 때 상태 문구 뒤에 붙는 말.
@@ -48,6 +48,7 @@ export default function SessionPlay() {
   const serverSessionId = useSessionStore((s) => s.serverSessionId);
   const problemSessionIds = useSessionStore((s) => s.problemSessionIds);
   const setLastAnalysis = useSessionStore((s) => s.setLastAnalysis);
+  const setLastAttemptNotice = useSessionStore((s) => s.setLastAttemptNotice);
   const isScreenMode = useSettingsStore((s) => s.mode) === "screen";
   const [cells, setCells] = useState<Cell[]>([]);
   // 제출이 막힌 이유 / 대기 중 / 실패 안내. 낭독만으로는 전달되지 않는다 — 음성·진동은
@@ -204,17 +205,21 @@ export default function SessionPlay() {
 
     switch (outcome.kind) {
       case "analyzed":
+        setLastAttemptNotice(null);
         setLastAnalysis(outcome.result);
         setPhase("idle");
         setStatusMessage(null);
         router.replace("/session/grade");
         return;
       case "already":
-        // 화면에 남긴다 — 다음 문항으로 넘어갈 때 위쪽 리셋 effect가 어차피 비운다.
-        // announce만 하고 지우면 음성 모드를 끈 사용자는 이 문항에 무슨 일이 있었는지
-        // 아무 신호도 못 받고 결과 화면으로 튕긴다.
-        setStatusMessage(ALREADY_MESSAGE);
-        announce(ALREADY_MESSAGE);
+        // 이 화면에 띄워 봐야 소용이 없다 — 바로 다음 줄의 router.replace가 화면을 치우고,
+        // 낭독도 grade.tsx의 announce가 Speech.stop()으로 끊는다. 안내를 스토어에 실어
+        // 보내 grade 화면이 화면·낭독 한 문자열로 내보내게 한다.
+        //
+        // 그 화면은 lastAnalysis가 null이라 로컬 채점으로 떨어지는데, 설계 3절이 정답
+        // 여부는 더 이상 로컬이 정하지 않는다고 못 박았다 — 그래서 grade.tsx는 이 안내가
+        // 있으면 로컬 정오 판정을 헤드라인으로 쓰지 않는다.
+        setLastAttemptNotice(ALREADY_MESSAGE);
         setPhase("idle");
         router.replace("/session/grade");
         return;

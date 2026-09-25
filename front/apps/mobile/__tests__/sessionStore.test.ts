@@ -205,3 +205,52 @@ describe("문항별 분석 결과 보관", () => {
     expect(useSessionStore.getState().lastAnalysis).toBeNull();
   });
 });
+
+// LEARNING_PROBLEM_ALREADY_ANALYZED 는 오류가 아니라 응답 유실·앱 재시작으로 서버가 이미
+// 끝낸 문항이다. 그 문항의 서버 설명은 만들 수 없는데, play.tsx 에서 화면에 띄워 봐야
+// 바로 다음 줄의 router.replace 가 치우고 낭독도 grade.tsx 의 announce 가 끊는다 —
+// 그래서 안내를 스토어에 실어 화면 간에 나른다.
+describe("서버 설명이 없는 문항의 안내", () => {
+  beforeEach(() => useSessionStore.getState().reset());
+
+  it("안내를 보관해 다음 화면이 읽을 수 있게 한다", () => {
+    useSessionStore.getState().start(session, "free", meta);
+    useSessionStore.getState().setLastAttemptNotice("이미 확인한 문제라 이번 설명은 없어요.");
+
+    expect(useSessionStore.getState().lastAttemptNotice).toBe(
+      "이미 확인한 문제라 이번 설명은 없어요.",
+    );
+  });
+
+  it("다음 문항으로 넘어가면 안내를 비운다", () => {
+    // 이전 문항의 안내가 남아 있으면 다음 문항의 채점 화면이 엉뚱한 말을 한다
+    useSessionStore.getState().start(session, "free", meta);
+    useSessionStore.getState().setLastAttemptNotice("이미 확인한 문제예요.");
+
+    useSessionStore.getState().next();
+
+    expect(useSessionStore.getState().lastAttemptNotice).toBeNull();
+  });
+
+  it("새로 제출하면 안내를 비운다", () => {
+    useSessionStore.getState().start(session, "free", meta);
+    useSessionStore.getState().setLastAttemptNotice("이미 확인한 문제예요.");
+
+    useSessionStore.getState().submit([1]);
+
+    expect(useSessionStore.getState().lastAttemptNotice).toBeNull();
+  });
+
+  it("reset과 start가 안내를 비운다", () => {
+    useSessionStore.getState().start(session, "free", meta);
+    useSessionStore.getState().setLastAttemptNotice("이미 확인한 문제예요.");
+    useSessionStore.getState().reset();
+    expect(useSessionStore.getState().lastAttemptNotice).toBeNull();
+
+    useSessionStore.getState().start(session, "free", meta);
+    useSessionStore.getState().setLastAttemptNotice("이미 확인한 문제예요.");
+    useSessionStore.getState().start(session, "free", meta);
+
+    expect(useSessionStore.getState().lastAttemptNotice).toBeNull();
+  });
+});
