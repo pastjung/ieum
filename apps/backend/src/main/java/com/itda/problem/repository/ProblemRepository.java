@@ -16,6 +16,13 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
 
   List<Problem> findAllByLevelAndIdNotIn(Level level, List<Long> ids);
 
+  /**
+   * 복습 출제 후보를 고른다.
+   *
+   * <p>{@code maxCells}가 있는 이유는 {@link #findAssignableByLevel}과 같다 — AI가 입력을 12칸까지만 받으므로({@code
+   * apps/ai/app/presentation/api/backend/router.py} 의 {@code input_patterns}), 13칸 이상인 문제는 정답을 넣어도
+   * 분석이 거부되고 {@code ProblemSession}이 완료되지 않는다. "레벨로 후보를 뽑는다"는 본질이 같으므로 같은 상한을 적용한다.
+   */
   @Query(
       """
     SELECT DISTINCT p
@@ -23,9 +30,12 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
     JOIN ProblemSkill ps ON ps.problem = p
     WHERE p.level = :level
       AND ps.skill.id = :learningSkillId
+      AND (SELECT COUNT(c) FROM ProblemCell c WHERE c.problem = p) <= :maxCells
     """)
   List<Problem> findAllByLevelAndLearningSkillId(
-      @Param("level") Level level, @Param("learningSkillId") Long learningSkillId);
+      @Param("level") Level level,
+      @Param("learningSkillId") Long learningSkillId,
+      @Param("maxCells") long maxCells);
 
   /**
    * 출제 후보를 고른다.

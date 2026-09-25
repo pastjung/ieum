@@ -2,9 +2,12 @@ package com.itda.problem.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.itda.problem.domain.LearningSkill;
 import com.itda.problem.domain.Level;
 import com.itda.problem.domain.Problem;
 import com.itda.problem.domain.ProblemCell;
+import com.itda.problem.domain.ProblemSkill;
+import com.itda.problem.domain.SkillType;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,6 +56,42 @@ class ProblemRepositoryTest {
 
     assertThat(assignable).extracting(Problem::getId).contains(kept.getId());
     assertThat(assignable).extracting(Problem::getId).doesNotContain(excluded.getId());
+  }
+
+  /**
+   * 경계값 회귀 테스트. 이 테스트가 없으면 쿼리의 {@code <=}가 실수로 {@code <}가 되어도(12칸 문제까지 버려도) 다른 테스트는 통과한다 — "12는 포함,
+   * 13은 제외"가 이 기능의 핵심이므로 그 경계를 직접 고정한다.
+   */
+  @Test
+  void 정확히_상한인_문제는_포함된다() {
+    Problem exact =
+        persistWithCells(Level.WORD, "딱상한", List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
+
+    List<Problem> assignable = problemRepository.findAssignableByLevel(Level.WORD, List.of(), 12L);
+
+    assertThat(assignable).extracting(Problem::getId).contains(exact.getId());
+  }
+
+  /**
+   * 복습 세션({@code reviewWithNewSession})이 쓰는 조회다. {@link #findAssignableByLevel}과 본질이 같은 "레벨로 후보를
+   * 뽑는" 조회이므로 같은 셀 상한이 적용되어야 한다 — 그렇지 않으면 복습 경로로 13칸 이상 문제가 그대로 배정된다.
+   */
+  @Test
+  void 요소로_찾을_때도_셀이_상한을_넘는_문제는_빠진다() {
+    Problem shortOne = persistWithCells(Level.WORD, "가방", List.of(0b000001));
+    Problem longOne =
+        persistWithCells(Level.WORD, "긴문제", List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13));
+    LearningSkill skill =
+        entityManager.persistFlushFind(LearningSkill.of(SkillType.SKILL_01, "ㄱ", "초성 ㄱ", null));
+    entityManager.persist(new ProblemSkill(shortOne, skill));
+    entityManager.persist(new ProblemSkill(longOne, skill));
+    entityManager.flush();
+
+    List<Problem> found =
+        problemRepository.findAllByLevelAndLearningSkillId(Level.WORD, skill.getId(), 12L);
+
+    assertThat(found).extracting(Problem::getId).contains(shortOne.getId());
+    assertThat(found).extracting(Problem::getId).doesNotContain(longOne.getId());
   }
 
   private Problem persistWithCells(Level level, String targetText, List<Integer> expectedPatterns) {

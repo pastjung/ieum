@@ -327,7 +327,8 @@ public class ProblemService {
 
     for (int i = 1; i <= 3; i++) {
       List<Problem> problem =
-          problemRepository.findAllByLevelAndLearningSkillId(level, learningSkillIds.get(i - 1));
+          problemRepository.findAllByLevelAndLearningSkillId(
+              level, learningSkillIds.get(i - 1), MAX_ASSIGNABLE_CELLS);
       while (selectedProblemIds.size() < i * 4) {
         selectedProblemIds.add(problem.get(random.nextInt(problem.size())).getId());
       }
