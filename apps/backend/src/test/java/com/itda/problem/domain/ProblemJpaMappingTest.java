@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.itda.problem.repository.ProblemCellRepository;
 import jakarta.persistence.PersistenceException;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +22,10 @@ class ProblemJpaMappingTest {
 
   @Test
   void 정답_Cell은_problem_id로_문제를_참조해_저장된다() {
-    LocalDateTime before = LocalDateTime.now();
+    // 마이크로초로 자른다. LocalDateTime.now()는 나노초까지 담지만 createdAt이 저장되는
+    // datetime(6)은 마이크로초까지만 담아, 저장된 값이 이 기준보다 최대 999ns 앞서게 된다.
+    // 그대로 비교하면 1000번에 몇 번씩 이유 없이 실패한다
+    LocalDateTime before = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
     Problem saved = persistWithCells(Level.WORD, "가방", List.of(0b000001, 0b100000));
     entityManager.clear();
 
