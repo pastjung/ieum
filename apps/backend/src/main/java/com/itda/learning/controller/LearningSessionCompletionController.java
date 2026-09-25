@@ -3,12 +3,14 @@ package com.itda.learning.controller;
 import com.itda.global.security.AuthenticatedUser;
 import com.itda.learning.dto.InProgressSessionResponse;
 import com.itda.learning.dto.SkillSummaryResponse;
+import com.itda.learning.dto.StageStatsResponse;
 import com.itda.learning.dto.LearningAttemptAnalysisRequest;
 import com.itda.learning.dto.LearningAttemptAnalysisResponse;
 import com.itda.learning.dto.LearningSessionCompletionRequest;
 import com.itda.learning.dto.LearningSessionCompletionResponse;
 import com.itda.learning.service.InProgressSessionQueryService;
 import com.itda.learning.service.SkillSummaryQueryService;
+import com.itda.learning.service.StageStatsQueryService;
 import com.itda.learning.service.LearningAttemptService;
 import com.itda.learning.service.LearningSessionCompletionService;
 import jakarta.validation.Valid;
@@ -34,6 +36,15 @@ public class LearningSessionCompletionController {
   private final LearningAttemptService attemptService;
   private final InProgressSessionQueryService inProgressSessionQueryService;
   private final SkillSummaryQueryService skillSummaryQueryService;
+  private final StageStatsQueryService stageStatsQueryService;
+
+  /**
+   * 테마(커리큘럼 단계)별 풀이 통계. 테마 선택 화면이 단계마다 진도를 보여준다.
+   */
+  @GetMapping("/stage-stats")
+  public StageStatsResponse stageStats(@AuthenticationPrincipal AuthenticatedUser user) {
+    return StageStatsResponse.from(this.stageStatsQueryService.find(user.userId()));
+  }
 
   /**
    * 내 요소별 숙련 상태와 풀이 통계.
