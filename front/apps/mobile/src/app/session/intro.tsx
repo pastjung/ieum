@@ -30,7 +30,7 @@ export default function SessionIntro() {
   const queryClient = useQueryClient();
   const { theme: themeId } = useLocalSearchParams<{ theme?: LearningThemeId }>();
   const start = useSessionStore((s) => s.start);
-  const { data, isError, errorUpdateCount, refetch } = useQuery({
+  const { data, isError, error, errorUpdateCount, refetch } = useQuery({
     queryKey: learningSessionQueryKey(themeId),
     queryFn: () => learningService.startSession(themeId),
     // 세션 생성은 서버에 행을 만든다. 화면에 다시 들어올 때마다 새 세션이 생기면 안 된다
@@ -47,20 +47,23 @@ export default function SessionIntro() {
   useEffect(() => {
     if (isError) {
       void hapticError();
-      // 시도 횟수를 문구에 담아 낭독 중복 제거(1.5초)에 걸리지 않게 한다
-      announce(buildSessionStartFailure(errorUpdateCount).speech);
+      // 시도 횟수를 문구에 담아 낭독 중복 제거(1.5초)에 걸리지 않게 한다.
+      // `error`를 함께 넘긴다 — 이걸 빠뜨리면 LEARNING_CONTENT_NOT_READY(그 단계에 문제가
+      // 없어 재시도로는 절대 풀리지 않는 실패)까지 "잠시 후 다시 해 보세요"가 되어
+      // 학습자가 무한히 재시도한다
+      announce(buildSessionStartFailure(errorUpdateCount, error).speech);
       return;
     }
     if (!session) return;
     announce(
       `${session.title}. ${session.problems.length}문항이에요. 점을 동시에 짚고 손을 떼면 한 칸이 입력돼요. 시작하기를 누르면 시작해요.`,
     );
-  }, [session, isError, errorUpdateCount]);
+  }, [session, isError, error, errorUpdateCount]);
 
   // V32 세션 준비 실패
   if (isError) {
     // 화면 글과 낭독 문구는 같은 곳에서 만든다 (`buildSessionStartFailure` 주석)
-    const failure = buildSessionStartFailure(errorUpdateCount);
+    const failure = buildSessionStartFailure(errorUpdateCount, error);
     return (
       <ScreenShell>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 18 }}>

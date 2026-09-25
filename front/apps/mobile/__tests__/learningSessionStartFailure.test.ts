@@ -1,3 +1,4 @@
+import { ApiError } from "@ieum/api-client";
 import { buildSessionStartFailure } from "@/services/learningSessionStartFailure";
 
 describe("세션 준비 실패 안내", () => {
@@ -39,5 +40,62 @@ describe("세션 준비 실패 안내", () => {
 
       expect(failure.speech).toBe(onScreen);
     }
+  });
+});
+
+/**
+ * 백엔드는 출제 후보가 12문항에 못 미치면 `LEARNING_CONTENT_NOT_READY`(503)를 던진다.
+ * 시드가 채워지기 전까지 약어(5개)·문장(0개) 단계는 **영구 실패**다 — 원인을 가린 채
+ * "잠시 후 다시 해 보세요"라고만 하면 학습자는 무한히 재시도한다.
+ */
+describe("문제가 준비되지 않은 단계", () => {
+  const notReady = new ApiError(
+    503,
+    "LEARNING_CONTENT_NOT_READY",
+    "학습 콘텐츠가 아직 준비되지 않았습니다.",
+  );
+
+  it("재시도가 아니라 다른 단계를 고르라고 안내한다", () => {
+    const failure = buildSessionStartFailure(1, notReady);
+
+    expect(failure.detail).toBe("이 단계는 건너뛰고 다른 단계를 골라 주세요.");
+    expect(failure.speech).toBe(
+      "아직 문제가 준비되지 않았어요. 이 단계는 건너뛰고 다른 단계를 골라 주세요.",
+    );
+    expect(failure.detail).not.toContain("잠시 후 다시 해 보세요");
+  });
+
+  it("화면 글과 낭독 문구가 같고, 같은 말을 두 번 하지 않는다", () => {
+    for (const count of [1, 2, 7]) {
+      const failure = buildSessionStartFailure(count, notReady);
+      const onScreen = `${failure.headline.replace("\n", " ")}. ${failure.detail}`;
+
+      expect(failure.speech).toBe(onScreen);
+      // headline이 한 말을 detail이 또 하면 그 반복이 낭독에 그대로 간다
+      expect(failure.detail).not.toContain("아직 문제가 준비되지 않았어요");
+    }
+  });
+
+  it("재시도가 또 실패하면 다른 문구가 된다", () => {
+    // 재시도해도 결과는 같지만, 문구가 고정이면 speak()의 1.5초 중복 제거에 걸려
+    // 두 번째 안내가 음성으로만 쓰는 사용자에게 씹힌다
+    const first = buildSessionStartFailure(1, notReady);
+    const second = buildSessionStartFailure(2, notReady);
+
+    expect(second.speech).not.toBe(first.speech);
+    expect(second.detail).toBe(
+      "두 번째 시도에도 준비되지 않았어요. 이 단계는 건너뛰고 다른 단계를 골라 주세요.",
+    );
+  });
+
+  it("다른 오류는 기존 일반 안내 그대로다", () => {
+    const other = new ApiError(500, "INTERNAL_ERROR", "서버 오류");
+
+    expect(buildSessionStartFailure(1, other)).toEqual(buildSessionStartFailure(1));
+  });
+
+  it("오류를 넘기지 않으면 일반 안내가 된다", () => {
+    // 화면이 error를 빠뜨리면 원인이 사용자에게 닿지 않는다는 사실을 고정한다
+    expect(buildSessionStartFailure(1).detail).toBe("잠시 후 다시 해 보세요.");
   });
 });

@@ -1,3 +1,5 @@
+import { ApiError } from "@ieum/api-client";
+
 /**
  * 세션 준비(`POST /learning-sessions`) 실패를 사용자에게 알리는 문구를 만든다.
  *
@@ -29,15 +31,48 @@ const ATTEMPT_ORDINAL_KO: Record<number, string> = {
   5: "다섯 번째",
 };
 
+function ordinal(errorCount: number): string {
+  return ATTEMPT_ORDINAL_KO[errorCount] ?? `${errorCount}번째`;
+}
+
+/**
+ * 그 단계에 낼 문제가 아직 없다는 서버 응답(`LEARNING_CONTENT_NOT_READY`, 503).
+ *
+ * **재시도로는 절대 풀리지 않는다.** 출제 후보가 12문항에 못 미치면 백엔드가 이 오류를
+ * 던지는데, 시드가 채워지기 전까지 약어(5개)·문장(0개) 단계는 영구 실패다. 원인을 가린 채
+ * "잠시 후 다시 해 보세요"라고만 하면 학습자는 무한히 재시도한다 — 다른 단계를 고르라고
+ * 말해야 하고, 화면(`session/intro.tsx`)에는 "다른 단계 복습" 버튼이 이미 있다.
+ */
+const CONTENT_NOT_READY_CODE = "LEARNING_CONTENT_NOT_READY";
+
 /**
  * @param errorCount 이 쿼리가 지금까지 실패한 횟수 (`useQuery`의 `errorUpdateCount`).
  *   0이나 1이면 첫 실패다.
+ * @param error 실패의 원인(`useQuery`의 `error`). **화면이 이것을 넘기지 않으면** 원인을
+ *   가리지 않는 일반 안내만 나가고, "이 단계에는 문제가 없다"는 사실이 사용자에게 영영
+ *   닿지 않는다.
  */
-export function buildSessionStartFailure(errorCount: number): SessionStartFailure {
+export function buildSessionStartFailure(
+  errorCount: number,
+  error?: unknown,
+): SessionStartFailure {
+  if (error instanceof ApiError && error.code === CONTENT_NOT_READY_CODE) {
+    // `headline`과 `detail`은 겹치지 않는 말을 한다 — 둘을 이어 붙인 것이 그대로 낭독
+    // 문구가 되므로, 같은 말을 양쪽에 넣으면 그 반복이 음성 사용자에게 고스란히 간다
+    const headline = "아직 문제가\n준비되지 않았어요";
+    // 재시도해도 결과는 같지만 문구는 매번 달라져야 한다 — `speak()`는 같은 문구를 1.5초
+    // 안에 다시 받으면 조용히 무시하므로, 고정하면 두 번째 안내가 음성 사용자에게 씹힌다
+    const detail =
+      errorCount <= 1
+        ? "이 단계는 건너뛰고 다른 단계를 골라 주세요."
+        : `${ordinal(errorCount)} 시도에도 준비되지 않았어요. 이 단계는 건너뛰고 다른 단계를 골라 주세요.`;
+    return { headline, detail, speech: `아직 문제가 준비되지 않았어요. ${detail}` };
+  }
+
   const headline = "학습 준비가\n안 됐어요";
   const detail =
     errorCount <= 1
       ? "잠시 후 다시 해 보세요."
-      : `${ATTEMPT_ORDINAL_KO[errorCount] ?? `${errorCount}번째`} 시도에도 안 됐어요. 잠시 후 다시 해 보세요.`;
+      : `${ordinal(errorCount)} 시도에도 안 됐어요. 잠시 후 다시 해 보세요.`;
   return { headline, detail, speech: `학습 준비가 안 됐어요. ${detail}` };
 }
