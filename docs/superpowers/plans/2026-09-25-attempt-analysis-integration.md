@@ -296,7 +296,7 @@ describe("문항별 분석 계약", () => {
         weakSkills: [],
       },
     });
-    expect(parsed.summary?.ttsText).toContain("받침");
+    expect(parsed.ttsText).toContain("받침");
   });
 });
 ```
@@ -345,19 +345,18 @@ export const attemptAnalysisResponseSchema = z.object({
 });
 export type AttemptAnalysisResponse = z.infer<typeof attemptAnalysisResponseSchema>;
 
-export const sessionSummarySchema = z.object({
-  summary: z.string().nullable(),
-  ttsText: z.string().nullable(),
-  errorTypeCounts: z.record(z.string(), z.number()),
-  weakSkills: z.array(z.unknown()),
-});
-export type SessionSummary = z.infer<typeof sessionSummarySchema>;
+/* 요약은 응답의 **최상위에 평평하게** 온다. 서비스 계층(`SessionSummaryResult`)은 중첩
+ * 레코드지만 `LearningSessionCompletionResponse.from()` 이 풀어서 넣는다. 중첩 객체로 받으면
+ * 모든 정상 응답이 파싱에 실패한다. */
 ```
 
 `completionResponseSchema` 에 `summary` 를 더한다. **기존 필드는 건드리지 않는다.**
 
 ```ts
-  summary: sessionSummarySchema.optional(),
+  summary: z.string().nullable(),
+  ttsText: z.string().nullable(),
+  errorTypeCounts: z.record(z.string(), z.number().int().nonnegative()),
+  weakSkills: z.array(z.unknown()),
 ```
 
 `optional()` 로 두는 이유: 이 필드는 최근에 생겼고, 서버가 요약을 만들지 못한 경우
@@ -887,12 +886,12 @@ git commit -m "feat(learning): 오답 화면이 서버 분석으로 칸마다 �
 - Modify: `front/apps/mobile/src/app/session/summary.tsx`
 
 **Interfaces:**
-- Consumes: Task 2의 `sessionSummarySchema`(완료 응답에 포함), 기존 `serverResult`
+- Consumes: Task 2가 `completionResponseSchema` 최상위에 더한 `summary`·`ttsText`·`errorTypeCounts`·`weakSkills`, 기존 `serverResult`
 - Produces: 없음
 
 - [ ] **Step 1: 요약을 표시하고 낭독한다**
 
-`serverResult?.summary?.ttsText` 가 있으면 낭독하고 화면에도 표시한다. 없으면 지금 문구를 그대로 쓴다 — 서버가 요약을 못 만든 경우(`notAvailable()`)가 있다.
+`serverResult?.ttsText` 가 있으면 (최상위 필드다 — 중첩이 아니다) 낭독하고 화면에도 표시한다. 없으면 지금 문구를 그대로 쓴다 — 서버가 요약을 못 만든 경우(`notAvailable()`)가 있다.
 
 `summary.summary`(화면용 설명)도 있으면 표시한다. `weakSkills` 는 이번에 쓰지 않는다(설계 7절).
 
