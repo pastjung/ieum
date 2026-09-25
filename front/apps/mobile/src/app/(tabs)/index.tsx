@@ -8,21 +8,14 @@ import { AppButton } from "@/components/AppButton";
 import { IeumFace } from "@/components/IeumFace";
 import { authService } from "@/services/authService";
 import { learningService } from "@/services/learningService";
+import { LEVEL_LABEL, LEVEL_UNSET_LABEL } from "@/services/levelLabels";
+import { LevelBadge } from "@/components/LevelBadge";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useTactileStore } from "@/stores/tactileStore";
 import { announce, hapticError, hapticTap } from "@/a11y";
 import { fontSize, radius, useFontScale, useTheme } from "@/theme";
 
 /** level은 단계 번호가 아니라 학습 범주라 "3단계" 같은 문구를 만들 수 없다 */
-const LEVEL_LABEL: Record<string, string> = {
-  CONSONANT: "자음",
-  VOWEL: "모음",
-  WORD: "단어",
-  SENTENCE: "문장",
-  CONTRACTION: "약자",
-  CONTRACTION_WORD: "약어",
-};
-
 const LOAD_FAILED_TEXT = "사용자 정보를 불러오지 못했어요.";
 
 /**
@@ -77,7 +70,7 @@ function VoiceHome() {
   const { data: homeSummary } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
   const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
-  const stepLabel = data?.level ? LEVEL_LABEL[data.level] : "자가 진단 전";
+  const stepLabel = data?.level ? LEVEL_LABEL[data.level] : LEVEL_UNSET_LABEL;
   // 장치 연결은 서버 요약이 아니라 실제 블루투스 상태에서 읽는다.
   const deviceConnected = useTactileStore((s) => s.connected);
 
@@ -134,9 +127,12 @@ function VoiceHome() {
   return (
     <ScreenShell noBottomPadding>
       <View>
-        <Text accessibilityRole="header" style={{ fontSize: fontSize.title * fontScale, fontWeight: "900", color: theme.color.text }}>
-          홈
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <Text accessibilityRole="header" style={{ fontSize: fontSize.title * fontScale, fontWeight: "900", color: theme.color.text }}>
+            홈
+          </Text>
+          <LevelBadge level={data?.level} />
+        </View>
         <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, marginTop: 4 }}>
           {isError
             ? LOAD_FAILED_TEXT
@@ -194,7 +190,7 @@ function ScreenHome() {
   const { data: homeSummary } = useQuery({ queryKey: ["homeSummary"], queryFn: learningService.getHomeSummary });
   const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
-  const stepLabel = data?.level ? LEVEL_LABEL[data.level] : "자가 진단 전";
+  const stepLabel = data?.level ? LEVEL_LABEL[data.level] : LEVEL_UNSET_LABEL;
   // 장치 연결은 서버 요약이 아니라 실제 블루투스 상태에서 읽는다.
   const deviceConnected = useTactileStore((s) => s.connected);
 
@@ -210,7 +206,10 @@ function ScreenHome() {
               {isError ? LOAD_FAILED_TEXT : data ? `${stepLabel}를 배우는 중이에요` : "불러오는 중이에요…"}
             </Text>
           </View>
-          <IeumFace size={56} />
+          <View style={{ alignItems: "flex-end", gap: 6 }}>
+            <LevelBadge level={data?.level} />
+            <IeumFace size={56} />
+          </View>
         </View>
 
         {isError && (

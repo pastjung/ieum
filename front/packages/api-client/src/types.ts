@@ -38,4 +38,6 @@ export interface ApiClientConfig {
 export interface ApiClient {
   get<T>(path: string, options?: RequestOptions): Promise<T>;
   post<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
+  /** 단일 값 자원의 교체. 같은 body를 두 번 보내도 결과가 같아야 하는 호출에 쓴다 */
+  put<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
 }
