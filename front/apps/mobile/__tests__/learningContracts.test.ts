@@ -2,6 +2,9 @@ import {
   problemsResponseSchema,
   completionResponseSchema,
   completionRequestSchema,
+  attemptAnalysisRequestSchema,
+  attemptAnalysisResponseSchema,
+  MAX_INPUT_CELLS,
 } from "@ieum/contracts";
 
 const serverProblems = {
@@ -101,5 +104,73 @@ describe("완료 제출 계약", () => {
       ],
     });
     expect(parsed.problemResults[0].cells[0].extraDots).toEqual([2]);
+  });
+});
+
+const serverAttempt = {
+  problemSessionId: 101,
+  problemId: 7,
+  attemptId: 55,
+  correct: false,
+  attemptedAt: "2026-09-25T02:00:00Z",
+  cells: [
+    {
+      cellIndex: 1,
+      expectedPattern: 5,
+      inputPattern: 1,
+      diffMask: 4,
+      missingMask: 4,
+      extraMask: 0,
+      missingDots: [3],
+      extraDots: [],
+    },
+  ],
+  feedback: { tts: "첫소리 이응은 점자로 적지 않아요.", detail: "제13항" },
+};
+
+describe("문항별 분석 계약", () => {
+  it("서버가 보내는 모양을 그대로 받는다", () => {
+    const parsed = attemptAnalysisResponseSchema.parse(serverAttempt);
+    expect(parsed.feedback.tts).toContain("이응");
+    expect(parsed.cells[0].missingDots).toEqual([3]);
+  });
+
+  it("피드백이 없으면 거부한다", () => {
+    // 낭독할 문장이 없으면 오답 화면이 아무 말도 못 한다 — 화면까지 흘려보내지 않는다
+    const { feedback: _omit, ...rest } = serverAttempt;
+    expect(() => attemptAnalysisResponseSchema.parse(rest)).toThrow();
+  });
+
+  it("요청은 12칸을 넘길 수 없다", () => {
+    // FastAPI가 input_patterns를 12개까지만 받는다(router.py:121).
+    // 여기서 막지 않으면 사용자는 이유를 알 수 없는 실패를 본다
+    const thirteen = Array.from({ length: 13 }, () => 1);
+    expect(() =>
+      attemptAnalysisRequestSchema.parse({ problemSessionId: 101, inputPatterns: thirteen }),
+    ).toThrow();
+    expect(MAX_INPUT_CELLS).toBe(12);
+  });
+
+  it("요청 식별자로 0을 거부한다", () => {
+    expect(() =>
+      attemptAnalysisRequestSchema.parse({ problemSessionId: 0, inputPatterns: [1] }),
+    ).toThrow();
+  });
+
+  it("완료 응답의 세션 요약을 읽는다", () => {
+    const parsed = completionResponseSchema.parse({
+      sessionId: 12,
+      completedAt: "2026-09-25T02:00:00Z",
+      totalProblemCount: 1,
+      correctProblemCount: 0,
+      problemResults: [],
+      summary: {
+        summary: "받침에서 자주 틀렸어요.",
+        ttsText: "받침 규칙을 더 연습해요.",
+        errorTypeCounts: { missing_dot: 3 },
+        weakSkills: [],
+      },
+    });
+    expect(parsed.summary?.ttsText).toContain("받침");
   });
 });

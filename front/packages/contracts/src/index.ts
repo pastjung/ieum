@@ -220,11 +220,56 @@ export const problemCompletionSchema = z.object({
   cells: z.array(cellCompletionSchema),
 });
 
+/**
+ * 한 문항에 보낼 수 있는 최대 칸 수.
+ *
+ * AI가 `input_patterns`를 12개까지만 받는다
+ * (`apps/ai/app/presentation/api/backend/router.py`). 기대 칸 수와 무관하게 이 상한이
+ * 걸리므로 — 5칸 문제에 13칸을 넣어도 거부된다 — 앱이 먼저 막는다.
+ */
+export const MAX_INPUT_CELLS = 12;
+
+export const attemptAnalysisRequestSchema = z.object({
+  problemSessionId: requestIdentifierSchema,
+  inputPatterns: z.array(cellSchema).min(1).max(MAX_INPUT_CELLS),
+});
+export type AttemptAnalysisRequest = z.infer<typeof attemptAnalysisRequestSchema>;
+
+/** 셀 하나의 진단. 완료 응답의 셀과 같은 모양이라 스키마를 공유한다 */
+export const attemptCellAnalysisSchema = cellCompletionSchema;
+export type AttemptCellAnalysis = z.infer<typeof attemptCellAnalysisSchema>;
+
+export const attemptAnalysisResponseSchema = z.object({
+  problemSessionId: identifierSchema,
+  problemId: identifierSchema,
+  attemptId: identifierSchema,
+  correct: z.boolean(),
+  attemptedAt: z.string(),
+  cells: z.array(attemptCellAnalysisSchema),
+  /** 서버가 AI로 만든 규칙 설명. 낭독할 문장이 없으면 오답 화면이 말할 것이 없다 */
+  feedback: z.object({ tts: z.string(), detail: z.string() }),
+});
+export type AttemptAnalysisResponse = z.infer<typeof attemptAnalysisResponseSchema>;
+
+export const sessionSummarySchema = z.object({
+  summary: z.string().nullable(),
+  ttsText: z.string().nullable(),
+  errorTypeCounts: z.record(z.string(), z.number()),
+  weakSkills: z.array(z.unknown()),
+});
+export type SessionSummary = z.infer<typeof sessionSummarySchema>;
+
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),
   totalProblemCount: z.number().int().nonnegative(),
   correctProblemCount: z.number().int().nonnegative(),
   problemResults: z.array(problemCompletionSchema),
+  /**
+   * `optional()` 로 두는 이유: 이 필드는 최근에 생겼고, 서버가 요약을 만들지 못한 경우
+   * (`SessionSummaryResult.notAvailable()`)에도 응답이 와야 한다. 받는 값에 엄격하면 서버의 정상
+   * 응답을 앱이 거부하는 더 나쁜 실패가 생긴다.
+   */
+  summary: sessionSummarySchema.optional(),
 });
 export type CompletionResponse = z.infer<typeof completionResponseSchema>;
