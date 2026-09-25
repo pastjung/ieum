@@ -68,11 +68,12 @@ export function particleFor(text: string): "을" | "를" {
 function toSession(
   response: ProblemsResponse,
   theme: LearningThemeId | undefined,
+  title?: string,
 ): { session: LearningSession; meta: ServerSessionMeta } {
   return {
     session: {
       id: String(response.sessionId),
-      title: theme ? THEME_LABEL[theme] : "학습",
+      title: title ?? (theme ? THEME_LABEL[theme] : "학습"),
       problems: response.problems.map((p) => ({
         id: String(p.problemId),
         prompt: `'${p.targetText}'${particleFor(p.targetText)} 점자로 입력하세요`,
@@ -106,6 +107,19 @@ export const learningService = {
       await api.post("/learning-sessions", { curriculumId }),
     );
     return toSession(response, theme);
+  },
+
+  /**
+   * 복습 세션을 만든다. 단계를 고르지 않는다 — 서버가 내 기록(`user_skill_memory`와 오류
+   * 횟수)을 FastAPI에 보내 약한 요소를 고르고 그 요소의 문항을 배정한다
+   * (`ProblemService.reviewWithNewSession`).
+   *
+   * 응답 모양은 `startSession`과 같은 `ProblemsResponse`라 이후 흐름(제출·채점·완료)은
+   * 자유 학습과 완전히 같다. 본문이 없는 POST다.
+   */
+  async startReviewSession() {
+    const response = problemsResponseSchema.parse(await api.post("/review-sessions"));
+    return toSession(response, undefined, "복습");
   },
 
   /** 세션의 모든 답안을 한 번에 제출한다. 이 응답이 최종 채점 결과다 */

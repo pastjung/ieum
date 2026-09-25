@@ -7,7 +7,11 @@ import { IeumFace } from "@/components/IeumFace";
 import { BackHeader } from "@/components/BackHeader";
 import { AppButton } from "@/components/AppButton";
 import { learningService } from "@/services/learningService";
-import { beginLearningSession, learningSessionQueryKey } from "@/services/learningSessionCache";
+import {
+  beginLearningSession,
+  learningSessionQueryKey,
+  type SessionRequest,
+} from "@/services/learningSessionCache";
 import { buildSessionStartFailure } from "@/services/learningSessionStartFailure";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticError } from "@/a11y";
@@ -28,11 +32,21 @@ export default function SessionIntro() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const queryClient = useQueryClient();
-  const { theme: themeId } = useLocalSearchParams<{ theme?: LearningThemeId }>();
+  // `mode=review`로 들어오면 복습 세션을 만든다. 주제(theme)는 무시된다 — 복습은 서버가
+  // 내 기록에서 약한 요소를 골라 출제하므로 고를 단계가 없다
+  const { theme: themeId, mode } = useLocalSearchParams<{
+    theme?: LearningThemeId;
+    mode?: string;
+  }>();
+  const request: SessionRequest =
+    mode === "review" ? { kind: "review" } : { kind: "theme", themeId };
   const start = useSessionStore((s) => s.start);
   const { data, isError, error, errorUpdateCount, refetch } = useQuery({
-    queryKey: learningSessionQueryKey(themeId),
-    queryFn: () => learningService.startSession(themeId),
+    queryKey: learningSessionQueryKey(request),
+    queryFn: () =>
+      request.kind === "review"
+        ? learningService.startReviewSession()
+        : learningService.startSession(themeId),
     // 세션 생성은 서버에 행을 만든다. 화면에 다시 들어올 때마다 새 세션이 생기면 안 된다
     staleTime: Infinity,
     gcTime: Infinity,
@@ -121,7 +135,7 @@ export default function SessionIntro() {
           disabled={!session}
           onPress={() => {
             if (!data) return;
-            beginLearningSession(queryClient, themeId, data, start);
+            beginLearningSession(queryClient, request, data, start);
             router.replace("/session/play");
           }}
         />
