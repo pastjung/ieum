@@ -120,7 +120,9 @@ class LectureMediaServiceTest {
 
   @Test
   void 종료된_수업은_학습자도_토큰을_받을_수_없다() {
-    participate(true);
+    // 수업 종료 시 LectureService.transition이 참여 중이던 학습자의 left_at을 채운다 (ERD 3.3절).
+    // 그 상태를 그대로 반영해야 한다: 참여자는 이미 퇴장 처리됐고 수업은 CLOSED다.
+    participate(false);
     lecture.open(NOW);
     lecture.close(NOW);
 

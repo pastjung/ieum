@@ -42,11 +42,14 @@ public class LectureMediaService {
           participantRepository
               .findById(ParticipantId.of(lectureId, user.userId()))
               .orElseThrow(LectureService::notFound);
-      if (!participant.isParticipating()) {
-        throw new BusinessException(ErrorCode.LECTURE_PARTICIPATION_REQUIRED);
-      }
+      // 수업 종료 시 참여 중이던 학습자는 모두 left_at이 채워진다 (LectureService.transition).
+      // 그래서 CLOSED 수업의 재요청은 상태 판정(409)이 먼저여야 한다 — 순서를 바꾸면 모든 학습자가
+      // 퇴장 요구(403)로 가려져 종료 사실을 알 수 없다 (API 명세 8.5절).
       if (!lecture.isJoinable()) {
         throw new BusinessException(ErrorCode.INVALID_LECTURE_STATE);
+      }
+      if (!participant.isParticipating()) {
+        throw new BusinessException(ErrorCode.LECTURE_PARTICIPATION_REQUIRED);
       }
       publisher = false;
     } else {
