@@ -6,6 +6,7 @@ import { cellToDots, cellsToUnicode } from "@ieum/domain";
 import { ScreenShell } from "@/components/ScreenShell";
 import { DotPad } from "@/components/DotPad";
 import { AppButton } from "@/components/AppButton";
+import { liveLecture } from "@/services/liveLecture";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, speak } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
@@ -30,7 +31,13 @@ export default function ClassPlay() {
     return (
       <ScreenShell style={styles.center}>
         <Text style={{ color: theme.color.text, fontSize: 20, fontWeight: "700" }}>진행 중인 수업이 없어요</Text>
-        <AppButton label="수업 참여로" onPress={() => router.replace("/(tabs)/class")} />
+        <AppButton
+          label="수업 참여로"
+          onPress={() => {
+            void liveLecture.leave();
+            router.replace("/(tabs)/class");
+          }}
+        />
       </ScreenShell>
     );
   }

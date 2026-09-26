@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
+import { liveLecture } from "@/services/liveLecture";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticError } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
@@ -13,6 +14,7 @@ export default function ClassDisconnected() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
+  const { lectureId, title } = useLocalSearchParams<{ lectureId: string; title?: string }>();
   const reset = useSessionStore((s) => s.reset);
 
   useEffect(() => {
@@ -34,18 +36,18 @@ export default function ClassDisconnected() {
       <View style={{ gap: 12 }}>
         <AppButton
           label="지금 다시 연결"
-          onPress={() => {
-            announce("다시 연결됐어요. 수업을 이어서 해요.");
-            router.replace("/class/play");
-          }}
+          onPress={() => router.replace({ pathname: "/class/waiting", params: { lectureId, title } })}
         />
         <AppButton
           label="수업 나가기"
           variant="secondary"
-          onPress={() => {
-            reset();
-            router.replace("/(tabs)");
-          }}
+          onPress={() =>
+            void (async () => {
+              await liveLecture.leave();
+              reset();
+              router.replace("/(tabs)");
+            })()
+          }
         />
       </View>
     </ScreenShell>

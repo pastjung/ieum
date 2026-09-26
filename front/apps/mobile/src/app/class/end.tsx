@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
+import { liveLecture } from "@/services/liveLecture";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticSuccess } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
@@ -42,19 +43,25 @@ export default function ClassEnd() {
         {hasWrong && (
           <AppButton
             label="오답 복습하기"
-            onPress={() => {
-              reset();
-              router.replace("/class/review");
-            }}
+            onPress={() =>
+              void (async () => {
+                await liveLecture.leave();
+                reset();
+                router.replace("/class/review");
+              })()
+            }
           />
         )}
         <AppButton
           label="홈으로"
           variant={hasWrong ? "secondary" : "primary"}
-          onPress={() => {
-            reset();
-            router.replace("/(tabs)");
-          }}
+          onPress={() =>
+            void (async () => {
+              await liveLecture.leave();
+              reset();
+              router.replace("/(tabs)");
+            })()
+          }
         />
       </View>
     </ScreenShell>
