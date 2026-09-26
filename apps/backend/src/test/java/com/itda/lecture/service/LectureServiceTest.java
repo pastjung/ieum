@@ -161,6 +161,20 @@ class LectureServiceTest {
   }
 
   @Test
+  void 종료된_수업의_종료_재요청은_종료_시각을_유지하고_방_삭제만_다시_한다() {
+    Lecture lecture = lecture(7L);
+    lecture.open(NOW);
+    lecture.close(NOW.plusHours(1));
+    LocalDateTime endedAt = lecture.getEndedAt();
+
+    service.changeStatus(INSTRUCTOR, LECTURE_ID, LectureStatus.CLOSED);
+
+    assertThat(lecture.getStatus()).isEqualTo(LectureStatus.CLOSED);
+    assertThat(lecture.getEndedAt()).isEqualTo(endedAt);
+    assertThat(gateway.deletedRooms).containsExactly("lecture-42");
+  }
+
+  @Test
   void 건너뛰거나_되돌리는_전이는_409다() {
     lecture(7L);
 
