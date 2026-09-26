@@ -49,8 +49,6 @@ interface SessionState {
    * `announce`가 `Speech.stop()`으로 끊는다 — 그래서 안내를 화면 간에 실어 나른다.
    */
   lastAttemptNotice: string | null;
-  /** 수업 중 연결 끊김 데모를 이미 보여줬는지 (V29) */
-  disconnectShown: boolean;
   serverSessionId: number | null;
   problemSessionIds: number[];
   serverResult: CompletionResponse | null;
@@ -60,7 +58,6 @@ interface SessionState {
   /** 다음 문항으로. 마지막이었으면 false */
   next: () => boolean;
   correctCount: () => number;
-  markDisconnectShown: () => void;
   /** 완료 제출 페이로드. 목 세션이면 빈 배열이다 */
   buildAttempts: () => AttemptInput[];
   setServerResult: (result: CompletionResponse) => void;
@@ -77,7 +74,6 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   lastResult: null,
   lastAnalysis: null,
   lastAttemptNotice: null,
-  disconnectShown: false,
   serverSessionId: null,
   problemSessionIds: [],
   serverResult: null,
@@ -90,7 +86,6 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       lastResult: null,
       lastAnalysis: null,
       lastAttemptNotice: null,
-      disconnectShown: false,
       serverSessionId: meta?.serverSessionId ?? null,
       problemSessionIds: meta?.problemSessionIds ?? [],
       serverResult: null,
@@ -134,7 +129,6 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     return true;
   },
   correctCount: () => get().answers.filter((a) => a.result.correct).length,
-  markDisconnectShown: () => set({ disconnectShown: true }),
   /**
    * 완료 제출 페이로드. **학습자가 실제로 입력한 셀을 그대로 보낸다.**
    *
@@ -178,7 +172,6 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       lastResult: null,
       lastAnalysis: null,
       lastAttemptNotice: null,
-      disconnectShown: false,
       serverSessionId: null,
       problemSessionIds: [],
       serverResult: null,
