@@ -49,6 +49,7 @@ function isActiveFor(lectureId: string): boolean {
   return s.active && s.lectureId === lectureId;
 }
 
+/** problemId를 키로 덮어쓴다 — 같은 문제의 결과가 두 번 와도(N1) 집계는 늘지 않고 마지막 값으로 대체된다 */
 function record(result: LiveAnswer): void {
   store().set({ results: { ...store().results, [result.problemId]: result.isCorrect } });
 }
@@ -123,6 +124,10 @@ export const lectureProblemSync = {
         phase.idempotencyKey,
       );
       if (!isActiveFor(lectureId)) return "ignored";
+      // 여기서는 일부러 gen(세대)으로 걸러내지 않는다 — 서버는 (강의,학습자,문제)당 시도를 하나만 저장하므로,
+      // 끊겼다 뒤늦게 도착한 이전 세대의 성공 응답도 "그 문제의 서버 진실"이다(다른 답이 이미 저장됐다면 여기가 아니라
+      // 아래 catch의 ALREADY_ANSWERED 분기를 탄다). record는 problemId 키로 덮어써 집계를 문제당 한 번으로 유지하고,
+      // commit도 같은 문제면 다시 그 결과로 덮어써도 값이 갈리지 않으므로 안전하다 (N1)
       record(result);
       // 그 사이 다른 문제로 넘어갔으면(화면이 이미 새 문제를 보여준다) 결과는 집계만 하고 화면은 그대로 둔다.
       // 제출 중 재접속으로 phase가 null·submitted(같은 문제)로 바뀐 것은 다른 문제로 넘어간 게 아니므로 반영한다 (M1)

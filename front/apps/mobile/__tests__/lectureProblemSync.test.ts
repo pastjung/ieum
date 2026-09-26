@@ -9,6 +9,7 @@ import {
   SUBMIT_CLOSED_MESSAGE,
   SUBMIT_FAILED_MESSAGE,
   SUBMITTED_WAITING_MESSAGE,
+  tallyResults,
   WAITING_MESSAGE,
 } from "@/services/lectureProblemFlow";
 import { lectureProblemSync } from "@/services/lectureProblemSync";
@@ -354,5 +355,28 @@ describe("lectureProblemSync 제출", () => {
     await expect(submitting).resolves.toBe("graded");
 
     expect(phase()).toMatchObject({ kind: "graded", problem: { problemId: "7" }, result: { isCorrect: true } });
+  });
+
+  it("끊긴 제출(A) 뒤 재제출(B)이 먼저 채점되고 A 응답이 늦게 와도 집계는 문제당 한 번 (N1 회귀)", async () => {
+    await startSolving("7");
+    const gateA = deferred<LiveAnswer>();
+    mockedClass.submitLiveAnswer.mockImplementationOnce(() => gateA.promise); // A: 응답이 늦게 온다
+
+    const submittingA = lectureProblemSync.submit([8]);
+
+    lectureProblemSync.stop();
+    lectureProblemSync.begin("42"); // 같은 강의로 재접속
+    await startSolving("7"); // 다시 조회해 solving으로
+
+    mockedClass.submitLiveAnswer.mockResolvedValueOnce(answer("7", true)); // B: 먼저 채점됨
+    await expect(lectureProblemSync.submit([8])).resolves.toBe("graded");
+    expect(useLectureProblemStore.getState().results).toEqual({ "7": true });
+
+    gateA.resolve(answer("7", false)); // A가 뒤늦게 도착 — 서버는 문제당 시도가 하나뿐이므로 이 값도 서버 진실이다
+    await expect(submittingA).resolves.toBe("graded");
+
+    // 집계는 두 번 세지 않고 문제당 하나만 남는다 (record가 problemId로 덮어쓴다)
+    expect(Object.keys(useLectureProblemStore.getState().results)).toEqual(["7"]);
+    expect(tallyResults(useLectureProblemStore.getState().results)).toEqual({ total: 1, correct: 0 });
   });
 });
