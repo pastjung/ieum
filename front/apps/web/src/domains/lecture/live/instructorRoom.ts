@@ -20,21 +20,39 @@ export async function connectInstructorRoom(
 ): Promise<InstructorRoom> {
   const room = new Room()
   let mic = false
+  let lastState: RoomState | undefined
 
-  room.on(RoomEvent.Reconnecting, () => onState('reconnecting'))
-  room.on(RoomEvent.Reconnected, () => onState('connected'))
-  room.on(RoomEvent.Disconnected, () => onState('disconnected'))
+  const emit = (state: RoomState) => {
+    lastState = state
+    onState(state)
+  }
 
-  onState('connecting')
+  room.on(RoomEvent.Reconnecting, () => emit('reconnecting'))
+  room.on(RoomEvent.Reconnected, () => emit('connected'))
+  room.on(RoomEvent.Disconnected, () => emit('disconnected'))
+
+  emit('connecting')
   try {
     await room.connect(token.serverUrl, token.token)
   } catch (error) {
-    onState('disconnected')
+    emit('disconnected')
     throw error
   }
-  onState('connected')
+  emit('connected')
 
-  await room.localParticipant.setMicrophoneEnabled(true)
+  try {
+    await room.localParticipant.setMicrophoneEnabled(true)
+  } catch (error) {
+    try {
+      await room.disconnect()
+    } catch {
+      // 연결 정리 중 발생한 오류는 원래 마이크 오류를 가리므로 무시한다
+    }
+    if (lastState !== 'disconnected') {
+      emit('disconnected')
+    }
+    throw error
+  }
   mic = true
 
   return {

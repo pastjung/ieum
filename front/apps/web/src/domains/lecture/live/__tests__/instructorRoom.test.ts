@@ -78,4 +78,19 @@ describe('instructorRoom', () => {
     await expect(connectInstructorRoom(token, (s) => states.push(s))).rejects.toThrow('ws failed')
     expect(states).toEqual(['connecting', 'disconnected'])
   })
+
+  it('마이크를 켜지 못하면 연결을 정리하고 해제 상태를 한 번만 알린다', async () => {
+    const states: string[] = []
+    const { Room } = await import('livekit-client')
+    vi.mocked(Room).mockImplementationOnce(() => {
+      const room = new FakeRoom()
+      room.localParticipant.setMicrophoneEnabled.mockRejectedValue(new Error('mic denied'))
+      return room as never
+    })
+
+    await expect(connectInstructorRoom(token, (s) => states.push(s))).rejects.toThrow('mic denied')
+
+    expect(rooms[0].disconnect).toHaveBeenCalled()
+    expect(states).toEqual(['connecting', 'connected', 'disconnected'])
+  })
 })
