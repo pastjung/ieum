@@ -100,6 +100,7 @@ backend ─ 채점·problem_attempts(LIVE)·attempt_cells 저장 → 응답으�
   `LECTURE_PROBLEM_ALREADY_ANSWERED`, `IDEMPOTENCY_KEY_REUSED`, `INVALID_ANSWER_CELLS`).
 - 채점: 서버에서 칸별로 비교한다. `diffMask = input XOR expected`, 칸 수가 다르면 오답, 모든 칸 diffMask 0이면 정답. AI 분석·BKT·user_skill_memory 갱신은 하지 않는다 (명세 8.1 LIVE 제외).
 - 저장: `ProblemAttempt.forLiveLecture(...)`(이미 있음) + `attempt_cells`. (lecture_id, user_id, problem_id) UNIQUE.
+  `durationMs`는 0 이상인지만 검증하고 저장하지 않는다(사용자 확정: problem_attempts에 시간 컬럼이 없어 스키마 변경을 피한다. 후속에 컬럼을 더하면 쓴다).
 - 멱등(사용자 확정: 키를 저장하지 않는다): `Idempotency-Key`는 UUID v4 형식만 검사한다(없거나 형식 오류 400).
   (lecture_id, user_id, problem_id) UNIQUE로 한 번만 저장하고, 이미 풀이가 있으면 같은 cells면 200 기존 결과, 다른 cells면 409 `LECTURE_PROBLEM_ALREADY_ANSWERED`.
   `IDEMPOTENCY_KEY_REUSED` 구분은 MVP에서 쓰지 않는다 — ERD의 `problem_attempts.idempotency_key` 컬럼이 아직 없고 운영 DB가 `ddl-auto: validate`라 스키마 변경을 피한다.
@@ -114,7 +115,7 @@ backend ─ 채점·problem_attempts(LIVE)·attempt_cells 저장 → 응답으�
 `GET /api/v1/lectures/{lectureId}/problems/{problemId}/answers` → 200
 
 - 담당 INSTRUCTOR, 연결된 문제만(아니면 404 `PROBLEM_NOT_FOUND`). 상태 무관(CLOSED 뒤에도 조회 가능).
-- 응답: `{"problemId","answers":[{"userId","username","isCorrect","durationMs","attemptedAt","cells":[{cellIndex,inputPattern,expectedPattern,diffMask,isCorrect}]}]}`.
+- 응답: `{"problemId","answers":[{"userId","username","isCorrect","attemptedAt","cells":[{cellIndex,inputPattern,expectedPattern,diffMask,isCorrect}]}]}`.
   제출한 학습자만 담는다. 미제출·미입장 판정은 웹이 접속자 목록과 맞춰 한다.
 
 ### 3.5 강사·학습자 Snapshot 채우기 (기존 필드)
@@ -134,7 +135,7 @@ backend ─ 채점·problem_attempts(LIVE)·attempt_cells 저장 → 응답으�
 - **현재 문제 카드(위)**: `displayText`, 정답 점형 문자열(`1·3·5 / 2·4·6`), 점자 그림. 없으면 "오른쪽에서 문제를 골라 출제하세요".
 - **제출 현황 카드**: 제출 N / 접속 학생 M, 정답·오답·미착수(=접속 학생 − 제출). 답안 목록과 LiveKit 접속자 목록으로 계산.
 - **학생 카드**: 점선 "예시" 칸을 실제 답안 칸으로 바꾼다.
-  - 정답: 초록, 제출 점자(유니코드), 걸린 시간 `1.9초` / 오답: 노랑, 제출 점자, 틀린 이유 / 미제출: 회색 "미착수"
+  - 정답: 초록, 제출 점자(유니코드), "정답" / 오답: 노랑, 제출 점자, 틀린 이유 / 미제출: 회색 "미착수" (걸린 시간은 저장하지 않으므로 표시하지 않는다)
   - 틀린 이유(순수 함수): 칸 수가 다르면 "칸 수 다름", 아니면 첫 틀린 칸 기준 "첫 칸 6점 누락"·"둘째 칸 3점 추가"·"첫 칸 1점 누락, 4점 추가"
   - 접속했지만 답안 목록에 없는 학생은 미착수. 답안은 있지만 지금 접속하지 않은 학생 카드는 두지 않는다(접속자 기준 명단 유지).
 - **갱신**: 출제 직후, `ANSWER_SUBMITTED` 신호 수신(현재 문제와 같은 problemId일 때), 페이지 진입·새로고침 때 답안 목록 조회.
@@ -175,14 +176,14 @@ backend ─ 채점·problem_attempts(LIVE)·attempt_cells 저장 → 응답으�
   1. 강사가 `초성 ㄱ`·`그리고`를 추가하면 목록에 뜨고 정답 점형이 보인다. `ㄱ`만 입력하면 후보 버튼이 나온다. 같은 글자를 다시 넣어도 목록이 늘지 않는다
   2. 학습자는 수업 시작 뒤 "문제를 기다리는 중" 화면을 본다
   3. 강사가 출제하면 앱이 풀이 화면으로 바뀌고 문제를 읽는다
-  4. 학습자가 제출하면 앱은 서버 채점 결과를 읽고, 강사 웹 학생 카드에 제출 점자·정답/오답·시간(또는 틀린 이유)이 뜨고 제출 현황 숫자가 바뀐다
+  4. 학습자가 제출하면 앱은 서버 채점 결과를 읽고, 강사 웹 학생 카드에 제출 점자·정답/오답(오답은 틀린 이유)이 뜨고 제출 현황 숫자가 바뀐다
   5. 강사가 다음 문제를 출제하면 채점 화면·대기 화면의 학습자가 새 문제로 넘어간다
   6. 강사 웹 새로고침·앱 재접속 뒤에도 현재 문제와 답안이 복원된다
 
 ## 9. 범위 밖
 
 - 문제 은행 검색·문제 순서 편집·연결 해제 UI, 출제됨 문제의 반 정답률
-- 점자 장치 연결 상태 표시, 미입장 학생 명단(참여자 목록 API)
+- 점자 장치 연결 상태 표시, 미입장 학생 명단(참여자 목록 API), 풀이 걸린 시간 저장·표시
 - 명세 8.3 WebSocket 구현
 - 문제 데이터 중복 정리(`아`·`오`·`이` 등), 자모 target_text 표기 변경
 - 수업 후 복습 연결(`reviewableCurriculumStages`)
