@@ -1,3 +1,4 @@
+import { AudioSession } from "@livekit/react-native";
 import { classService } from "@/services/classService";
 import { liveLecture } from "@/services/liveLecture";
 
@@ -42,6 +43,7 @@ jest.mock("@/services/classService", () => ({
 }));
 
 const mockedClass = classService as unknown as { getLecture: jest.Mock; issueMediaToken: jest.Mock };
+const mockedAudio = AudioSession as unknown as { startAudioSession: jest.Mock; stopAudioSession: jest.Mock };
 
 function handlers() {
   return { onOpen: jest.fn(), onExit: jest.fn() };
@@ -184,10 +186,15 @@ describe("liveLecture", () => {
   it("입장 대기 중 나가면 그 이후 응답이 와도 방에 연결하지 않는다", async () => {
     mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "SCHEDULED" });
     const tokenGate = deferred<{ serverUrl: string; token: string; expiresAt: string }>();
-    mockedClass.issueMediaToken.mockImplementationOnce(() => tokenGate.promise);
+    const reachedTokenGate = deferred<void>();
+    mockedClass.issueMediaToken.mockImplementationOnce(() => {
+      reachedTokenGate.resolve(); // 토큰 발급 호출까지 실제로 도달했다는 신호 — 큐에 낡은 구현이 남지 않게 한다
+      return tokenGate.promise;
+    });
 
     const h = handlers();
     const joinPromise = liveLecture.join("42", h);
+    await reachedTokenGate.promise; // 토큰 발급이 대기 중인 상태가 되도록 보장한다
 
     await liveLecture.leave();
 
@@ -198,5 +205,46 @@ describe("liveLecture", () => {
     expect(h.onOpen).not.toHaveBeenCalled();
     expect(h.onExit).not.toHaveBeenCalled();
     expect(liveLecture.currentLectureId()).toBeNull();
+  });
+
+  it("먼저 시작한 요청의 오디오 세션이 늦게 열려도 이미 연결된 세션의 오디오를 끄지 않는다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "SCHEDULED" });
+    mockedClass.issueMediaToken
+      .mockResolvedValueOnce({ serverUrl: "wss://a", token: "ta", expiresAt: "x" })
+      .mockResolvedValueOnce({ serverUrl: "wss://b", token: "tb", expiresAt: "x" });
+
+    const audioGateA = deferred<void>();
+    const reachedAudioGateA = deferred<void>();
+    mockedAudio.startAudioSession
+      .mockImplementationOnce(() => {
+        reachedAudioGateA.resolve(); // A가 startAudioSession을 호출했다는 신호 — 정확한 시점을 타이밍 추측 없이 보장한다
+        return audioGateA.promise;
+      })
+      .mockImplementationOnce(async () => undefined); // B는 바로 열린다
+
+    const a = handlers();
+    const b = handlers();
+
+    const joinA = liveLecture.join("42", a);
+    // A가 getLecture·issueMediaToken을 지나 startAudioSession 대기 상태(audioGateA)에 들어갈 때까지 기다린다
+    await reachedAudioGateA.promise;
+
+    // B는 완전히 접속을 마친다 — 오디오 세션도 이미 열었다
+    await liveLecture.join("42", b);
+
+    expect(mockRooms).toHaveLength(1);
+    expect(mockRooms[0].connect).toHaveBeenCalledWith("wss://b", "tb");
+    expect(mockedAudio.stopAudioSession).not.toHaveBeenCalled();
+
+    // 이제서야 A의 오디오 세션이 열린다 — 이미 낡은 요청이니 B의 오디오를 꺼서는 안 된다
+    audioGateA.resolve();
+    await joinA;
+
+    expect(mockedAudio.stopAudioSession).not.toHaveBeenCalled();
+    expect(mockRooms).toHaveLength(1); // A는 방을 만들지 않는다
+    expect(mockRooms[0].disconnect).not.toHaveBeenCalled(); // B는 여전히 연결되어 있다
+    expect(a.onOpen).not.toHaveBeenCalled();
+    expect(a.onExit).not.toHaveBeenCalled();
+    expect(liveLecture.currentLectureId()).toBe("42");
   });
 });

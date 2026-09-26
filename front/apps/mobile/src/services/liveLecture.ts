@@ -17,6 +17,8 @@ interface Session {
   opened: boolean;
   exited: boolean;
   leavingByUser: boolean;
+  /** 이 세션을 만든 join() 호출의 세대 — 오디오 세션 소유권 확인에 쓴다 */
+  generation: number;
 }
 
 /**
@@ -30,10 +32,22 @@ let session: Session | null = null;
 // 이미 만든 방·오디오 세션을 핸들러 호출 없이 조용히 정리하고 물러난다.
 let joinGeneration = 0;
 
+// AudioSession은 전역 싱글턴이다. 겹친 join()들이 각자 startAudioSession을 부를 수 있으므로,
+// "지금 살아 있는 오디오는 어느 세대의 것인가"를 따로 기억해 둔다 — 낡은 join의 정리 로직이
+// 이미 이긴 join의 오디오를 꺼버리지 않게 하려면 세대 비교 없이 무조건 stop()을 부르면 안 된다.
+let audioOwner: number | null = null;
+
 function markOpen(current: Session): void {
   if (current.opened || current.exited || session !== current) return;
   current.opened = true;
   current.handlers.onOpen();
+}
+
+/** 이 세대가 오디오를 소유하고 있을 때만 끈다. 더 최신 세대가 이미 소유했다면 손대지 않는다 */
+function releaseAudio(generation: number): void {
+  if (audioOwner !== null && audioOwner !== generation) return;
+  audioOwner = null;
+  void AudioSession.stopAudioSession();
 }
 
 function finish(current: Session, exit: RoomExit): void {
@@ -42,7 +56,7 @@ function finish(current: Session, exit: RoomExit): void {
   current.exited = true;
   current.room.removeAllListeners();
   if (session === current) session = null;
-  void AudioSession.stopAudioSession();
+  releaseAudio(current.generation);
   if (wasLive) current.handlers.onExit(exit);
 }
 
@@ -55,12 +69,12 @@ async function discardSilently(previous: Session): Promise<void> {
 }
 
 /** 낡은 세대로 판명된 join 시도가 만들어 둔 것을 핸들러 호출 없이 정리한다 */
-function abandon(room: Room | null, audioStarted: boolean): void {
+function abandon(room: Room | null, generation: number): void {
   if (room) {
     room.removeAllListeners();
     void room.disconnect();
   }
-  if (audioStarted) void AudioSession.stopAudioSession();
+  releaseAudio(generation);
 }
 
 export const liveLecture = {
@@ -77,12 +91,13 @@ export const liveLecture = {
 
     await AudioSession.startAudioSession();
     if (generation !== joinGeneration) {
-      abandon(null, true);
+      releaseAudio(generation);
       return;
     }
+    audioOwner = generation;
 
     const room = new Room();
-    const current: Session = { lectureId, room, handlers, opened: false, exited: false, leavingByUser: false };
+    const current: Session = { lectureId, room, handlers, opened: false, exited: false, leavingByUser: false, generation };
 
     room.on(RoomEvent.RoomMetadataChanged, (metadata: string) => {
       if (isLectureOpen(metadata)) markOpen(current);
@@ -93,7 +108,7 @@ export const liveLecture = {
 
     if (generation !== joinGeneration) {
       current.exited = true;
-      abandon(room, true);
+      abandon(room, generation);
       return;
     }
 
@@ -105,14 +120,14 @@ export const liveLecture = {
       current.exited = true;
       room.removeAllListeners();
       if (session === current) session = null;
-      void AudioSession.stopAudioSession();
+      releaseAudio(generation);
       throw error;
     }
 
     if (generation !== joinGeneration) {
       current.exited = true;
       if (session === current) session = null;
-      abandon(room, true);
+      abandon(room, generation);
       return;
     }
 
