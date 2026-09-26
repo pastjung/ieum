@@ -47,6 +47,19 @@ function handlers() {
   return { onOpen: jest.fn(), onExit: jest.fn() };
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+/** 대기 중인 마이크로태스크(예: 이미 resolve된 프라미스 체인)를 흘려보낸다 */
+async function flushMicrotasks(times = 5): Promise<void> {
+  for (let i = 0; i < times; i += 1) await Promise.resolve();
+}
+
 beforeEach(async () => {
   await liveLecture.leave();
   mockRooms.length = 0;
@@ -135,6 +148,55 @@ describe("liveLecture", () => {
 
     await expect(liveLecture.join("42", handlers())).rejects.toThrow("503");
     expect(mockRooms).toHaveLength(0);
+    expect(liveLecture.currentLectureId()).toBeNull();
+  });
+
+  it("겹쳐서 입장하면 나중 요청만 방에 남는다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "SCHEDULED" });
+    const tokenGate = deferred<{ serverUrl: string; token: string; expiresAt: string }>();
+    mockedClass.issueMediaToken
+      .mockImplementationOnce(() => tokenGate.promise)
+      .mockImplementationOnce(async () => ({ serverUrl: "wss://s2", token: "t2", expiresAt: "x" }));
+
+    const first = handlers();
+    const second = handlers();
+
+    const joinFirst = liveLecture.join("42", first);
+    // 첫 번째 요청이 getLecture를 지나 토큰 발급 대기 상태(tokenGate)에 들어가게 한다
+    await flushMicrotasks();
+    // 두 번째 입장은 토큰이 바로 도착해 먼저 끝난다
+    await liveLecture.join("42", second);
+
+    expect(mockRooms).toHaveLength(1);
+    expect(mockRooms[0].connect).toHaveBeenCalledWith("wss://s2", "t2");
+    expect(liveLecture.currentLectureId()).toBe("42");
+
+    // 이제서야 첫 번째 토큰이 도착한다 — 이미 낡은 요청이니 방을 만들지 않는다
+    tokenGate.resolve({ serverUrl: "wss://s1", token: "t1", expiresAt: "x" });
+    await joinFirst;
+
+    expect(mockRooms).toHaveLength(1);
+    expect(first.onOpen).not.toHaveBeenCalled();
+    expect(first.onExit).not.toHaveBeenCalled();
+    expect(liveLecture.currentLectureId()).toBe("42");
+  });
+
+  it("입장 대기 중 나가면 그 이후 응답이 와도 방에 연결하지 않는다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "SCHEDULED" });
+    const tokenGate = deferred<{ serverUrl: string; token: string; expiresAt: string }>();
+    mockedClass.issueMediaToken.mockImplementationOnce(() => tokenGate.promise);
+
+    const h = handlers();
+    const joinPromise = liveLecture.join("42", h);
+
+    await liveLecture.leave();
+
+    tokenGate.resolve({ serverUrl: "wss://s", token: "t", expiresAt: "x" });
+    await joinPromise;
+
+    expect(mockRooms).toHaveLength(0);
+    expect(h.onOpen).not.toHaveBeenCalled();
+    expect(h.onExit).not.toHaveBeenCalled();
     expect(liveLecture.currentLectureId()).toBeNull();
   });
 });
