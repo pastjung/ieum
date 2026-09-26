@@ -96,9 +96,11 @@ export const lectureProblemSync = {
       const snapshot = await classService.getLectureProblem(lectureId);
       if (seq !== requestSeq || !isActiveFor(lectureId)) return;
       if (snapshot.myResult) record(snapshot.myResult);
-      commit(applySnapshot(store().phase, snapshot.currentProblem, deps));
-    } catch {
+      commit(applySnapshot(store().phase, snapshot.currentProblem, deps, snapshot.myResult));
+    } catch (error) {
       if (seq !== requestSeq || !isActiveFor(lectureId)) return;
+      // 조용히 삼키지 않는다 — 개발 중에는 원인을 볼 수 있어야 한다. 사용자에게 보이는 동작은 그대로다
+      if (__DEV__) console.warn("lectureProblemSync.refresh 실패", error);
       // 처음 조회가 실패해도 화면은 대기로 둔다. 다음 출제 신호나 "문제 다시 확인"이 다시 조회한다
       if (store().phase === null) commit({ phase: { kind: "waiting" }, announcement: WAITING_MESSAGE });
     }
@@ -107,10 +109,23 @@ export const lectureProblemSync = {
   /**
    * 풀던 문제의 답을 낸다. 멱등 키는 그 문제의 키를 그대로 쓴다 — 실패 뒤 다시 눌러도 같은 키.
    * 성공하면 상태가 graded가 되고 화면이 채점 화면으로 옮긴다(낭독은 채점 화면).
+   *
+   * `expectedProblemId`: 호출부가 await(마이크 끄기 등) 전에 잡아 둔 문제 id. 그 사이 문제가
+   * 바뀌었으면(현재 phase가 다른 문제를 가리키면) 이 답은 이제 어느 문제에도 맞지 않으므로
+   * 보내지 않고 새 문제로 안내한다 (M1)
    */
-  async submit(cells: readonly Cell[]): Promise<SubmitOutcome> {
+  async submit(cells: readonly Cell[], expectedProblemId?: string | null): Promise<SubmitOutcome> {
     const { lectureId, active, phase } = store();
     if (!active || lectureId === null || phase?.kind !== "solving" || submitting) return "ignored";
+    if (
+      expectedProblemId !== undefined &&
+      expectedProblemId !== null &&
+      expectedProblemId !== phase.problem.problemId
+    ) {
+      announce(PROBLEM_CHANGED_MESSAGE);
+      void lectureProblemSync.refresh();
+      return "changed";
+    }
     submitting = true;
     const gen = ++submitGen;
     requestSeq++;
@@ -123,12 +138,15 @@ export const lectureProblemSync = {
         { cells: [...cells], durationMs },
         phase.idempotencyKey,
       );
-      if (!isActiveFor(lectureId)) return "ignored";
       // 여기서는 일부러 gen(세대)으로 걸러내지 않는다 — 서버는 (강의,학습자,문제)당 시도를 하나만 저장하므로,
       // 끊겼다 뒤늦게 도착한 이전 세대의 성공 응답도 "그 문제의 서버 진실"이다(다른 답이 이미 저장됐다면 여기가 아니라
       // 아래 catch의 ALREADY_ANSWERED 분기를 탄다). record는 problemId 키로 덮어써 집계를 문제당 한 번으로 유지하고,
       // commit도 같은 문제면 다시 그 결과로 덮어써도 값이 갈리지 않으므로 안전하다 (N1)
-      record(result);
+      //
+      // 집계(record)는 같은 수업이면 active가 꺼졌어도(끊김·퇴장) 반영한다 — 종료 화면이 볼 집계라
+      // 방을 나온 뒤에도 값이 늦게 와서 유실되면 안 된다. 화면 반영(commit)만 active 게이트를 그대로 둔다 (M2)
+      if (store().lectureId === lectureId) record(result);
+      if (!isActiveFor(lectureId)) return "ignored";
       // 그 사이 다른 문제로 넘어갔으면(화면이 이미 새 문제를 보여준다) 결과는 집계만 하고 화면은 그대로 둔다.
       // 제출 중 재접속으로 phase가 null·submitted(같은 문제)로 바뀐 것은 다른 문제로 넘어간 게 아니므로 반영한다 (M1)
       const curId = phaseProblemId(store().phase);

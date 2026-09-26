@@ -228,7 +228,7 @@ describe("lectureProblemSync 제출", () => {
     expect(phase()).toMatchObject({ kind: "solving", problem: { problemId: "8" } });
   });
 
-  it("다른 답을 이미 냈으면(409 ALREADY_ANSWERED) 다시 조회해 제출 대기로 둔다", async () => {
+  it("다른 답을 이미 냈으면(409 ALREADY_ANSWERED) 다시 조회해 그 결과를 채점 화면으로 읽어 준다 (M5)", async () => {
     await startSolving("7");
     mockedClass.submitLiveAnswer.mockRejectedValue(new ApiError(409, "LECTURE_PROBLEM_ALREADY_ANSWERED", "x"));
     mockedClass.getLectureProblem.mockResolvedValueOnce(snapshot(current("7", true), answer("7", false)));
@@ -236,8 +236,22 @@ describe("lectureProblemSync 제출", () => {
     await expect(lectureProblemSync.submit([8])).resolves.toBe("changed");
     await flushMicrotasks();
 
-    expect(phase()).toEqual({ kind: "submitted", problemId: "7" });
-    expect(mockedAnnounce).toHaveBeenLastCalledWith(SUBMITTED_WAITING_MESSAGE);
+    // 예전에는 "제출 대기"로만 두어 앞서 저장된 결과가 영영 안 읽혔다 — 지금 풀던 문제의 결과이므로
+    // 곧바로 채점 화면으로 간다 (M5)
+    expect(phase()).toMatchObject({ kind: "graded", problem: { problemId: "7" }, result: { isCorrect: false } });
+    expect(useLectureProblemStore.getState().results).toEqual({ "7": false });
+  });
+
+  it("다른 답을 이미 냈어도 결과가 지금 풀이 중인 문제와 다르면 제출 대기로 둔다", async () => {
+    await startSolving("7");
+    mockedClass.submitLiveAnswer.mockRejectedValue(new ApiError(409, "LECTURE_PROBLEM_ALREADY_ANSWERED", "x"));
+    // 그 사이 다른 문제로 넘어가 이미 그 문제를 냈다 — myResult가 지금 phase("7")와 다른 문제("9")를 가리킨다
+    mockedClass.getLectureProblem.mockResolvedValueOnce(snapshot(current("9", true), answer("9", true)));
+
+    await expect(lectureProblemSync.submit([8])).resolves.toBe("changed");
+    await flushMicrotasks();
+
+    expect(phase()).toEqual({ kind: "submitted", problemId: "9" });
   });
 
   it("수업이 닫혔으면(409 INVALID_LECTURE_STATE) 알리고 끝낸다", async () => {
@@ -355,6 +369,44 @@ describe("lectureProblemSync 제출", () => {
     await expect(submitting).resolves.toBe("graded");
 
     expect(phase()).toMatchObject({ kind: "graded", problem: { problemId: "7" }, result: { isCorrect: true } });
+  });
+
+  it("보내기 전에 잡아 둔 문제가 그 사이 바뀌었으면 알리고 새 문제로 가며 보내지 않는다 (M1 회귀)", async () => {
+    // 마이크를 끄는 동안 다음 문제가 도착해 phase가 이미 "8"로 바뀐 상황을 흉내낸다 —
+    // submitAnswer는 await 전에 잡아 둔 "7"을 그대로 넘긴다
+    await startSolving("7");
+    await startSolving("8");
+    mockedAnnounce.mockClear();
+    // mismatch 분기가 안에서 한 번 더 refresh()를 부른다 (안내와 별개로 새 문제를 다시 확인)
+    mockedClass.getLectureProblem.mockResolvedValueOnce(snapshot(current("8")));
+
+    await expect(lectureProblemSync.submit([8], "7")).resolves.toBe("changed");
+
+    expect(mockedClass.submitLiveAnswer).not.toHaveBeenCalled();
+    expect(mockedAnnounce).toHaveBeenCalledWith(PROBLEM_CHANGED_MESSAGE);
+  });
+
+  it("잡아 둔 문제가 지금 풀이 중인 문제와 같으면 그대로 보낸다 (M1)", async () => {
+    await startSolving("7");
+    mockedClass.submitLiveAnswer.mockResolvedValue(answer("7", true));
+
+    await expect(lectureProblemSync.submit([8], "7")).resolves.toBe("graded");
+
+    expect(mockedClass.submitLiveAnswer).toHaveBeenCalledTimes(1);
+  });
+
+  it("방을 나온 뒤(active=false) 도착한 성공 응답도 같은 수업이면 집계에는 반영한다 (M2 회귀)", async () => {
+    await startSolving("7");
+    const gate = deferred<LiveAnswer>();
+    mockedClass.submitLiveAnswer.mockImplementationOnce(() => gate.promise);
+
+    const submitting = lectureProblemSync.submit([8]);
+    lectureProblemSync.stop(); // active=false, lectureId는 "42" 그대로
+    gate.resolve(answer("7", true));
+
+    await expect(submitting).resolves.toBe("ignored");
+    expect(phase()).toMatchObject({ kind: "solving" }); // 화면 반영은 여전히 막힌다
+    expect(useLectureProblemStore.getState().results).toEqual({ "7": true }); // 집계는 반영된다
   });
 
   it("끊긴 제출(A) 뒤 재제출(B)이 먼저 채점되고 A 응답이 늦게 와도 집계는 문제당 한 번 (N1 회귀)", async () => {

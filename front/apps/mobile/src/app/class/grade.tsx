@@ -11,6 +11,7 @@ import { liveLecture } from "@/services/liveLecture";
 import { lectureProblemSync } from "@/services/lectureProblemSync";
 import { isUserBackAction } from "@/services/lectureSignals";
 import { useLectureProblemStore } from "@/stores/lectureProblemStore";
+import { useLectureVoiceStore } from "@/stores/lectureVoiceStore";
 import { announce, hapticError, hapticSuccess } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
 
@@ -21,6 +22,13 @@ export default function ClassGrade() {
   const fontScale = useFontScale();
   const phase = useLectureProblemStore((s) => s.phase);
   const graded = phase?.kind === "graded" ? phase : null;
+  // 정상 경로(play.tsx submitAnswer)는 채점 화면에 오기 전에 마이크를 끈다 — 여기 구독은
+  // 그 경로를 놓친 경우의 방어선이다. 마이크가 켜진 채로는 결과 낭독이 반 전체에 전해지므로
+  // 꺼질 때까지 낭독을 미룬다 (I1)
+  const micOn = useLectureVoiceStore((s) => s.micOn);
+  useEffect(() => {
+    if (micOn) void liveLecture.setMicrophone(false);
+  }, [micOn]);
   const feedback = useMemo(() => (graded ? liveGradeFeedback(graded.result) : null), [graded]);
   /** 지금 보고 있는 틀린 칸의 순서 — 칸이 여럿이면 한 칸씩 넘겨 본다 */
   const [step, setStep] = useState(0);
@@ -51,11 +59,11 @@ export default function ClassGrade() {
   const isLastStep = step + 1 >= steps.length;
 
   useEffect(() => {
-    if (!feedback || !current) return;
+    if (!feedback || !current || micOn) return;
     // 정오 진동은 문항당 한 번이다. 칸을 넘길 때마다 울리면 칸마다 새로 채점된 것처럼 느껴진다
     if (step === 0) void (feedback.correct ? hapticSuccess() : hapticError());
     announce(current.speech);
-  }, [current, feedback, step]);
+  }, [current, feedback, step, micOn]);
 
   if (!graded || !feedback || !current) {
     return <ScreenShell style={styles.center} />;

@@ -113,6 +113,21 @@ describe("applySnapshot", () => {
     const phase = graded("7");
     expect(applySnapshot(phase, null, deps).phase).toBe(phase);
   });
+
+  it("풀던 문제가 이미 채점되어 있으면(ALREADY_ANSWERED 뒤 재조회) 제출 대기 대신 채점 화면으로 간다 (M5)", () => {
+    const phase = solving("7");
+    const result = answer("7", false);
+
+    const t = applySnapshot(phase, current("7", true), deps, result);
+
+    expect(t).toEqual({ phase: { kind: "graded", problem: problemOf("7"), result }, announcement: null });
+  });
+
+  it("결과의 문제 id가 지금 풀이 중인 문제와 다르면 그냥 제출 대기로 둔다 (M5)", () => {
+    const t = applySnapshot(solving("7"), current("7", true), deps, answer("8", false));
+
+    expect(t).toEqual({ phase: { kind: "submitted", problemId: "7" }, announcement: SUBMITTED_WAITING_MESSAGE });
+  });
 });
 
 describe("acceptResult", () => {

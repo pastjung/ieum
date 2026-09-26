@@ -49,10 +49,17 @@ export function applySnapshot(
   phase: ProblemPhase | null,
   currentProblem: LearnerCurrentProblem | null,
   deps: FlowDeps,
+  myResult: LiveAnswer | null = null,
 ): Transition {
   if (currentProblem === null) {
     if (phase !== null && (phase.kind === "waiting" || phase.kind === "graded")) return { phase, announcement: null };
     return { phase: { kind: "waiting" }, announcement: WAITING_MESSAGE };
+  }
+
+  // 풀던 문제가 이미 채점되어 있다(제출이 ALREADY_ANSWERED로 막혀 다시 조회한 경우 등) — 제출
+  // 대기로만 두면 이 결과를 영영 읽어 주지 못하므로 곧바로 채점 화면으로 간다 (M5)
+  if (phase?.kind === "solving" && myResult && myResult.problemId === phase.problem.problemId) {
+    return { phase: { kind: "graded", problem: phase.problem, result: myResult }, announcement: null };
   }
 
   if (phase !== null && answeredProblemId(phase) === currentProblem.problemId) return { phase, announcement: null };

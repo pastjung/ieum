@@ -345,4 +345,24 @@ describe("api-client 요청별 헤더", () => {
     expect(headers.Authorization).toBe("Bearer access-1");
     expect(headers["X-Client-Platform"]).toBe("MOBILE");
   });
+
+  it("이름의 대소문자를 바꿔도 인증·플랫폼·Content-Type 헤더를 덮지 못한다 (M6)", async () => {
+    const fetchFn = jest.fn(async () => fakeResponse(200, {}));
+
+    await clientWith(fetchFn).post(
+      "/users/me",
+      { a: 1 },
+      { headers: { authorization: "Bearer other", "x-client-platform": "WEB", "content-type": "text/plain" } },
+    );
+
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer access-1");
+    expect(headers["X-Client-Platform"]).toBe("MOBILE");
+    expect(headers["Content-Type"]).toBe("application/json");
+    // 소문자 이름 자체도 새 키로 남아 있으면 안 된다 — 두 헤더가 같이 나가는 것도 우회다
+    expect(headers.authorization).toBeUndefined();
+    expect(headers["x-client-platform"]).toBeUndefined();
+    expect(headers["content-type"]).toBeUndefined();
+  });
 });

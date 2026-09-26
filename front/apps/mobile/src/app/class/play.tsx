@@ -128,12 +128,21 @@ export default function ClassPlay() {
       return;
     }
     submittingRef.current = true;
+    // 마이크를 끄려고 기다리는 사이 선생님이 다음 문제를 낼 수 있다 — await 전에 지금 풀던 문제를
+    // 잡아 두고 lectureProblemSync에 넘긴다. 그사이 문제가 바뀌었으면 그 답은 보내지 않는다 (M1)
+    const expectedProblemId = solving?.problem.problemId ?? null;
     try {
       // 채점 화면에는 마이크 버튼이 없다 — 켠 채로 넘어가면 끌 방법이 없어
-      // 채점 결과 낭독이 그대로 반 전체에 전해진다
-      if (micOn) await liveLecture.setMicrophone(false);
+      // 채점 결과 낭독이 그대로 반 전체에 전해진다. 끄지 못하면 채점 화면으로 넘어가지 않는다 (I1)
+      if (micOn) {
+        const off = await liveLecture.setMicrophone(false);
+        if (!off) {
+          announce(MIC_FAILED_MESSAGE);
+          return;
+        }
+      }
       // 성공하면 상태가 graded가 되어 채점 화면으로 옮긴다. 실패 안내는 lectureProblemSync가 읽는다
-      await lectureProblemSync.submit(cells);
+      await lectureProblemSync.submit(cells, expectedProblemId);
     } finally {
       submittingRef.current = false;
     }
@@ -157,7 +166,8 @@ export default function ClassPlay() {
   };
 
   const toggleMic = async () => {
-    if (voiceBusyRef.current) return;
+    // 제출이 진행 중이면(마이크를 끄는 중일 수 있다) 겹쳐 누르지 않는다 (I1)
+    if (voiceBusyRef.current || submittingRef.current) return;
     voiceBusyRef.current = true;
     try {
       if (micOn) {
