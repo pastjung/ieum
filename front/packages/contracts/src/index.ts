@@ -236,7 +236,15 @@ export const attemptAnalysisRequestSchema = z.object({
 export type AttemptAnalysisRequest = z.infer<typeof attemptAnalysisRequestSchema>;
 
 /** 셀 하나의 진단. 완료 응답의 셀과 같은 모양이라 스키마를 공유한다 */
-export const attemptCellAnalysisSchema = cellCompletionSchema;
+/**
+ * 문항 채점 응답의 칸. 완료 응답의 칸에 **이 칸이 어떤 학습 요소인지**가 더해진다
+ * (AI 가 채점할 때 칸마다 붙이는 요소 — "약자 바", "첫소리 ㅂ", "모음 ㅙ (1/2)").
+ * 둘 다 없을 수 있다(초과 입력 칸, AI 가 주지 않은 경우) → 화면은 "N번째 칸"으로 되돌아간다.
+ */
+export const attemptCellAnalysisSchema = cellCompletionSchema.extend({
+  learningSkillId: z.number().int().nullable().optional(),
+  label: z.string().nullable().optional(),
+});
 export type AttemptCellAnalysis = z.infer<typeof attemptCellAnalysisSchema>;
 
 export const attemptAnalysisResponseSchema = z.object({
@@ -384,33 +392,3 @@ export const completionResponseSchema = z.object({
   weakSkills: z.array(weakSkillSchema).catch([]),
 });
 export type CompletionResponse = z.infer<typeof completionResponseSchema>;
-
-/* ─── 실시간 수업 (API 명세 8.2·8.5절) ─── */
-
-export const lectureStatusSchema = z.enum(["SCHEDULED", "OPEN", "CLOSED"]);
-export type LectureStatus = z.infer<typeof lectureStatusSchema>;
-
-/** 참여 학습자용 수업 Snapshot. 참여 코드·다른 참여자 정보는 오지 않는다 */
-export const learnerLectureSchema = z.object({
-  /** BIGINT의 10진수 문자열. number로 바꾸지 않는다 */
-  lectureId: z.string(),
-  title: z.string(),
-  description: z.string().nullable(),
-  status: lectureStatusSchema,
-  scheduledAt: z.string().nullable(),
-  startedAt: z.string().nullable(),
-  endedAt: z.string().nullable(),
-  currentProblem: z.unknown().nullable(),
-  createdAt: z.string(),
-  myParticipation: z.object({ joinedAt: z.string(), leftAt: z.string().nullable() }),
-  reviewableCurriculumStages: z.array(z.unknown()),
-});
-export type LearnerLecture = z.infer<typeof learnerLectureSchema>;
-
-/** OpenVidu 음성 접속 토큰. 서버에 저장되지 않으며 10분 유효 */
-export const mediaTokenSchema = z.object({
-  serverUrl: z.string().regex(/^wss?:\/\//),
-  token: z.string().min(1),
-  expiresAt: z.string(),
-});
-export type MediaToken = z.infer<typeof mediaTokenSchema>;

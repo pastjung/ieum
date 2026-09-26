@@ -7,7 +7,7 @@ import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { BrailleCellView } from "@/components/BrailleCellView";
 import { useSessionStore } from "@/stores/sessionStore";
-import { selectGradeFeedback } from "@/services/gradeFeedback";
+import { selectGradeFeedback, compareCaption } from "@/services/gradeFeedback";
 import { announce, hapticError, hapticSuccess, hapticTap } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
 
@@ -24,6 +24,8 @@ export default function Grade() {
   const next = useSessionStore((s) => s.next);
   const problem = useSessionStore((s) => s.current)();
   const kind = useSessionStore((s) => s.kind);
+  const disconnectShown = useSessionStore((s) => s.disconnectShown);
+  const markDisconnectShown = useSessionStore((s) => s.markDisconnectShown);
 
   // 서버 분석(analysis)이 있으면 그것을, 없으면 기존 로컬 채점(local)을 쓴다. 실시간 수업은
   // 서버 세션이 없어 analysis가 항상 null이라 이 화면은 그대로 기존 로컬 경로로 떨어진다
@@ -81,6 +83,12 @@ export default function Grade() {
 
   const goNext = () => {
     if (next()) {
+      // 수업 데모: 두 번째 문항 뒤 연결 끊김(V29)을 한 번 보여 준다 — 실연동 시 실제 이벤트로 교체
+      if (kind === "class" && !disconnectShown && index + 1 === 2) {
+        markDisconnectShown();
+        router.replace("/class/disconnected");
+        return;
+      }
       router.replace(kind === "class" ? "/class/play" : "/session/play");
     } else {
       router.replace(kind === "class" ? "/class/end" : "/session/analyzing");
@@ -153,8 +161,12 @@ export default function Grade() {
             <View style={[styles.compare, { backgroundColor: theme.color.surface, borderColor: theme.color.border, borderRadius: radius.card }]}>
               <BrailleCellView
                 cell={current.compare.expected}
-                caption={`정답 · ${ordinalKo(current.compare.index)} 칸`}
-                accessibilityLabel={`정답 점자, ${ordinalKo(current.compare.index)} 칸`}
+                caption={`정답 · ${compareCaption(current.compare, ordinalKo)}`}
+                accessibilityLabel={
+                  current.compare.label
+                    ? `정답 점자, ${ordinalKo(current.compare.index)} 칸, ${current.compare.label}`
+                    : `정답 점자, ${ordinalKo(current.compare.index)} 칸`
+                }
               />
               <BrailleCellView
                 cell={current.compare.actual}
