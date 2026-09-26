@@ -1,12 +1,31 @@
-import { createBrowserRouter } from 'react-router-dom'
-import { HomePage } from '../pages/HomePage'
-import { SignupPage } from '../pages/SignupPage'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppActionRedirectPage } from '../pages/AppActionRedirectPage'
+import { LectureCreatePage } from '../pages/LectureCreatePage'
+import { LectureListPage } from '../pages/LectureListPage'
+import { LiveLecturePage } from '../pages/LiveLecturePage'
+import { LoginPage } from '../pages/LoginPage'
+import { SignupPage } from '../pages/SignupPage'
+import { AppShell } from './AppShell'
+import { RequireInstructor } from './RequireInstructor'
 
 export const router = createBrowserRouter([
-  { path: '/', element: <HomePage /> },
+  { path: '/', element: <Navigate to="/lectures" replace /> },
+  { path: '/login', element: <LoginPage /> },
   { path: '/signup', element: <SignupPage /> },
-
+  {
+    element: <RequireInstructor />,
+    children: [
+      {
+        element: <AppShell />,
+        children: [
+          { path: '/lectures', element: <LectureListPage /> },
+          { path: '/lectures/new', element: <LectureCreatePage /> },
+        ],
+      },
+      // 03 실시간 수업은 흰 상단 바 대신 자체 어두운 수업 바를 쓴다
+      { path: '/lectures/:lectureId/live', element: <LiveLecturePage /> },
+    ],
+  },
   // 계정 메일 링크가 착지하는 경로. 백엔드의 MAIL_LINK_* 환경변수가 이 주소를 가리키므로
   // 둘 중 하나만 바꾸면 링크가 끊긴다. 앱의 라우트 구조(auth/...)와도 맞춰 둔다.
   {
@@ -29,5 +48,4 @@ export const router = createBrowserRouter([
       />
     ),
   },
-  // TODO: /rooms, /problems, /reports ...
 ])

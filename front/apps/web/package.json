@@ -9,9 +9,12 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write src"
+    "format": "prettier --write src",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@ieum/api-client": "workspace:*",
+    "livekit-client": "2.22.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-router-dom": "^7.6.0"
@@ -30,6 +33,7 @@
     "prettier": "^3.5.0",
     "typescript": "~5.8.0",
     "typescript-eslint": "^8.30.0",
-    "vite": "^6.3.0"
+    "vite": "^6.3.0",
+    "vitest": "^3.2.7"
   }
 }
