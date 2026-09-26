@@ -12,11 +12,17 @@ export const INVALID_RESPONSE = "INVALID_RESPONSE";
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
+  /**
+   * 오류 응답 본문 원문(JSON). 공통 `{code, message}` 밖의 필드를 읽을 때 쓴다 —
+   * 예: 409 `PROBLEM_TEXT_AMBIGUOUS`의 `candidates`. 본문이 없으면 undefined
+   */
+  readonly body: unknown;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, body?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.body = body;
   }
 }

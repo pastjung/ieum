@@ -9,6 +9,8 @@ const MESSAGES: Record<string, string> = {
   MEDIA_SERVER_UNAVAILABLE: '음성 서버에 연결하지 못했어요. 같은 버튼을 다시 눌러 주세요.',
   LECTURE_PARTICIPANT_NOT_CONNECTED: '지금 연결돼 있지 않은 학생이에요.',
   LECTURE_PARTICIPANT_NOT_FOUND: '수업에 참여 중인 학생이 아니에요.',
+  PROBLEM_NOT_FOUND: '해당하는 문제를 찾지 못했어요. 구분어와 글자를 확인해 주세요.',
+  PROBLEM_TEXT_AMBIGUOUS: '어떤 문제인지 아래에서 골라 주세요.',
   INVALID_REQUEST_INPUT: '입력값을 확인해 주세요.',
   NETWORK_UNAVAILABLE: '서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.',
   INVALID_ACCOUNT_INPUT: '아이디와 비밀번호 형식을 확인해 주세요.',
