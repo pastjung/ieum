@@ -235,6 +235,9 @@ class LectureAuthenticatedApiIntegrationTest {
     final List<String> openedRooms = new CopyOnWriteArrayList<>();
     final List<String> deletedRooms = new CopyOnWriteArrayList<>();
 
+    /** {@code "{room}/{identity}/{allowed}"}. 같은 context를 여러 테스트가 공유하므로 고유한 수업 ID로 찾는다. */
+    final List<String> speakingChanges = new CopyOnWriteArrayList<>();
+
     @Override
     public IssuedMediaToken issueToken(MediaTokenRequest request) {
       return new IssuedMediaToken(
@@ -249,6 +252,12 @@ class LectureAuthenticatedApiIntegrationTest {
     @Override
     public void deleteRoom(String roomName) {
       this.deletedRooms.add(roomName);
+    }
+
+    @Override
+    public boolean setSpeaking(String roomName, String identity, boolean allowed) {
+      this.speakingChanges.add(roomName + "/" + identity + "/" + allowed);
+      return true;
     }
   }
 }

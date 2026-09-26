@@ -18,7 +18,16 @@ public interface LiveRoomGateway {
   void deleteRoom(String roomName);
 
   /**
-   * @param publisher true면 마이크 음성 송출 권한(강사), false면 수신만(학습자)
+   * 참가자의 발언(마이크 송출) 권한을 바꾸고 손을 내린다(속성 {@code hand=down}, {@code speaking=allowed|none}). 권한을 거두면
+   * OpenVidu가 그 참가자가 게시한 트랙을 내린다. 여러 번 불러도 결과가 같다 (API 명세 8.5.1절).
+   *
+   * @return 적용했으면 true, 방에 그 참가자가 접속해 있지 않으면 false
+   */
+  boolean setSpeaking(String roomName, String identity, boolean allowed);
+
+  /**
+   * @param publisher true면 마이크 음성 송출 권한(강사), false면 수신과 자기 속성 갱신만(학습자 — 발언은 {@link #setSpeaking}으로
+   *     따로 허용)
    */
   record MediaTokenRequest(
       String roomName, String identity, String displayName, boolean publisher) {}

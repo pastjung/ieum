@@ -19,6 +19,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import livekit.LivekitModels.ParticipantPermission;
+import livekit.LivekitModels.TrackSource;
 import lombok.extern.slf4j.Slf4j;
 import retrofit2.Call;
 import retrofit2.Response;
@@ -39,6 +42,14 @@ public class LiveKitRoomGateway implements LiveRoomGateway {
   static final String OPEN_METADATA = "{\"status\":\"OPEN\"}";
 
   private static final int NOT_FOUND = 404;
+
+  /** 참가자 속성 규약 (API 명세 8.5.1절). 웹·앱이 같은 키·값을 읽는다. */
+  static final String HAND_ATTRIBUTE = "hand";
+
+  static final String HAND_DOWN = "down";
+  static final String SPEAKING_ATTRIBUTE = "speaking";
+  static final String SPEAKING_ALLOWED = "allowed";
+  static final String SPEAKING_NONE = "none";
 
   private final LiveKitProperties properties;
   private final RoomServiceClient roomServiceClient;
@@ -96,11 +107,44 @@ public class LiveKitRoomGateway implements LiveRoomGateway {
     execute(roomServiceClient.deleteRoom(roomName), "deleteRoom", true);
   }
 
-  private void execute(Call<?> call, String operation, boolean notFoundIsDone) {
+  @Override
+  public boolean setSpeaking(String roomName, String identity, boolean allowed) {
+    // 권한은 부분 갱신이 아니라 통째로 바뀐다. 구독·자기 속성 갱신(손들기)을 매번 다시 적는다.
+    ParticipantPermission.Builder permission =
+        ParticipantPermission.newBuilder()
+            .setCanSubscribe(true)
+            .setCanPublish(allowed)
+            .setCanPublishData(false)
+            .setCanUpdateMetadata(true);
+    if (allowed) {
+      permission.addCanPublishSources(TrackSource.MICROPHONE);
+    }
+    Map<String, String> attributes =
+        Map.of(
+            HAND_ATTRIBUTE,
+            HAND_DOWN,
+            SPEAKING_ATTRIBUTE,
+            allowed ? SPEAKING_ALLOWED : SPEAKING_NONE);
+    // 표시 이름·metadata는 null로 보내 바꾸지 않는다.
+    return execute(
+        roomServiceClient.updateParticipant(
+            roomName, identity, null, null, permission.build(), attributes),
+        "updateParticipant",
+        true);
+  }
+
+  /**
+   * @param notFoundAllowed true면 404를 실패가 아니라 "대상 없음"으로 본다
+   * @return 성공이면 true, 404를 허용한 호출에서 대상이 없으면 false
+   */
+  private boolean execute(Call<?> call, String operation, boolean notFoundAllowed) {
     try {
       Response<?> response = call.execute();
-      if (response.isSuccessful() || (notFoundIsDone && response.code() == NOT_FOUND)) {
-        return;
+      if (response.isSuccessful()) {
+        return true;
+      }
+      if (notFoundAllowed && response.code() == NOT_FOUND) {
+        return false;
       }
       log.warn("OpenVidu {} 실패: HTTP {}", operation, response.code());
     } catch (IOException e) {

@@ -1,13 +1,22 @@
 package com.itda.lecture.media;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
+import com.itda.global.error.ErrorCode;
 import com.itda.lecture.media.LiveRoomGateway.IssuedMediaToken;
 import com.itda.lecture.media.LiveRoomGateway.MediaTokenRequest;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import io.livekit.server.RoomServiceClient;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -16,7 +25,14 @@ import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import livekit.LivekitModels.ParticipantInfo;
+import livekit.LivekitModels.ParticipantPermission;
+import livekit.LivekitModels.TrackSource;
+import okhttp3.ResponseBody;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import retrofit2.Call;
+import retrofit2.Response;
 
 class LiveKitRoomGatewayTest {
 
@@ -85,5 +101,109 @@ class LiveKitRoomGatewayTest {
   void 방_이름과_identity_규칙() {
     assertThat(LectureRoom.nameOf(42L)).isEqualTo("lecture-42");
     assertThat(LectureRoom.identityOf(7L)).isEqualTo("user-7");
+  }
+
+  // ---------- 발언 권한 (API 명세 8.5.1절) ----------
+
+  /** RoomServiceClient는 Kotlin final 클래스지만 Mockito 5 기본 inline mock maker가 대역을 만든다. */
+  private final RoomServiceClient roomClient = mock(RoomServiceClient.class);
+
+  private final LiveKitRoomGateway speakingGateway =
+      new LiveKitRoomGateway(properties, roomClient, Clock.fixed(NOW, ZoneOffset.UTC));
+
+  @SuppressWarnings("unchecked")
+  private void answer(Response<ParticipantInfo> response) throws IOException {
+    Call<ParticipantInfo> call = mock(Call.class);
+    given(call.execute()).willReturn(response);
+    given(roomClient.updateParticipant(any(), any(), any(), any(), any(), any())).willReturn(call);
+  }
+
+  private static Response<ParticipantInfo> error(int status) {
+    return Response.error(status, ResponseBody.create("", null));
+  }
+
+  @SuppressWarnings("unchecked")
+  private void verifyUpdate(
+      ArgumentCaptor<ParticipantPermission> permission,
+      ArgumentCaptor<Map<String, String>> attributes) {
+    verify(roomClient)
+        .updateParticipant(
+            eq("lecture-42"),
+            eq("user-8"),
+            isNull(),
+            isNull(),
+            permission.capture(),
+            attributes.capture());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void 발언을_허용하면_마이크_송출_권한을_주고_손을_내린다() throws Exception {
+    answer(Response.success(ParticipantInfo.getDefaultInstance()));
+
+    assertThat(speakingGateway.setSpeaking("lecture-42", "user-8", true)).isTrue();
+
+    ArgumentCaptor<ParticipantPermission> permission =
+        ArgumentCaptor.forClass(ParticipantPermission.class);
+    ArgumentCaptor<Map<String, String>> attributes = ArgumentCaptor.forClass(Map.class);
+    verifyUpdate(permission, attributes);
+    ParticipantPermission granted = permission.getValue();
+    assertThat(granted.getCanSubscribe()).isTrue();
+    assertThat(granted.getCanPublish()).isTrue();
+    assertThat(granted.getCanPublishSourcesList()).containsExactly(TrackSource.MICROPHONE);
+    assertThat(granted.getCanPublishData()).isFalse();
+    // 권한은 통째로 바뀐다. 빠뜨리면 학습자가 더는 손을 들 수 없다.
+    assertThat(granted.getCanUpdateMetadata()).isTrue();
+    assertThat(attributes.getValue())
+        .containsExactlyInAnyOrderEntriesOf(Map.of("hand", "down", "speaking", "allowed"));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void 발언을_회수하면_송출_권한을_거두고_손을_내린다() throws Exception {
+    answer(Response.success(ParticipantInfo.getDefaultInstance()));
+
+    assertThat(speakingGateway.setSpeaking("lecture-42", "user-8", false)).isTrue();
+
+    ArgumentCaptor<ParticipantPermission> permission =
+        ArgumentCaptor.forClass(ParticipantPermission.class);
+    ArgumentCaptor<Map<String, String>> attributes = ArgumentCaptor.forClass(Map.class);
+    verifyUpdate(permission, attributes);
+    ParticipantPermission revoked = permission.getValue();
+    assertThat(revoked.getCanSubscribe()).isTrue();
+    assertThat(revoked.getCanPublish()).isFalse();
+    assertThat(revoked.getCanPublishSourcesList()).isEmpty();
+    assertThat(revoked.getCanPublishData()).isFalse();
+    assertThat(revoked.getCanUpdateMetadata()).isTrue();
+    assertThat(attributes.getValue())
+        .containsExactlyInAnyOrderEntriesOf(Map.of("hand", "down", "speaking", "none"));
+  }
+
+  @Test
+  void 방에_그_참가자가_없으면_false다() throws Exception {
+    answer(error(404));
+
+    assertThat(speakingGateway.setSpeaking("lecture-42", "user-8", true)).isFalse();
+  }
+
+  @Test
+  void 그_밖의_OpenVidu_오류는_503이다() throws Exception {
+    answer(error(500));
+
+    assertThatThrownBy(() -> speakingGateway.setSpeaking("lecture-42", "user-8", true))
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void OpenVidu에_닿지_않으면_503이다() throws Exception {
+    Call<ParticipantInfo> call = mock(Call.class);
+    given(call.execute()).willThrow(new IOException("connection refused"));
+    given(roomClient.updateParticipant(any(), any(), any(), any(), any(), any())).willReturn(call);
+
+    assertThatThrownBy(() -> speakingGateway.setSpeaking("lecture-42", "user-8", false))
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
   }
 }
