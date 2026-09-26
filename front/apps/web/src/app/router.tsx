@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppActionRedirectPage } from '../pages/AppActionRedirectPage'
 import { LectureCreatePage } from '../pages/LectureCreatePage'
 import { LectureListPage } from '../pages/LectureListPage'
+import { LiveLecturePage } from '../pages/LiveLecturePage'
 import { LoginPage } from '../pages/LoginPage'
 import { SignupPage } from '../pages/SignupPage'
 import { AppShell } from './AppShell'
@@ -21,6 +22,8 @@ export const router = createBrowserRouter([
           { path: '/lectures/new', element: <LectureCreatePage /> },
         ],
       },
+      // 03 실시간 수업은 흰 상단 바 대신 자체 어두운 수업 바를 쓴다
+      { path: '/lectures/:lectureId/live', element: <LiveLecturePage /> },
     ],
   },
   // 계정 메일 링크가 착지하는 경로. 백엔드의 MAIL_LINK_* 환경변수가 이 주소를 가리키므로
