@@ -5,7 +5,7 @@ import { BackHeader } from "@/components/BackHeader";
 import { BigInput } from "@/components/BigInput";
 import { AppButton } from "@/components/AppButton";
 import { BrailleCellView } from "@/components/BrailleCellView";
-import { lookupWord, sampleWords, type DictEntry } from "@/services/dictionary";
+import { lookupWord, type DictEntry } from "@/services/dictionary";
 import { describeCell, playCells, stopPlayback } from "@/services/tactilePlayer";
 import { announce, speak } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
@@ -25,26 +25,39 @@ export default function Dictionary() {
     if (!entry) return;
     try {
       announce(`${entry.word}, 장치로 보여 드릴게요. 셀 ${entry.cells.length}개예요.`);
-      await playCells(entry.cells, { onCell: (index, cell) => announce(describeCell(index, cell)) });
+      await playCells(entry.cells, {
+        // 요소 이름이 있으면 함께 읽는다 — "두 번째 칸, 4번과 5번, 약자 바"
+        onCell: (index, cell) =>
+          announce(entry.labels[index] ? `${describeCell(index, cell)}, ${entry.labels[index]}` : describeCell(index, cell)),
+      });
     } catch (error) {
       announce(error instanceof Error ? error.message : "장치에 보내지 못했어요.");
     }
   };
-  const [notFound, setNotFound] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    announce(`점자 사전이에요. 단어를 입력하고 찾기를 누르세요. 지금은 ${sampleWords.join(", ")} 단어를 찾을 수 있어요.`);
+    announce("점자 사전이에요. 한글 단어나 낱자를 입력하고 찾기를 누르세요.");
   }, []);
 
-  const search = () => {
-    const found = lookupWord(query);
-    setEntry(found);
-    setNotFound(!found && query.trim().length > 0);
-    if (found) {
-      announce(`${found.word}. ${found.breakdown}. 셀 ${found.cells.length}개예요.`);
-    } else {
-      announce("아직 사전에 없는 단어예요. 다른 단어를 찾아보세요.");
+  /** 등록된 문제면 그 정답 칸을, 없으면 서버가 AI 점역기로 바꾼 칸을 받는다 (`GET /braille-dictionary`) */
+  const search = async () => {
+    if (searching || query.trim().length === 0) return;
+    stopPlayback(); // 이전 단어를 촉지하던 중이면 멈춘다
+    setSearching(true);
+    setMessage(null);
+    const result = await lookupWord(query);
+    setSearching(false);
+    if (result.kind === "found") {
+      setEntry(result.entry);
+      announce(`${result.entry.word}. ${result.entry.breakdown}. 셀 ${result.entry.cells.length}개예요.`);
+      return;
     }
+    setEntry(null);
+    const text = result.kind === "unsupported" ? "한글 단어나 낱자만 찾을 수 있어요." : result.message;
+    setMessage(text);
+    announce(text);
   };
 
   return (
@@ -55,15 +68,20 @@ export default function Dictionary() {
         value={query}
         onChangeText={(t) => {
           setQuery(t);
-          setNotFound(false);
+          setMessage(null);
         }}
       />
-      <AppButton label="찾기" variant="secondary" onPress={search} />
+      <AppButton label={searching ? "찾는 중…" : "찾기"} variant="secondary" onPress={() => void search()} />
       {entry && (
         <View style={[styles.card, { backgroundColor: theme.color.surface, borderColor: theme.color.border, borderRadius: radius.card }]}>
           <View style={styles.cells}>
             {entry.cells.map((cell, i) => (
-              <BrailleCellView key={i} cell={cell} accessibilityLabel={`${i + 1}번째 칸`} />
+              <BrailleCellView
+                key={i}
+                cell={cell}
+                caption={entry.labels[i] ?? undefined}
+                accessibilityLabel={entry.labels[i] ? `${i + 1}번째 칸, ${entry.labels[i]}` : `${i + 1}번째 칸`}
+              />
             ))}
           </View>
           <Text style={{ fontSize: 15 * fontScale, color: theme.color.textMuted }}>
@@ -71,9 +89,9 @@ export default function Dictionary() {
           </Text>
         </View>
       )}
-      {notFound && (
+      {message && (
         <Text accessibilityLiveRegion="polite" style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, textAlign: "center" }}>
-          아직 사전에 없는 단어예요.
+          {message}
         </Text>
       )}
       {entry && (
@@ -97,5 +115,5 @@ export default function Dictionary() {
 
 const styles = StyleSheet.create({
   card: { borderWidth: 1, padding: 20, gap: 14, alignItems: "center" },
-  cells: { flexDirection: "row", gap: 14 },
+  cells: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14 },
 });

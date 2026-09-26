@@ -32,8 +32,6 @@ export default function Grade() {
   const next = useSessionStore((s) => s.next);
   const problem = useSessionStore((s) => s.current)();
   const kind = useSessionStore((s) => s.kind);
-  const disconnectShown = useSessionStore((s) => s.disconnectShown);
-  const markDisconnectShown = useSessionStore((s) => s.markDisconnectShown);
 
   // 서버 분석(analysis)이 있으면 그것을, 없으면 기존 로컬 채점(local)을 쓴다. 실시간 수업은
   // 서버 세션이 없어 analysis가 항상 null이라 이 화면은 그대로 기존 로컬 경로로 떨어진다
@@ -126,7 +124,8 @@ export default function Grade() {
     const cells = compare ? [compare.expected] : (problem?.expectedCells ?? []);
     if (cells.length === 0) return;
     try {
-      announce(compare ? `정답 ${ordinalKo(compare.index)} 칸을 장치로 보여 드릴게요.` : "정답을 장치로 보여 드릴게요.");
+      // 칸 이름으로 부른다 — "정답, 받침 ㅇ" / 칸을 더 넣은 자리는 "정답, 빈칸"(점이 하나도 올라가지 않는다)
+      announce(compare ? `정답, ${compareCaption(compare, ordinalKo)}. 장치로 보여 드릴게요.` : "정답을 장치로 보여 드릴게요.");
       await playCells(cells, {
         onCell: (index, cell) => announce(describeCell(compare ? compare.index : index, cell)),
       });

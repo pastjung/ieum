@@ -14,7 +14,12 @@ public record LearningAttemptAnalysisResponse(
     Instant attemptedAt,
     List<CellAnalysisResponse> cells,
     FeedbackResponse feedback,
-    List<ViolatedSkillResponse> violatedSkills) {
+    List<ViolatedSkillResponse> violatedSkills,
+    /**
+     * 오답의 "틀린 곳" 하나당 한 장 (AI 가 칸을 맞춘 뒤 고른 것). 칸을 더 넣거나 빼도 뒤 칸이 밀리지 않는다. 정답 칸이 없는 자리는
+     * expectedPattern 이 null, label 이 "빈칸". 정답이면 빈 목록
+     */
+    List<FeedbackStepResponse> feedbackSteps) {
 
   public static LearningAttemptAnalysisResponse from(AttemptResult result) {
     return new LearningAttemptAnalysisResponse(
@@ -25,7 +30,30 @@ public record LearningAttemptAnalysisResponse(
         result.attemptedAt(),
         result.cells().stream().map(CellAnalysisResponse::from).toList(),
         new FeedbackResponse(result.feedback().tts(), result.feedback().detail()),
-        result.violatedSkills().stream().map(ViolatedSkillResponse::from).toList());
+        result.violatedSkills().stream().map(ViolatedSkillResponse::from).toList(),
+        result.feedbackSteps().stream().map(FeedbackStepResponse::from).toList());
+  }
+
+  public record FeedbackStepResponse(
+      Integer expectedCellIndex,
+      Integer expectedPattern,
+      Integer inputPattern,
+      List<Integer> missingDots,
+      List<Integer> extraDots,
+      String label,
+      String errorType,
+      String tts) {
+    static FeedbackStepResponse from(LearningAttemptAnalysisFastApiResponse.FeedbackStep step) {
+      return new FeedbackStepResponse(
+          step.expectedCellIndex(),
+          step.expectedPattern(),
+          step.inputPattern(),
+          step.missingDots(),
+          step.extraDots(),
+          step.label(),
+          step.errorType(),
+          step.tts());
+    }
   }
 
   public record FeedbackResponse(String tts, String detail) {}

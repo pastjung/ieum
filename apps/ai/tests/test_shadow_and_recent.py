@@ -120,6 +120,7 @@ def test_attempt_analyze_emits_shadow_log_without_changing_response(caplog):
         "skillResults",
         "updatedSkillStates",
         "cellSkills",
+        "feedbackSteps",
     }  # 응답 형태 그대로
     lines = [r.getMessage() for r in caplog.records if "shadow_prediction" in r.getMessage()]
     assert len(lines) == 1

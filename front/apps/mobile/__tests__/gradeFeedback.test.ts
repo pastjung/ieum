@@ -1,4 +1,4 @@
-import { selectGradeFeedback } from "@/services/gradeFeedback";
+import { compareCaption, selectGradeFeedback } from "@/services/gradeFeedback";
 import { gradeAnswer } from "@ieum/domain";
 import type { AttemptAnalysisResponse, AttemptCellAnalysis } from "@ieum/contracts";
 
@@ -31,6 +31,7 @@ function analysis(overrides: Partial<AttemptAnalysisResponse>): AttemptAnalysisR
     cells: [],
     feedback: { tts: "", detail: "" },
     violatedSkills: [],
+    feedbackSteps: [],
     ...overrides,
   };
 }
@@ -242,5 +243,57 @@ describe("서버 분석과 로컬 결과 중 무엇을 쓸지 고른다", () => 
     const result = selectGradeFeedback(null, local);
 
     expect(result?.steps).toHaveLength(1);
+  });
+});
+
+describe("AI 채점기의 틀린 곳(feedbackSteps)", () => {
+  const ordinal = (i: number) => ["첫", "두", "세", "네"][i] ?? `${i + 1}번째`;
+
+  it("오답이고 AI가 틀린 곳을 주면 칸 비교 대신 그 문장으로 단계를 만든다", () => {
+    // '우유'를 ㅇㅜㅇㅠ 네 칸으로 씀 — 칸 비교라면 뒤가 밀려 "모두 4칸"이지만 AI는 두 곳만 짚는다
+    const result = selectGradeFeedback(
+      analysis({
+        correct: false,
+        cells: [cell(1, 13, 54, [1, 3, 6], [2, 5]), cell(2, 41, 13, [], [])],
+        feedbackSteps: [
+          { expectedCellIndex: null, expectedPattern: null, inputPattern: 54, missingDots: [], extraDots: [2, 3, 5, 6],
+            label: "빈칸", errorType: "silent_onset_written", tts: "첫소리 이응은 점자로 적지 않아요. '우'는 한 칸이에요." },
+          { expectedCellIndex: null, expectedPattern: null, inputPattern: 54, missingDots: [], extraDots: [2, 3, 5, 6],
+            label: "빈칸", errorType: "silent_onset_written", tts: "첫소리 이응은 점자로 적지 않아요. '유'는 한 칸이에요." },
+        ],
+      }),
+      null,
+    );
+    expect(result?.headline).toBe("오답이에요.");
+    expect(result?.steps).toHaveLength(2);
+    expect(result?.steps[0].detail).toBe("틀린 곳이 2군데예요. 첫소리 이응은 점자로 적지 않아요. '우'는 한 칸이에요.");
+    expect(result?.steps[0].speech.startsWith("오답이에요. ")).toBe(true);
+    expect(result?.steps[1].detail).toBe("첫소리 이응은 점자로 적지 않아요. '유'는 한 칸이에요.");
+    const compare = result?.steps[0].compare;
+    expect(compare?.expected).toBe(0);
+    expect(compare?.actual).toBe(54);
+    expect(compare && compareCaption(compare, ordinal)).toBe("빈칸");
+  });
+
+  it("정답이면 AI 틀린 곳이 와도 쓰지 않는다", () => {
+    const result = selectGradeFeedback(
+      analysis({
+        correct: true,
+        feedbackSteps: [
+          { expectedCellIndex: 1, expectedPattern: 43, inputPattern: 43, missingDots: [], extraDots: [],
+            label: "약자 가", errorType: "dot_missing", tts: "쓰면 안 되는 문장" },
+        ],
+      }),
+      null,
+    );
+    expect(result?.steps[0].detail).toBe("");
+  });
+
+  it("칸 비교 경로에서도 정답 길이를 넘는 칸(0으로 채운 칸)은 '빈칸'으로 부른다", () => {
+    expect(compareCaption({ expected: 0, actual: 2, missingDots: [], extraDots: [2], index: 7 }, ordinal)).toBe("빈칸");
+    expect(compareCaption({ expected: 43, actual: 8, missingDots: [], extraDots: [], index: 0 }, ordinal)).toBe("첫 칸");
+    expect(
+      compareCaption({ expected: 24, actual: 8, missingDots: [], extraDots: [], index: 1, label: "약자 바" }, ordinal),
+    ).toBe("약자 바");
   });
 });

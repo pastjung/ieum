@@ -8,6 +8,8 @@ import com.itda.learning.dto.LearningSkillStatesFastApiRequest;
 import com.itda.learning.dto.LearningSkillStatesFastApiResponse;
 import com.itda.learning.dto.LearningSkillSummaryFastApiRequest;
 import com.itda.learning.dto.LearningSkillSummaryFastApiResponse;
+import com.itda.problem.dto.BrailleLookupFastApiRequest;
+import com.itda.problem.dto.BrailleLookupFastApiResponse;
 import com.itda.problem.dto.ProblemAnalyzeResponse;
 import com.itda.problem.dto.RegisterProblemRequest;
 import com.itda.problem.dto.ReviewAnalyzeRequest;
@@ -31,6 +33,17 @@ public class FastApiClient {
         .body(request)
         .retrieve()
         .body(ProblemAnalyzeResponse.class);
+  }
+
+  /** 점자 사전: 텍스트를 점자 칸과 칸별 요소 이름으로 바꾼다. 상태를 바꾸지 않는다 */
+  public BrailleLookupFastApiResponse lookupBraille(BrailleLookupFastApiRequest request) {
+    return restClient
+        .post()
+        .uri("/braille-lookup")
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(request)
+        .retrieve()
+        .body(BrailleLookupFastApiResponse.class);
   }
 
   public ReviewAnalyzeResponse reviewAnalyze(ReviewAnalyzeRequest request) {

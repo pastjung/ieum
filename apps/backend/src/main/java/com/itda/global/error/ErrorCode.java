@@ -95,7 +95,11 @@ public enum ErrorCode {
   LEARNING_CONTENT_NOT_READY(HttpStatus.SERVICE_UNAVAILABLE, "학습 콘텐츠가 아직 준비되지 않았습니다."),
 
   // problem
-  PROBLEM_VALIDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "문제 검증 서비스를 일시적으로 사용할 수 없습니다.");
+  PROBLEM_VALIDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "문제 검증 서비스를 일시적으로 사용할 수 없습니다."),
+
+  // braille dictionary
+  BRAILLE_TEXT_UNSUPPORTED(HttpStatus.UNPROCESSABLE_CONTENT, "한글 단어나 낱자만 찾을 수 있어요."),
+  BRAILLE_CONVERSION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "점자로 바꿀 수 없어요. 잠시 후 다시 시도해 주세요.");
 
   private final HttpStatus status;
   private final String message;

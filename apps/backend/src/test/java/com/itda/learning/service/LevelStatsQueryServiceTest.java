@@ -37,8 +37,9 @@ class LevelStatsQueryServiceTest {
   /**
    * 집계 행을 만들어 스텁까지 끝낸다.
    *
-   * <p>{@code given(...)} 인자 안에서 이 메서드를 부르면 Mockito가 중첩 스텁으로 보고 {@code UnfinishedStubbingException}을
-   * 낸다. 목록을 먼저 만든 뒤 {@link #stub}으로 넘긴다 ({@code StageStatsQueryServiceTest}와 같은 규칙).
+   * <p>{@code given(...)} 인자 안에서 이 메서드를 부르면 Mockito가 중첩 스텁으로 보고 {@code
+   * UnfinishedStubbingException}을 낸다. 목록을 먼저 만든 뒤 {@link #stub}으로 넘긴다 ({@code
+   * StageStatsQueryServiceTest}와 같은 규칙).
    */
   private LevelAttemptCount count(Level level, long solved, long correct) {
     LevelAttemptCount row = mock(LevelAttemptCount.class);

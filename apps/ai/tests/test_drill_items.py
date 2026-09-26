@@ -151,3 +151,52 @@ def test_cell_skills_ids_match_skill_results():
     assert {c["learningSkillId"] for c in body["cellSkills"]} <= {
         r["learningSkillId"] for r in body["skillResults"]
     }
+
+
+def test_feedback_steps_follow_aligned_errors_not_shifted_cells():
+    """'우유'를 ㅇㅜㅇㅠ 네 칸으로 쓰면 틀린 곳은 두 군데(첫소리 ㅇ 두 번) — 정답 칸은 빈칸."""
+    body = _attempt("우유", [13, 41], [54, 13, 54, 41]).json()
+    steps = body["feedbackSteps"]
+    assert [s["errorType"] for s in steps] == ["silent_onset_written", "silent_onset_written"]
+    assert all(
+        s["expectedPattern"] is None and s["label"] == "빈칸" and s["inputPattern"] == 54
+        for s in steps
+    )
+    assert "'우'는 한 칸이에요" in steps[0]["tts"] and "'유'는 한 칸이에요" in steps[1]["tts"]
+
+
+def test_feedback_steps_for_dot_error_omission_and_correct():
+    body = _attempt("가방", [43, 24, 54], [43, 24, 32]).json()
+    assert body["feedbackSteps"] == [
+        {
+            "expectedCellIndex": 3,
+            "expectedPattern": 54,
+            "inputPattern": 32,
+            "missingDots": [2, 3, 5],
+            "extraDots": [],
+            "label": "받침 ㅇ",
+            "errorType": "dot_missing",
+            "tts": "세 번째 칸에서 2, 3, 5점이 빠졌어요. 받침 이응은 2, 3, 5, 6점이에요.",
+        }
+    ]
+    omitted = _attempt("사과", [7, 8, 39], [7, 8]).json()["feedbackSteps"]
+    assert omitted[0]["inputPattern"] is None and omitted[0]["label"] == "모음 ㅘ"
+    assert _attempt("가방", [43, 24, 54], [43, 24, 54]).json()["feedbackSteps"] == []
+
+
+def test_braille_lookup_words_spaces_jamo_and_rejects_non_hangul():
+    res = client.post(f"{P}/braille-lookup", json={"text": "바보"}).json()
+    assert res["braille"] == "⠘⠘⠥"
+    assert [c["label"] for c in res["cells"]] == ["약자 바", "첫소리 ㅂ", "모음 ㅗ"]
+    two = client.post(f"{P}/braille-lookup", json={"text": "학교  가방"}).json()
+    assert two["text"] == "학교 가방" and two["cells"][4] == {
+        "cellIndex": 5,
+        "pattern": 0,
+        "learningSkillId": None,
+        "label": "띄어쓰기",
+    }
+    assert (
+        client.post(f"{P}/braille-lookup", json={"text": "ㄱ"}).json()["cells"][0]["label"]
+        == "첫소리 ㄱ"
+    )
+    assert client.post(f"{P}/braille-lookup", json={"text": "abc"}).status_code == 422

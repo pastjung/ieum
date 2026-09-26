@@ -108,7 +108,8 @@ public class LearningAttemptService {
         attemptedAt.toInstant(ZoneOffset.UTC),
         toCellResults(savedCells, analysis),
         analysis.feedback(),
-        violatedSkills);
+        violatedSkills,
+        analysis.feedbackSteps());
   }
 
   private LearningSession findOwnedSession(long userId, long sessionId) {
@@ -311,10 +312,34 @@ public class LearningAttemptService {
       Instant attemptedAt,
       List<CellResult> cells,
       FeedbackResult feedback,
-      List<ViolatedSkill> violatedSkills) {
+      List<ViolatedSkill> violatedSkills,
+      /** AI 가 칸을 맞춘 뒤 고른 "틀린 곳"들. 앱의 오답 화면이 한 장씩 넘겨 보여준다. 없으면 빈 목록 */
+      List<LearningAttemptAnalysisFastApiResponse.FeedbackStep> feedbackSteps) {
     public AttemptResult {
       cells = List.copyOf(cells);
       violatedSkills = List.copyOf(violatedSkills);
+      feedbackSteps = feedbackSteps == null ? List.of() : List.copyOf(feedbackSteps);
+    }
+
+    public AttemptResult(
+        Long problemSessionId,
+        Long problemId,
+        Long attemptId,
+        boolean correct,
+        Instant attemptedAt,
+        List<CellResult> cells,
+        FeedbackResult feedback,
+        List<ViolatedSkill> violatedSkills) {
+      this(
+          problemSessionId,
+          problemId,
+          attemptId,
+          correct,
+          attemptedAt,
+          cells,
+          feedback,
+          violatedSkills,
+          List.of());
     }
   }
 
