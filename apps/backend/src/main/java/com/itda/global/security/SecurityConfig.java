@@ -106,6 +106,17 @@ public class SecurityConfig {
 
   private static final String REVIEW_SESSION_PATH = "/review-sessions/{sessionId}";
 
+  /** 수업 (API 명세 8.2·8.5절). 모두 principal의 역할·소유·참여 관계로 판정하므로 인증이 필요하다. */
+  private static final String LECTURES_PATH = "/lectures";
+
+  private static final String LECTURE_PATH = "/lectures/{lectureId}";
+
+  private static final String LECTURE_STATUS_PATH = "/lectures/{lectureId}/status";
+
+  private static final String LECTURE_MEDIA_TOKENS_PATH = "/lectures/{lectureId}/media-tokens";
+
+  private static final String LECTURE_PARTICIPATIONS_PATH = "/lecture-participations";
+
   /**
    * CORS 설정 원본인 MVC 설정을 읽는 bean. Spring Security의 {@code http.cors()}도 MVC가 있으면 이 이름의 bean을 {@link
    * CorsConfigurationSource}로 찾는다.
@@ -150,7 +161,14 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, SKILL_SUMMARY_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, STAGE_STATS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, REVIEW_SESSIONS_PATH),
-                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, REVIEW_SESSION_PATH)))
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, REVIEW_SESSION_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LECTURES_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LECTURES_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LECTURE_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, LECTURE_STATUS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LECTURE_MEDIA_TOKENS_PATH),
+                PathPatternRequestMatcher.pathPattern(
+                    HttpMethod.POST, LECTURE_PARTICIPATIONS_PATH)))
         .addFilterBefore(
             new AccessTokenAuthenticationFilter(accessAuthenticationService),
             AuthorizationFilter.class)
