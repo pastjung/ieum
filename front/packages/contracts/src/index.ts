@@ -236,7 +236,15 @@ export const attemptAnalysisRequestSchema = z.object({
 export type AttemptAnalysisRequest = z.infer<typeof attemptAnalysisRequestSchema>;
 
 /** 셀 하나의 진단. 완료 응답의 셀과 같은 모양이라 스키마를 공유한다 */
-export const attemptCellAnalysisSchema = cellCompletionSchema;
+/**
+ * 문항 채점 응답의 칸. 완료 응답의 칸에 **이 칸이 어떤 학습 요소인지**가 더해진다
+ * (AI 가 채점할 때 칸마다 붙이는 요소 — "약자 바", "첫소리 ㅂ", "모음 ㅙ (1/2)").
+ * 둘 다 없을 수 있다(초과 입력 칸, AI 가 주지 않은 경우) → 화면은 "N번째 칸"으로 되돌아간다.
+ */
+export const attemptCellAnalysisSchema = cellCompletionSchema.extend({
+  learningSkillId: z.number().int().nullable().optional(),
+  label: z.string().nullable().optional(),
+});
 export type AttemptCellAnalysis = z.infer<typeof attemptCellAnalysisSchema>;
 
 export const attemptAnalysisResponseSchema = z.object({
@@ -356,6 +364,26 @@ export type StageStat = z.infer<typeof stageStatSchema>;
 export const stageStatsSchema = z.object({ stages: z.array(stageStatSchema) });
 export type StageStats = z.infer<typeof stageStatsSchema>;
 
+/** 문제 단계(Level) 하나의 풀이 통계 */
+export const levelStatSchema = z.object({
+  level: levelSchema,
+  solvedCount: z.number().int().nonnegative(),
+  correctCount: z.number().int().nonnegative(),
+});
+export type LevelStat = z.infer<typeof levelStatSchema>;
+
+/**
+ * "내 실력" 화면이 읽는다. 풀이 기록(`problem_attempts`)을 문제 자신의 단계(`problems.level`)로
+ * 묶은 것이라 복습 세션 풀이까지 담는다 — 세션의 커리큘럼 단계로 묶는 `stageStats`는 복습
+ * 세션의 단계가 NULL이라 그 풀이를 통째로 뺀다.
+ *
+ * **기록이 있는 단계만 온다.** 여섯 단계 전부와 그 표시 순서·이름은 앱이 들고 있다
+ * (`levelLabels.ts`의 `LEVEL_ORDER`·`LEVEL_LABEL`). 서버가 빈 줄을 채워 보내도 앱이 다시
+ * 채우는 일이 겹칠 뿐이라 채우지 않는다. 같은 이유로 **순서를 약속하지 않는다.**
+ */
+export const levelStatsSchema = z.object({ levels: z.array(levelStatSchema) });
+export type LevelStats = z.infer<typeof levelStatsSchema>;
+
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),
@@ -384,33 +412,3 @@ export const completionResponseSchema = z.object({
   weakSkills: z.array(weakSkillSchema).catch([]),
 });
 export type CompletionResponse = z.infer<typeof completionResponseSchema>;
-
-/* ─── 실시간 수업 (API 명세 8.2·8.5절) ─── */
-
-export const lectureStatusSchema = z.enum(["SCHEDULED", "OPEN", "CLOSED"]);
-export type LectureStatus = z.infer<typeof lectureStatusSchema>;
-
-/** 참여 학습자용 수업 Snapshot. 참여 코드·다른 참여자 정보는 오지 않는다 */
-export const learnerLectureSchema = z.object({
-  /** BIGINT의 10진수 문자열. number로 바꾸지 않는다 */
-  lectureId: z.string(),
-  title: z.string(),
-  description: z.string().nullable(),
-  status: lectureStatusSchema,
-  scheduledAt: z.string().nullable(),
-  startedAt: z.string().nullable(),
-  endedAt: z.string().nullable(),
-  currentProblem: z.unknown().nullable(),
-  createdAt: z.string(),
-  myParticipation: z.object({ joinedAt: z.string(), leftAt: z.string().nullable() }),
-  reviewableCurriculumStages: z.array(z.unknown()),
-});
-export type LearnerLecture = z.infer<typeof learnerLectureSchema>;
-
-/** OpenVidu 음성 접속 토큰. 서버에 저장되지 않으며 10분 유효 */
-export const mediaTokenSchema = z.object({
-  serverUrl: z.string().regex(/^wss?:\/\//),
-  token: z.string().min(1),
-  expiresAt: z.string(),
-});
-export type MediaToken = z.infer<typeof mediaTokenSchema>;

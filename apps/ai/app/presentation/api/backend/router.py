@@ -154,12 +154,22 @@ class SkillStateOutSchema(CamelModel):
     recent_results: str  # 최근 5회 정오 ('01101'), 오래된 것부터. Spring 은 저장·전달만
 
 
+class CellSkillSchema(CamelModel):
+    """정답 칸 하나의 학습 요소. cellIndex 는 1부터(attempt_cells.cell_index 와 같음)."""
+
+    cell_index: int
+    learning_skill_id: int
+    label: str
+
+
 class AttemptAnalyzeResponse(CamelModel):
-    """{ feedback, skillResults[], updatedSkillStates[] }  — updatedSkillStates 는 이번 문항에 나온 요소만(변경분)"""
+    """{ feedback, skillResults[], updatedSkillStates[], cellSkills[] }
+    updatedSkillStates 는 이번 문항에 나온 요소만(변경분). cellSkills 는 정답 칸마다 요소 라벨("약자 바")."""
 
     feedback: FeedbackSchema
     skill_results: list[SkillResultSchema]
     updated_skill_states: list[SkillStateOutSchema]
+    cell_skills: list[CellSkillSchema] = Field(default_factory=list)
 
 
 class SessionSummaryRequest(CamelModel):
@@ -323,6 +333,12 @@ def attempt_analyze(
             for r in result.skill_results
         ],
         updated_skill_states=[_state_out(s) for s in result.updated_skill_states],
+        cell_skills=[
+            CellSkillSchema(
+                cell_index=c.cell_index, learning_skill_id=c.learning_skill_id, label=c.label
+            )
+            for c in result.cell_skills
+        ],
     )
 
 

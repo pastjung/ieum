@@ -110,6 +110,25 @@ class AttemptAnalysis:
     skill_results: list[SkillResult]
     updated_skill_states: list[SkillState]
     warnings: list[str]
+    cell_skills: list["CellSkill"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class CellSkill:
+    """정답 칸 하나가 어떤 학습 요소인지. 화면의 '정답 · 약자 바' 캡션용."""
+
+    cell_index: int  # 1부터 (백엔드 attempt_cells.cell_index 와 같음)
+    learning_skill_id: int
+    label: str  # "약자 바", "첫소리 ㅂ", "모음 ㅙ (1/2)"
+
+
+def skill_label(display_name: str) -> str:
+    """화면용 짧은 이름. 카탈로그 이름('초성 ㅂ', '구분표(모음+예)')을 학습자가 읽기 쉽게 다듬는다."""
+    if display_name.startswith("초성 "):
+        return "첫소리 " + display_name[len("초성 ") :]
+    if display_name.startswith("구분표"):
+        return "구분표"
+    return display_name
 
 
 @dataclass(frozen=True)
@@ -377,7 +396,28 @@ class SessionService:
             skill_results=results,
             updated_skill_states=updated,
             warnings=warnings,
+            cell_skills=self._cell_skills(graded),
         )
+
+    def _cell_skills(self, graded: dict[str, Any]) -> list[CellSkill]:
+        """정답 칸마다 요소 라벨. 한 요소가 이어진 여러 칸을 차지하면(ㅙ, ㄳ, 약어, 받침 ㄲ) '(1/2)'를 붙인다.
+        같은 요소라도 다른 음절이면('가가') 따로 센다."""
+        kcs: list[str] = list(graded["kc"])
+        syls: list[int | None] = list(graded.get("cell_syllables") or [None] * len(kcs))
+        groups: list[list[int]] = []
+        for i, kc in enumerate(kcs):
+            if groups and kcs[groups[-1][-1]] == kc and syls[groups[-1][-1]] == syls[i]:
+                groups[-1].append(i)
+            else:
+                groups.append([i])
+        out: list[CellSkill] = []
+        for g in groups:
+            skill = self.catalog.by_kc(kcs[g[0]])
+            base = skill_label(skill.display_name)
+            for k, i in enumerate(g, 1):
+                label = f"{base} ({k}/{len(g)})" if len(g) > 1 else base
+                out.append(CellSkill(i + 1, skill.id, label))
+        return out
 
     def _detail(self, graded: dict[str, Any], results: list[SkillResult]) -> str:
         wrong = [r for r in results if not r.correct]

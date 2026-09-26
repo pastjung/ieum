@@ -7,9 +7,10 @@ import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { BackHeader } from "@/components/BackHeader";
 import { AppButton } from "@/components/AppButton";
-import { learningService } from "@/services/learningService";
+import { learningService, type InProgressKind } from "@/services/learningService";
 import {
   beginLearningSession,
+  inProgressSessionQueryKey,
   learningSessionQueryKey,
   type SessionRequest,
 } from "@/services/learningSessionCache";
@@ -79,10 +80,17 @@ export default function SessionIntro() {
     그래서 **세션을 만들기 전에** 묻는다. 진행 중 세션 조회가 끝나기 전에는 시작할 수 없게
     막는다 — 그 전에 만들면 물어볼 기회가 없다.
   */
-  const { data: inProgress, isPending: inProgressPending } = useQuery({
-    queryKey: ["inProgressSession"],
-    queryFn: learningService.getInProgressSession,
+  // 시작하려는 종류의 진행 중 세션만 본다. 두 종류를 함께 조회하면 더 최근인 다른 종류에 가려져,
+  // 새 세션이 닫을 세션이 있는데도 묻지 못한다. 이어하기는 새 세션을 만들지 않아 물을 것이 없다
+  const conflictKind: InProgressKind = request.kind === "review" ? "review" : "learning";
+  const inProgressQuery = useQuery({
+    queryKey: inProgressSessionQueryKey(conflictKind),
+    queryFn: () => learningService.getInProgressSession(conflictKind),
+    enabled: !isResume,
   });
+  const inProgress = inProgressQuery.data;
+  // 조회하지 않는 쿼리도 값이 없으면 pending이라, 이어하기에서는 기다리지 않는다
+  const inProgressPending = !isResume && inProgressQuery.isPending;
   const [confirmed, setConfirmed] = useState(false);
   const conflict = describeSessionConflict(request, inProgressPending ? undefined : inProgress);
   const awaitingConfirm = conflict !== null && !confirmed;
@@ -242,7 +250,11 @@ export default function SessionIntro() {
         </View>
         {/*
           이어서 풀기를 주 버튼으로 둔다. TalkBack 포커스가 먼저 닿는 자리이고, 잃는 것이
-          없는 선택이기 때문이다 — 새로 시작하기는 되돌릴 수 없다
+          없는 선택이기 때문이다.
+
+          새로 시작하기는 길게 누르지 않아도 된다. 누르면 세션 안내로 넘어갈 뿐이고, 진행 중인
+          세션은 거기서 "시작하기"를 눌러 새 세션이 만들어질 때 닫힌다. 예전에는 길게 눌러야 해서
+          짧게 누르면 화면에 아무 변화가 없어 버튼이 고장 난 것처럼 보였다.
         */}
         <View style={{ gap: 12 }}>
           <AppButton
@@ -257,9 +269,7 @@ export default function SessionIntro() {
           <AppButton
             label="새로 시작하기"
             variant="secondary"
-            requireLongPress
             accessibilityHint="진행 중인 학습을 끝내고 새로 시작해요"
-            onShortPress={() => announce("길게 누르면 새로 시작해요.")}
             onPress={() => setConfirmed(true)}
           />
         </View>

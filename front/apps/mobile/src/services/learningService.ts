@@ -1,8 +1,8 @@
 import {
   inProgressSessionSchema,
   problemsResponseSchema,
-  skillSummarySchema,
   stageStatsSchema,
+  levelStatsSchema,
   completionResponseSchema,
   attemptAnalysisRequestSchema,
   attemptAnalysisResponseSchema,
@@ -12,11 +12,14 @@ import {
   type CompletionResponse,
   type LearningSession,
   type ProblemsResponse,
-  type SkillSummary,
   type StageStats,
+  type LevelStats,
 } from "@ieum/contracts";
 import { api } from "./apiClient";
 import type { ServerSessionMeta } from "@/stores/sessionStore";
+
+/** 진행 중 세션의 종류. 새 세션은 같은 종류의 진행 중 세션만 닫으므로 종류마다 하나씩 남을 수 있다 */
+export type InProgressKind = "learning" | "review";
 
 /**
  * 마지막 글자의 받침 유무로 "을"/"를"을 고른다.
@@ -95,14 +98,20 @@ export const learningService = {
   },
 
   /**
-   * 진행 중인 학습 세션. 없으면 null.
+   * 진행 중인 세션 중 `kind` 종류의 것. 없으면 null.
    *
    * 홈의 "이어서 학습"이 오랫동안 목 데이터("3단계 자음과 모음 · 7 / 10 문항")를 보여주고,
    * 누르면 진행 중이던 세션이 아니라 새 자음 세션을 만들었다. 이어받을 세션의 식별자를
    * 알 방법이 없었기 때문이다.
+   *
+   * **종류를 반드시 고른다.** 고르지 않으면 서버는 두 종류 중 최근 것 하나만 준다. 단계 학습과
+   * 복습이 함께 진행 중일 때 오래된 쪽이 가려져 이어받을 수 없고, 세션 안내 화면은 새 세션이
+   * 그것을 닫는다는 것을 묻지도 못한다.
    */
-  async getInProgressSession(): Promise<InProgressSession | null> {
-    const payload = await api.get<unknown>("/learning-sessions/in-progress");
+  async getInProgressSession(kind: InProgressKind): Promise<InProgressSession | null> {
+    const payload = await api.get<unknown>(
+      `/learning-sessions/in-progress?review=${kind === "review"}`,
+    );
     // 204는 본문이 없다 — 진행 중인 것이 없다는 뜻이다
     if (payload === undefined || payload === null || payload === "") {
       return null;
@@ -135,22 +144,25 @@ export const learningService = {
   },
 
   /**
-   * 내 요소별 숙련 상태와 풀이 통계.
-   *
-   * 지금까지 숙련 라벨은 세션 완료 응답에만 실려서, "내 실력" 화면과 홈 복습 카드는
-   * 세션 밖에서 알 방법이 없어 고정값을 내 실력처럼 보여주고 있었다.
-   */
-  async getSkillSummary(): Promise<SkillSummary> {
-    return skillSummarySchema.parse(await api.get("/learning-sessions/skill-summary"));
-  },
-
-  /**
    * 테마(커리큘럼 단계)별 풀이 통계.
    *
    * 테마 선택 화면이 고정 숫자를 진도로 보여주고 있었다.
    */
   async getStageStats(): Promise<StageStats> {
     return stageStatsSchema.parse(await api.get("/learning-sessions/stage-stats"));
+  },
+
+  /**
+   * 문제 단계(Level)별 풀이 통계. "내 실력" 화면이 단계마다 정답률을 보여준다.
+   *
+   * `getStageStats`와 묶는 축이 다르다 — 저쪽은 세션의 커리큘럼 단계로 묶어 복습 세션 풀이가
+   * 빠지고(복습 세션은 그 값이 없다), 이쪽은 문제 자신의 단계로 묶어 복습 풀이까지 담는다.
+   *
+   * 기록이 있는 단계만 온다. 여섯 단계 전부와 그 순서·이름은 앱이 채운다
+   * (`levelStats.ts`의 `selectLevelDashboard`).
+   */
+  async getLevelStats(): Promise<LevelStats> {
+    return levelStatsSchema.parse(await api.get("/learning-sessions/level-stats"));
   },
 
   /** 세션의 모든 답안을 한 번에 제출한다. 이 응답이 최종 채점 결과다 */

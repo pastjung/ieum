@@ -101,6 +101,8 @@ public class SecurityConfig {
   /** 테마별 풀이 통계. 같은 이유로 보호 대상이다 */
   private static final String STAGE_STATS_PATH = "/learning-sessions/stage-stats";
 
+  private static final String LEVEL_STATS_PATH = "/learning-sessions/level-stats";
+
   private static final String REVIEW_SESSIONS_PATH = "/review-sessions";
 
   private static final String REVIEW_SESSION_PATH = "/review-sessions/{sessionId}";
@@ -158,6 +160,7 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, IN_PROGRESS_SESSION_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, SKILL_SUMMARY_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, STAGE_STATS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LEVEL_STATS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, REVIEW_SESSIONS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, REVIEW_SESSION_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LECTURES_PATH),

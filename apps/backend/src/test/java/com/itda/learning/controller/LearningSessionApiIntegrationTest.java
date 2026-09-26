@@ -108,6 +108,16 @@ class LearningSessionApiIntegrationTest {
   }
 
   @Test
+  void 종류를_골라_진행_중인_세션을_조회해도_토큰_없이는_401이다() {
+    // 보호 경로는 path로 고른다. query가 붙어도 인증 체인에서 빠지지 않아야 한다
+    HttpResponse<String> response =
+        this.client.send(
+            "GET", SESSIONS + "/in-progress?review=true", null, "Content-Type", "application/json");
+
+    assertThat(response.statusCode()).isEqualTo(401);
+  }
+
+  @Test
   void 토큰_없이_숙련_상태를_조회하면_401이다() {
     HttpResponse<String> response =
         this.client.send(
@@ -121,6 +131,15 @@ class LearningSessionApiIntegrationTest {
     HttpResponse<String> response =
         this.client.send(
             "GET", SESSIONS + "/stage-stats", null, "Content-Type", "application/json");
+
+    assertThat(response.statusCode()).isEqualTo(401);
+  }
+
+  @Test
+  void 토큰_없이_단계별_통계를_조회하면_401이다() {
+    HttpResponse<String> response =
+        this.client.send(
+            "GET", SESSIONS + "/level-stats", null, "Content-Type", "application/json");
 
     assertThat(response.statusCode()).isEqualTo(401);
   }

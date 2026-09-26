@@ -12,6 +12,7 @@ import com.itda.learning.domain.LearningSession;
 import com.itda.learning.domain.LearningSessionRepository;
 import com.itda.learning.domain.ProblemAttempt;
 import com.itda.learning.domain.ProblemAttemptRepository;
+import com.itda.learning.dto.LearningAttemptAnalysisFastApiResponse;
 import com.itda.learning.service.LearningSessionAnalysisService.AnalysisAttempt;
 import com.itda.learning.service.LearningSessionAnalysisService.AttemptAnalysisResult;
 import com.itda.learning.service.LearningSessionAnalysisService.FeedbackResult;
@@ -26,6 +27,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -104,7 +106,7 @@ public class LearningAttemptService {
         savedAttempt.getId(),
         correct,
         attemptedAt.toInstant(ZoneOffset.UTC),
-        savedCells.stream().map(LearningAttemptService::toCellResult).toList(),
+        toCellResults(savedCells, analysis),
         analysis.feedback(),
         violatedSkills);
   }
@@ -252,6 +254,23 @@ public class LearningAttemptService {
     return stageId;
   }
 
+  private static List<CellResult> toCellResults(
+      List<AttemptCell> cells, AttemptAnalysisResult analysis) {
+    Map<Integer, LearningAttemptAnalysisFastApiResponse.CellSkill> byIndex = new HashMap<>();
+    for (LearningAttemptAnalysisFastApiResponse.CellSkill cellSkill : analysis.cellSkills()) {
+      if (cellSkill != null) {
+        byIndex.putIfAbsent(cellSkill.cellIndex(), cellSkill);
+      }
+    }
+    List<CellResult> results = new ArrayList<>(cells.size());
+    for (AttemptCell cell : cells) {
+      CellResult base = toCellResult(cell);
+      LearningAttemptAnalysisFastApiResponse.CellSkill skill = byIndex.get(cell.getCellIndex());
+      results.add(skill == null ? base : base.withSkill(skill.learningSkillId(), skill.label()));
+    }
+    return List.copyOf(results);
+  }
+
   private static CellResult toCellResult(AttemptCell cell) {
     int expectedPattern = cell.getExpectedPattern();
     int inputPattern = cell.getInputPattern();
@@ -310,10 +329,50 @@ public class LearningAttemptService {
       int missingMask,
       int extraMask,
       List<Integer> missingDots,
-      List<Integer> extraDots) {
+      List<Integer> extraDots,
+      /** 이 정답 칸의 학습 요소. AI 가 주지 않았거나 정답 칸 밖(초과 입력)이면 null */
+      Long learningSkillId,
+      /** 화면 캡션용 요소 이름("약자 바"). 없으면 null → 앱은 "N번째 칸"으로 표시 */
+      String label) {
     public CellResult {
       missingDots = List.copyOf(missingDots);
       extraDots = List.copyOf(extraDots);
+    }
+
+    public CellResult(
+        int cellIndex,
+        int expectedPattern,
+        int inputPattern,
+        int diffMask,
+        int missingMask,
+        int extraMask,
+        List<Integer> missingDots,
+        List<Integer> extraDots) {
+      this(
+          cellIndex,
+          expectedPattern,
+          inputPattern,
+          diffMask,
+          missingMask,
+          extraMask,
+          missingDots,
+          extraDots,
+          null,
+          null);
+    }
+
+    CellResult withSkill(Long skillId, String skillLabel) {
+      return new CellResult(
+          cellIndex,
+          expectedPattern,
+          inputPattern,
+          diffMask,
+          missingMask,
+          extraMask,
+          missingDots,
+          extraDots,
+          skillId,
+          skillLabel);
     }
   }
 }
