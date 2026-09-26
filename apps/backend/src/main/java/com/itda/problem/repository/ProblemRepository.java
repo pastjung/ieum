@@ -5,7 +5,6 @@ import com.itda.problem.domain.Problem;
 import com.itda.problem.domain.SkillType;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ProblemRepository extends JpaRepository<Problem, Long> {
-  Optional<Problem> findByTargetText(String s);
 
   /**
    * '초성 ㄱ'·'받침 ㄱ' 해석용. 같은 글자의 자음 문제를 연결된 학습 요소 유형으로 가른다 (API 명세 8.2.1절).

@@ -4,6 +4,8 @@ import com.itda.curriculum.domain.CurriculumStage;
 import com.itda.curriculum.domain.CurriculumStageRepository;
 import com.itda.global.FastApiClient;
 import com.itda.global.error.BusinessException;
+import com.itda.global.error.CandidatesBusinessException;
+import com.itda.global.error.CandidatesBusinessException.Candidate;
 import com.itda.global.error.ErrorCode;
 import com.itda.global.security.AuthenticatedUser;
 import com.itda.learning.domain.LearningSession;
@@ -16,6 +18,7 @@ import com.itda.lecture.repository.LectureRepository;
 import com.itda.problem.domain.*;
 import com.itda.problem.dto.*;
 import com.itda.problem.repository.*;
+import com.itda.problem.service.ProblemTextQuery.Prefix;
 import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
 import com.itda.user.repository.UserJpaRepository;
@@ -48,6 +51,13 @@ public class ProblemService {
   /** 복습 세션에서 요소 하나당 뽑는 문제 수. 셋을 합쳐 12문항이 된다. */
   private static final int REVIEW_PROBLEMS_PER_SKILL = 4;
 
+  /** 구분어 없는 입력에서 먼저 고르는 단계 — 낱말·약어·문장 (API 명세 8.2.1절). */
+  private static final List<Level> BARE_TEXT_LEVELS =
+      List.of(Level.WORD, Level.CONTRACTION_WORD, Level.SENTENCE);
+
+  /** 구분어 없는 낱자의 후보 단계. */
+  private static final List<Level> JAMO_LEVELS = List.of(Level.CONSONANT, Level.VOWEL);
+
   private final ProblemRepository problemRepository;
   private final LectureProblemRepository lectureProblemRepository;
   private final ProblemCellRepository problemCellRepository;
@@ -62,37 +72,95 @@ public class ProblemService {
   private final UserSkillErrorCountRepository userSkillErrorCountRepository;
   private final FastApiClient fastApiClient;
   private final UserJpaRepository userJpaRepository;
+  private final LinkedProblemReader linkedProblemReader;
 
+  /**
+   * 강사 입력으로 문제를 찾아(없는 낱말은 AI로 만들어) 수업에 연결한다 (API 명세 8.2.1절). 이미 연결된 문제면 저장하지 않는다.
+   *
+   * <p>동시 요청이 (lecture_id, problem_id) UNIQUE에 걸리면 DataIntegrityViolationException이 나가고 이 트랜잭션은
+   * 롤백된다 — 컨트롤러가 다시 불러 기존 연결(200)로 답한다.
+   */
   @Transactional
-  public void registerProblem(
+  public RegisteredProblem registerProblem(
       AuthenticatedUser user, Long lectureId, RegisterProblemRequest registerProblemRequest) {
     Lecture lecture = validateInstructor(user, lectureId);
-    Problem problem =
-        problemRepository
-            .findByTargetText(registerProblemRequest.targetText())
-            .orElseGet(() -> createProblem(registerProblemRequest));
-
-    lectureProblemRepository.save(new LectureProblem(lecture, problem));
-
-    List<Integer> expectedPatterns =
-        problemCellRepository.findAllByProblemOrderByCellIndex(problem).stream()
-            .map(ProblemCell::getExpectedPattern)
-            .toList();
-
-    ProblemDetail problemDetail =
-        new ProblemDetail(
-            null,
-            problem.getId(),
-            1L,
-            registerProblemRequest.targetText(),
-            expectedPatterns,
-            false);
-    // TODO:수강생들에게 문제 전달
-
+    Problem problem = resolveProblem(ProblemTextQuery.parse(registerProblemRequest.targetText()));
+    boolean created =
+        lectureProblemRepository
+            .findByLecture_IdAndProblem_Id(lecture.getId(), problem.getId())
+            .isEmpty();
+    if (created) {
+      lectureProblemRepository.save(new LectureProblem(lecture, problem));
+    }
+    return new RegisteredProblem(linkedProblemReader.read(problem), created);
   }
 
-  private Problem createProblem(RegisterProblemRequest registerProblemRequest) {
-    ProblemAnalyzeResponse analyzeResponse = fastApiClient.analyze(registerProblemRequest);
+  private Problem resolveProblem(ProblemTextQuery query) {
+    String text = query.text();
+    if (query.prefix() != null) {
+      // 자모·약자는 고정 목록이다. 없으면 AI로 만들지 않고 404로 알린다.
+      return firstOrNotFound(prefixedCandidates(query.prefix(), text));
+    }
+    if (query.isSingleJamo()) {
+      return pickJamo(text);
+    }
+    return problemRepository
+        .findAllByTargetTextAndLevelInOrderByIdAsc(text, BARE_TEXT_LEVELS)
+        .stream()
+        .findFirst()
+        // 약자만 있는 글자('억' 등)를 낱말로 또 만들지 않는다 — 같은 글자의 기존 문제를 먼저 쓴다.
+        .or(() -> problemRepository.findAllByTargetTextOrderByIdAsc(text).stream().findFirst())
+        .orElseGet(() -> createProblem(text));
+  }
+
+  private List<Problem> prefixedCandidates(Prefix prefix, String text) {
+    return switch (prefix) {
+      case ONSET ->
+          problemRepository.findAllByTargetTextAndLevelAndSkillType(
+              text, Level.CONSONANT, SkillType.SKILL_01);
+      case CODA ->
+          problemRepository.findAllByTargetTextAndLevelAndSkillType(
+              text, Level.CONSONANT, SkillType.SKILL_03);
+      case VOWEL ->
+          problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc(text, List.of(Level.VOWEL));
+      case SYLLABLE ->
+          problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc(
+              text, List.of(Level.CONTRACTION));
+    };
+  }
+
+  /** 'ㄱ'처럼 구분어 없는 낱자. 표시 문구가 둘 이상 갈리면 강사에게 고르게 한다 (API 명세 8.2.1절). */
+  private Problem pickJamo(String text) {
+    List<Problem> candidates =
+        problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc(text, JAMO_LEVELS);
+    if (candidates.size() <= 1) {
+      return firstOrNotFound(candidates);
+    }
+    // 표시 문구가 같은 중복 문제는 하나로 본다 — 같은 버튼을 두 번 보이지 않는다. id 오름차순이라 작은 id가 남는다.
+    List<LinkedProblem> linked = linkedProblemReader.readAll(candidates);
+    Map<String, Problem> byDisplayText = new LinkedHashMap<>();
+    for (int i = 0; i < candidates.size(); i++) {
+      byDisplayText.putIfAbsent(linked.get(i).displayText(), candidates.get(i));
+    }
+    if (byDisplayText.size() == 1) {
+      return byDisplayText.values().iterator().next();
+    }
+    throw new CandidatesBusinessException(
+        ErrorCode.PROBLEM_TEXT_AMBIGUOUS,
+        byDisplayText.keySet().stream()
+            .map(displayText -> new Candidate(displayText, displayText))
+            .toList());
+  }
+
+  private static Problem firstOrNotFound(List<Problem> candidates) {
+    return candidates.stream()
+        .findFirst()
+        .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
+  }
+
+  private Problem createProblem(String targetText) {
+    ProblemAnalyzeResponse analyzeResponse =
+        fastApiClient.analyze(new RegisterProblemRequest(targetText));
 
     validateAnalyzeResponse(analyzeResponse);
 
@@ -100,7 +168,7 @@ public class ProblemService {
     List<Integer> cellPatterns = analyzeResponse.cells();
     List<SkillSet> skillSets = analyzeResponse.skillSets();
 
-    Problem problem = new Problem(level, registerProblemRequest.targetText());
+    Problem problem = new Problem(level, targetText);
     problemRepository.save(problem);
 
     List<LearningSkill> learningSkills = learningSkillQueryRepository.findAllBySkillSets(skillSets);
@@ -120,6 +188,7 @@ public class ProblemService {
     return problem;
   }
 
+  /** 담당 강사만, SCHEDULED·OPEN에서 연결한다. CLOSED는 409 (API 명세 8.1절). */
   private Lecture validateInstructor(AuthenticatedUser user, Long lectureId) {
     if (!user.role().equals(UserRole.INSTRUCTOR)) {
       throw new BusinessException(ErrorCode.INSTRUCTOR_ACCESS_REQUIRED);
@@ -133,7 +202,7 @@ public class ProblemService {
     if (!lecture.getInstructorUserId().equals(user.userId())) {
       throw new BusinessException(ErrorCode.LECTURE_NOT_FOUND);
     }
-    if (!lecture.isOpen()) {
+    if (!lecture.isJoinable()) {
       throw new BusinessException(ErrorCode.INVALID_LECTURE_STATE);
     }
 

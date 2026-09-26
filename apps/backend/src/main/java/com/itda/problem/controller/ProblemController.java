@@ -1,11 +1,17 @@
 package com.itda.problem.controller;
 
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.problem.dto.LinkedProblemResponse;
 import com.itda.problem.dto.NewStudyRequest;
 import com.itda.problem.dto.ProblemsResponse;
 import com.itda.problem.dto.RegisterProblemRequest;
 import com.itda.problem.service.ProblemService;
+import com.itda.problem.service.RegisteredProblem;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -15,13 +21,22 @@ import org.springframework.web.bind.annotation.*;
 public class ProblemController {
   private final ProblemService problemService;
 
+  /** 201 새 연결 / 200 이미 연결됨 (API 명세 8.2.1절). */
   @PostMapping("/lectures/{lectureId}/problems")
-  public ResponseEntity<Void> registerProblem(
-      @PathVariable Long lectureId,
-      @RequestBody RegisterProblemRequest registerProblemRequest,
+  public ResponseEntity<LinkedProblemResponse> registerProblem(
+      @PathVariable @Positive Long lectureId,
+      @Valid @RequestBody RegisterProblemRequest registerProblemRequest,
       @AuthenticationPrincipal AuthenticatedUser user) {
-    problemService.registerProblem(user, lectureId, registerProblemRequest);
-    return ResponseEntity.noContent().build();
+    RegisteredProblem registered;
+    try {
+      registered = problemService.registerProblem(user, lectureId, registerProblemRequest);
+    } catch (DataIntegrityViolationException e) {
+      // 같은 문제를 동시에 연결하면 한쪽이 (lecture_id, problem_id) UNIQUE에 걸린다. 그 트랜잭션은 이미 롤백됐으므로
+      // 다시 불러 기존 연결(200)로 답한다.
+      registered = problemService.registerProblem(user, lectureId, registerProblemRequest);
+    }
+    return ResponseEntity.status(registered.created() ? HttpStatus.CREATED : HttpStatus.OK)
+        .body(LinkedProblemResponse.from(registered.problem()));
   }
 
   @PostMapping("/learning-sessions")
