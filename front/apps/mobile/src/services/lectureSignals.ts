@@ -36,3 +36,28 @@ const USER_BACK_ACTIONS = new Set(["GO_BACK", "POP", "POP_TO_TOP"]);
 export function isUserBackAction(action: { type: string }): boolean {
   return USER_BACK_ACTIONS.has(action.type);
 }
+
+/** livekit protocol TrackSource.MICROPHONE */
+export const MICROPHONE_SOURCE = 2;
+
+/** LiveKit ParticipantPermission 중 송출 판단에 쓰는 부분 (네이티브 없이 테스트하려고 타입을 직접 둔다) */
+export interface PublishPermissions {
+  canPublish: boolean;
+  canPublishSources: readonly number[];
+}
+
+/**
+ * 실제로 마이크를 송출할 수 있는지 — 선생님의 발언 허용은 이 권한으로만 판단한다.
+ * `speaking` 속성은 표시용이라 보지 않는다. 소스 목록이 비어 있으면 LiveKit은 모든 소스를 허용한다.
+ */
+export function canSpeak(permissions: PublishPermissions | undefined): boolean {
+  if (!permissions?.canPublish) return false;
+  return permissions.canPublishSources.length === 0 || permissions.canPublishSources.includes(MICROPHONE_SOURCE);
+}
+
+export type Hand = "up" | "down";
+
+/** 참가자 속성의 손 상태. 정확히 "up"일 때만 든 것으로 본다 (백엔드는 허용·회수 때 "down"으로 바꾼다) */
+export function handFromAttributes(attributes: Readonly<Record<string, string>> | undefined): Hand {
+  return attributes?.hand === "up" ? "up" : "down";
+}

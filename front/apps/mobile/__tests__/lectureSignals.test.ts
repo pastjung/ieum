@@ -1,4 +1,12 @@
-import { classifyDisconnect, isLectureOpen, isUserBackAction, ROOM_DELETED_REASON } from "@/services/lectureSignals";
+import {
+  canSpeak,
+  classifyDisconnect,
+  handFromAttributes,
+  isLectureOpen,
+  isUserBackAction,
+  MICROPHONE_SOURCE,
+  ROOM_DELETED_REASON,
+} from "@/services/lectureSignals";
 
 describe("isLectureOpen", () => {
   it("OPEN 메타데이터를 인식한다", () => {
@@ -46,5 +54,42 @@ describe("isUserBackAction", () => {
     expect(isUserBackAction({ type: "REPLACE" })).toBe(false);
     expect(isUserBackAction({ type: "NAVIGATE" })).toBe(false);
     expect(isUserBackAction({ type: "RESET" })).toBe(false);
+  });
+});
+
+describe("canSpeak", () => {
+  it("게시 권한과 마이크 소스가 있으면 말할 수 있다", () => {
+    expect(canSpeak({ canPublish: true, canPublishSources: [MICROPHONE_SOURCE] })).toBe(true);
+  });
+
+  it("소스 목록이 비어 있으면 모든 소스가 허용된 것이다 (LiveKit 규칙)", () => {
+    expect(canSpeak({ canPublish: true, canPublishSources: [] })).toBe(true);
+  });
+
+  it("게시 권한이 없으면 말할 수 없다", () => {
+    expect(canSpeak({ canPublish: false, canPublishSources: [MICROPHONE_SOURCE] })).toBe(false);
+    expect(canSpeak({ canPublish: false, canPublishSources: [] })).toBe(false);
+  });
+
+  it("마이크가 아닌 소스만 허용되면 말할 수 없다", () => {
+    expect(canSpeak({ canPublish: true, canPublishSources: [1] })).toBe(false);
+  });
+
+  it("권한 정보가 아직 없으면 말할 수 없다", () => {
+    expect(canSpeak(undefined)).toBe(false);
+  });
+});
+
+describe("handFromAttributes", () => {
+  it("hand가 up이면 손을 든 것이다", () => {
+    expect(handFromAttributes({ hand: "up" })).toBe("up");
+  });
+
+  it("down·다른 값·없음은 모두 내린 것이다", () => {
+    expect(handFromAttributes({ hand: "down" })).toBe("down");
+    expect(handFromAttributes({ hand: "UP" })).toBe("down");
+    expect(handFromAttributes({ speaking: "allowed" })).toBe("down");
+    expect(handFromAttributes({})).toBe("down");
+    expect(handFromAttributes(undefined)).toBe("down");
   });
 });

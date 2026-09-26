@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { AppState } from "react-native";
 import {
   CapsuleSession,
   ItdaCapsule,
@@ -162,12 +163,19 @@ function instance(): ItdaAssistant {
 }
 
 /**
+ * 수업에서 내 마이크가 켜져 있는 동안 잇다는 쉰다 — 한 마이크를 두고 음성 인식과 수업 송출이 다투지 않게.
+ * 앱이 앞으로 돌아올 때 `_layout`이 부르는 startItda도 이 동안에는 무시한다.
+ */
+let pausedForLecture = false;
+
+/**
  * 설정에서 켠 상태일 때만 시작한다.
  *
  * 여기서 터지면 **앱이 켜질 때마다 같은 자리에서 죽는다** — 설정이 저장돼 있어서 다음 실행에도
  * 그대로 들어오기 때문이다. 실패는 화면에 남기고 앱은 계속 가게 둔다.
  */
 export async function startItda(): Promise<void> {
+  if (pausedForLecture) return;
   if (!useSettingsStore.getState().itdaEnabled) return;
   try {
     await instance().start();
@@ -191,4 +199,15 @@ export function isItdaRunning(): boolean {
 /** 음성 없이 같은 경로로 실행한다. */
 export function handleItdaUtterance(utterance: string): Promise<void> {
   return instance().handle(utterance);
+}
+
+/** 수업 마이크를 켤 때 true, 끄거나 발언이 회수되거나 방을 떠날 때 false. 같은 값이 연달아 오면 무시한다 */
+export function pauseItdaForLecture(paused: boolean): void {
+  if (pausedForLecture === paused) return;
+  pausedForLecture = paused;
+  if (paused) stopItda();
+  // 앱이 배경에 있는 동안 풀렸다면(네트워크 끊김·회수·수업 종료가 배경에서 일어난 경우) 여기서
+  // 시작하지 않는다 — `_layout`의 포그라운드 전환이 이미 pausedForLecture=false를 보고
+  // 자연히 startItda를 부른다. 배경에서 시작하면 인식이 무음이거나 오류 상태로 끝난다
+  else if (AppState.currentState === "active") void startItda();
 }
