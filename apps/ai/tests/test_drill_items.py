@@ -89,3 +89,41 @@ def test_session_summary_accepts_mixed_drill_and_word_items():
 
 def test_non_hangul_still_rejected():
     assert _attempt("abc", [], [1]).status_code == 422
+
+
+def test_double_final_consonants_by_article_4():
+    """제4항 쌍받침: ㅆ = 3·4점 한 칸, ㄲ = 받침 ㄱ 두 번. 낱자로 오면 expectedPatterns 로 첫소리(된소리)와 가른다."""
+    assert _item("ㅆ", [12])["kc"] == ["종성:ㅆ"] and _item("ㅆ", [12])["cells"] == [[3, 4]]
+    assert _item("ㄲ", [1, 1])["kc"] == ["종성:ㄲ", "종성:ㄲ"]
+    assert _item("ㅆ", [32, 32])["kc"] == [
+        "규칙:된소리표",
+        "초성:ㅅ",
+    ]  # 정답이 된소리 첫소리면 그쪽
+    assert _item("받침 ㅆ")["cells"] == [[3, 4]] and _item("받침 ㄲ")["cells"] == [[1], [1]]
+    ok = _attempt("ㅆ", [12], [12]).json()
+    assert ok["skillResults"] == [{"learningSkillId": 31, "correct": True, "errorCounts": {}}]
+    wrong = _attempt("ㅆ", [12], [32]).json()  # 6점 하나 (된소리표 모양)
+    assert (
+        wrong["skillResults"][0]["learningSkillId"] == 31
+        and wrong["skillResults"][0]["correct"] is False
+    )
+    assert "받침 쌍시옷" in wrong["feedback"]["tts"]
+
+
+def test_every_seeded_drill_in_db_is_graded_with_matching_skills():
+    """DB 시드의 드릴 78개(자음·모음·약자·음절) 전부: 200 + 요소 id 가 problem_skills 와 같음 + 정답 입력은 전부 맞음."""
+    import json
+    from pathlib import Path
+
+    drills = json.loads(
+        (Path(__file__).parent / "fixtures_seed_drills.json").read_text(encoding="utf-8")
+    )
+    assert len(drills) >= 70
+    for d in drills:
+        res = _attempt(d["text"], d["expectedPatterns"], d["expectedPatterns"])
+        assert res.status_code == 200, (d["text"], res.text)
+        body = res.json()
+        assert sorted(s["learningSkillId"] for s in body["skillResults"]) == d["skillIds"], d[
+            "text"
+        ]
+        assert all(s["correct"] for s in body["skillResults"]), d["text"]
