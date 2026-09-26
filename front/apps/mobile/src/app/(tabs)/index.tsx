@@ -206,7 +206,7 @@ function ScreenHome() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  const { data: inProgress } = useQuery({
+  const { data: inProgress, isPending: inProgressPending } = useQuery({
     queryKey: ["inProgressSession"],
     queryFn: learningService.getInProgressSession,
   });
@@ -243,7 +243,13 @@ function ScreenHome() {
           />
         )}
 
-        {inProgress && (
+        {/*
+          진행 중 세션 조회가 끝나기 전에는 어느 카드도 그리지 않는다. "새 학습" 카드를 먼저
+          그렸다가 "이어서 학습"으로 바꾸면 학습자가 누르려던 자리가 바뀐다.
+          진행 중 세션이 없으면 카드를 없애지 않고 새 학습 진입점으로 바꾼다 — 홈의 가장 큰
+          자리가 비면 무엇부터 해야 할지 알 수 없다. 음성 중심 홈의 "새 단계 학습"과 같은 역할이다.
+        */}
+        {inProgressPending ? null : inProgress ? (
           <View
             style={[
               styles.card,
@@ -265,6 +271,20 @@ function ScreenHome() {
                 })
               }
             />
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: theme.color.primary, borderRadius: radius.card },
+              theme.shadow != null && { boxShadow: `0 6px 0 ${theme.shadow.primary}` },
+            ]}
+            accessibilityLabel="새 학습. 자유 학습 시작. 테마를 골라 새로 시작해요"
+          >
+            <Text style={{ fontSize: 15 * fontScale, fontWeight: "800", color: theme.color.onPrimary, opacity: 0.85 }}>새 학습</Text>
+            <Text style={{ fontSize: 24 * fontScale, fontWeight: "900", color: theme.color.onPrimary }}>자유 학습 시작</Text>
+            <Text style={{ fontSize: 15 * fontScale, fontWeight: "600", color: theme.color.onPrimary }}>테마를 골라 새로 시작해요</Text>
+            <AppButton label="테마 고르기" variant="compact" onPress={() => router.push("/learn-themes")} />
           </View>
         )}
 
