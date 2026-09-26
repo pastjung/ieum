@@ -1,5 +1,6 @@
 import {
   lectureVoiceControls,
+  HAND_LOCKED_HINT,
   MIC_LOCKED_HINT,
   setLecturePlayScreenActive,
   speakingAllowedAnnouncement,
@@ -12,20 +13,21 @@ import {
 describe("lectureVoiceControls", () => {
   it("허용 전: 손들기 버튼이 있고 마이크는 잠겨 있다", () => {
     const c = lectureVoiceControls({ speakingAllowed: false, micOn: false, handUp: false });
-    expect(c.hand?.label).toBe("손들기");
+    expect(c.hand).toEqual({ label: "손들기", hint: "선생님께 말하고 싶다고 알려요", disabled: false });
     expect(c.mic).toEqual({ label: "마이크 켜기", hint: MIC_LOCKED_HINT, disabled: true });
     expect(c.status).toBe("");
   });
 
   it("손을 든 상태: 손 내리기", () => {
     const c = lectureVoiceControls({ speakingAllowed: false, micOn: false, handUp: true });
-    expect(c.hand?.label).toBe("손 내리기");
+    expect(c.hand.label).toBe("손 내리기");
+    expect(c.hand.disabled).toBe(false);
     expect(c.status).toBe("손 든 상태");
   });
 
-  it("허용되면 손들기를 숨기고 마이크를 켤 수 있다", () => {
+  it("허용되면 손들기는 자리를 지킨 채 잠기고 마이크를 켤 수 있다", () => {
     const c = lectureVoiceControls({ speakingAllowed: true, micOn: false, handUp: false });
-    expect(c.hand).toBeNull();
+    expect(c.hand).toEqual({ label: "손들기", hint: HAND_LOCKED_HINT, disabled: true });
     expect(c.mic.label).toBe("마이크 켜기");
     expect(c.mic.disabled).toBe(false);
     expect(c.status).toBe("발언 허용됨, 마이크 꺼짐");

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import type { Cell, Dot } from "@ieum/domain";
-import { dotButtonSize, radius, useTheme } from "@/theme";
+import { radius, useTheme } from "@/theme";
+import { fitDotSize } from "./dotPadLayout";
 import { DotButton } from "./DotButton";
 import { useMultiTouchDots } from "./useMultiTouchDots";
 
@@ -45,9 +47,13 @@ export function DotPad({ onCommitCell, highlightDots, disabled, onBlockedTouch }
     onBlocked: onBlockedTouch,
   });
 
+  const [padHeight, setPadHeight] = useState(0);
+  const size = fitDotSize(padHeight);
+
   return (
     <View
       {...padHandlers}
+      onLayout={(e) => setPadHeight(e.nativeEvent.layout.height)}
       style={[styles.pad, { borderColor: theme.color.border, borderRadius: radius.card }]}
       accessibilityLabel={
         disabled
@@ -59,7 +65,7 @@ export function DotPad({ onCommitCell, highlightDots, disabled, onBlockedTouch }
         <DotButton
           key={dot}
           dot={dot}
-          size={dotButtonSize}
+          size={size}
           on={active.has(dot) || !!highlightDots?.includes(dot)}
           onMeasure={onMeasureDot}
           style={positions[dot]}

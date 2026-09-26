@@ -5,6 +5,7 @@ export const SPEAKING_ALLOWED_MESSAGE = "선생님이 말할 수 있게 했어�
 export const SPEAKING_ALLOWED_MESSAGE_NEUTRAL = "선생님이 말할 수 있게 했어요.";
 export const SPEAKING_REVOKED_MESSAGE = "선생님이 발언을 마쳤어요.";
 export const MIC_LOCKED_HINT = "선생님이 허용하면 말할 수 있어요";
+export const HAND_LOCKED_HINT = "발언이 허용된 동안에는 손을 들지 않아도 돼요";
 export const MIC_PERMISSION_DENIED_MESSAGE = "설정에서 마이크 권한을 허용해 주세요";
 /** 켜기 **전에** 읽는다 — 켠 뒤에 읽으면 안내 음성이 수업에 그대로 전해진다 */
 export const MIC_ON_MESSAGE = "마이크를 켤게요. 말씀하세요.";
@@ -36,8 +37,8 @@ export interface LectureVoiceView {
 }
 
 export interface LectureVoiceControls {
-  /** 발언이 허용된 동안에는 null(숨김) */
-  hand: { label: string; hint: string } | null;
+  /** 발언이 허용된 동안에는 잠근다 — 숨기면 마이크 버튼 자리가 바뀌어 손으로 익힌 위치가 흔들린다 */
+  hand: { label: string; hint: string; disabled: boolean };
   mic: { label: string; hint: string; disabled: boolean };
   /** 상태 줄 접근성 라벨에 붙일 말. 알릴 것이 없으면 "" */
   status: string;
@@ -45,10 +46,10 @@ export interface LectureVoiceControls {
 
 export function lectureVoiceControls(view: LectureVoiceView): LectureVoiceControls {
   const hand = view.speakingAllowed
-    ? null
+    ? { label: "손들기", hint: HAND_LOCKED_HINT, disabled: true }
     : view.handUp
-      ? { label: "손 내리기", hint: "선생님께 한 발언 요청을 거둬요" }
-      : { label: "손들기", hint: "선생님께 말하고 싶다고 알려요" };
+      ? { label: "손 내리기", hint: "선생님께 한 발언 요청을 거둬요", disabled: false }
+      : { label: "손들기", hint: "선생님께 말하고 싶다고 알려요", disabled: false };
 
   const mic = !view.speakingAllowed
     ? { label: "마이크 켜기", hint: MIC_LOCKED_HINT, disabled: true }

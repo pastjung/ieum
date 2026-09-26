@@ -170,20 +170,20 @@ export default function ClassPlay() {
         </View>
       </View>
       <View style={{ flexDirection: "row", gap: 10 }}>
-        {voice.hand && (
-          <View style={{ flex: 1 }}>
-            <AppButton
-              label={voice.hand.label}
-              variant="compact"
-              accessibilityHint={voice.hand.hint}
-              onPress={() => void toggleHand()}
-            />
-          </View>
-        )}
+        {/* 두 버튼은 늘 같은 자리·같은 높이다 — 상태가 바뀌어도 오른쪽 마이크 버튼의 글자만 바뀐다 */}
+        <View style={{ flex: 1 }}>
+          <AppButton
+            label={voice.hand.label}
+            variant="compact"
+            accessibilityHint={voice.hand.hint}
+            disabled={voice.hand.disabled}
+            onPress={() => void toggleHand()}
+          />
+        </View>
         <View style={{ flex: 1 }}>
           <AppButton
             label={voice.mic.label}
-            variant={speakingAllowed ? "primary" : "compact"}
+            variant="compact"
             accessibilityHint={voice.mic.hint}
             disabled={voice.mic.disabled}
             onPress={() => void toggleMic()}
