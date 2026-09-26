@@ -6,6 +6,7 @@ export function createClient(config: ApiClientConfig): ApiClient {
 
   function buildHeaders(options: RequestOptions): Record<string, string> {
     const headers: Record<string, string> = {
+      ...options.headers,
       "X-Client-Platform": config.platform,
     };
     // body가 없는 요청에 Content-Type을 붙이지 않는다 — 보낼 표현이 없다

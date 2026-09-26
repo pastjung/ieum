@@ -74,4 +74,50 @@ describe("classService", () => {
     );
     expect(joinErrorMessage(new Error("?"))).toBe("입장하지 못했어요. 다시 시도해 주세요.");
   });
+
+  it("현재 문제와 내 결과를 조회한다", async () => {
+    const currentProblem = {
+      problemId: "26578",
+      problemType: "CONSONANT",
+      targetText: "ㄱ",
+      displayText: "초성 ㄱ",
+      cellCount: 1,
+      submitted: false,
+    };
+    mockedApi.get.mockResolvedValue({ ...snapshot("OPEN"), currentProblem, myResult: null });
+
+    const state = await classService.getLectureProblem("42");
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/lectures/42");
+    expect(state).toEqual({ status: "OPEN", currentProblem, myResult: null });
+  });
+
+  it("답안을 멱등 키와 함께 제출하고 서버 채점 결과를 돌려준다", async () => {
+    const answer = {
+      attemptId: "900",
+      lectureId: "42",
+      problemId: "26578",
+      isCorrect: true,
+      score: 100,
+      attemptedAt: "2026-09-27T01:00:00.000Z",
+      cells: [{ cellIndex: 1, inputPattern: 8, expectedPattern: 8, diffMask: 0, isCorrect: true }],
+    };
+    mockedApi.post.mockResolvedValue(answer);
+
+    const result = await classService.submitLiveAnswer("42", "26578", { cells: [8], durationMs: 1900 }, "key-1");
+
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      "/lectures/42/problems/26578/answers",
+      { cells: [8], durationMs: 1900 },
+      { headers: { "Idempotency-Key": "key-1" } },
+    );
+    expect(result).toEqual(answer);
+  });
+
+  it("계약을 벗어난 답안은 보내지 않는다", async () => {
+    await expect(
+      classService.submitLiveAnswer("42", "26578", { cells: [], durationMs: 0 }, "key-1"),
+    ).rejects.toThrow();
+    expect(mockedApi.post).not.toHaveBeenCalled();
+  });
 });

@@ -1,10 +1,15 @@
 import { ApiError } from "@ieum/api-client";
 import {
   learnerLectureSchema,
+  liveAnswerRequestSchema,
+  liveAnswerSchema,
   mediaTokenSchema,
+  type LearnerCurrentProblem,
   type LearnerLecture,
   type LearningSession,
   type LectureStatus,
+  type LiveAnswer,
+  type LiveAnswerRequest,
   type MediaToken,
 } from "@ieum/contracts";
 import { dotsToCell } from "@ieum/domain";
@@ -14,6 +19,13 @@ export interface ClassInfo {
   lectureId: string;
   title: string;
   status: LectureStatus;
+}
+
+/** 문제 상태 조회 결과 — 화면이 대기·풀이·제출 대기를 정하는 데 쓴다 */
+export interface LectureProblemSnapshot {
+  status: LectureStatus;
+  currentProblem: LearnerCurrentProblem | null;
+  myResult: LiveAnswer | null;
 }
 
 function toClassInfo(lecture: LearnerLecture): ClassInfo {
@@ -40,6 +52,29 @@ export const classService = {
   async issueMediaToken(lectureId: string): Promise<MediaToken> {
     const payload = await api.post<unknown>(`/lectures/${lectureId}/media-tokens`);
     return mediaTokenSchema.parse(payload);
+  },
+
+  /** 현재 문제와 내 결과. 출제 신호(방 metadata)·입장·재접속 때 부른다. 정답 점형은 오지 않는다 */
+  async getLectureProblem(lectureId: string): Promise<LectureProblemSnapshot> {
+    const lecture = learnerLectureSchema.parse(await api.get<unknown>(`/lectures/${lectureId}`));
+    return { status: lecture.status, currentProblem: lecture.currentProblem, myResult: lecture.myResult };
+  },
+
+  /**
+   * 현재 문제의 답안을 낸다. 서버가 채점해 결과를 돌려준다.
+   * idempotencyKey는 문제마다 새로 만들고, 같은 문제를 다시 보낼 때(응답 유실·재시도)는 같은 값을 쓴다.
+   */
+  async submitLiveAnswer(
+    lectureId: string,
+    problemId: string,
+    answer: LiveAnswerRequest,
+    idempotencyKey: string,
+  ): Promise<LiveAnswer> {
+    const body = liveAnswerRequestSchema.parse(answer);
+    const payload = await api.post<unknown>(`/lectures/${lectureId}/problems/${problemId}/answers`, body, {
+      headers: { "Idempotency-Key": idempotencyKey },
+    });
+    return liveAnswerSchema.parse(payload);
   },
 
   /* ─── 아래는 아직 목이다. 대응 엔드포인트(문제 출제·복습 연결)가 없다 ─── */
