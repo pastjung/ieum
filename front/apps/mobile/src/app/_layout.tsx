@@ -1,3 +1,8 @@
+import { registerGlobals } from "@livekit/react-native";
+
+// livekit-client가 React Native에서 WebRTC를 쓰려면 다른 모듈보다 먼저 전역을 등록해야 한다.
+registerGlobals();
+
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { Stack, useRouter } from "expo-router";
