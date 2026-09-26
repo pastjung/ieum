@@ -13,12 +13,15 @@ import com.itda.lecture.repository.ParticipantRepository;
 import com.itda.user.domain.UserRole;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class LectureService {
@@ -32,7 +35,27 @@ public class LectureService {
   private final LiveRoomGateway liveRoomGateway;
   private final TransactionOperations transactionOperations;
 
+  /**
+   * 트랜잭션 템플릿을 모듈 안에서 만든다. {@code TransactionOperations} bean을 주입받으면 다른 모듈이 등록한 bean에 묶여, 그 모듈의 설정이
+   * 바뀔 때 수업 상태 전이의 경계가 함께 바뀐다.
+   */
+  @Autowired
   public LectureService(
+      LectureRepository lectureRepository,
+      ParticipantRepository participantRepository,
+      ParticipationCodeGenerator codeGenerator,
+      LiveRoomGateway liveRoomGateway,
+      PlatformTransactionManager transactionManager) {
+    this(
+        lectureRepository,
+        participantRepository,
+        codeGenerator,
+        liveRoomGateway,
+        new TransactionTemplate(transactionManager));
+  }
+
+  /** 단위 테스트가 트랜잭션 없는 실행기를 넣는 경로. */
+  LectureService(
       LectureRepository lectureRepository,
       ParticipantRepository participantRepository,
       ParticipationCodeGenerator codeGenerator,
