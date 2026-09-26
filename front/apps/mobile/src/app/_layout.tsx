@@ -1,6 +1,9 @@
 import { registerGlobals } from "@livekit/react-native";
 
-// livekit-client가 React Native에서 WebRTC를 쓰려면 다른 모듈보다 먼저 전역을 등록해야 한다.
+// livekit-client가 React Native에서 WebRTC를 쓰려면 전역(WebRTC 등)을 등록해야 한다.
+// ES import는 호이스팅되므로 이 호출은 아래 import들이 모두 평가된 뒤에 실행된다 — "다른
+// 모듈보다 먼저"가 아니다. 그래도 괜찮은 이유는 어떤 모듈도 로드 시점에 Room을 만들지 않고,
+// Room은 사용자가 수업에 입장할 때(liveLecture.join) 처음 생기기 때문이다.
 registerGlobals();
 
 import { useEffect, useState } from "react";

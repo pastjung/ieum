@@ -26,6 +26,9 @@ export default function ClassWaiting() {
   // 언마운트(풀이 화면으로 이동 등) 뒤에는 상태를 바꾸거나 화면을 옮기지 않는다. onExit은
   // 그대로 살려 둔다 — 대기 화면을 떠난 뒤에도 liveLecture 쪽 handlers는 계속 불릴 수 있다.
   const mountedRef = useRef(true);
+  // "입장 완료" 안내는 화면에 들어올 때 한 번만 읽는다. 다시 시도할 때마다 되풀이하지 않는다.
+  // 실패 안내는 이 낭독이 끝난 뒤에 읽는다 — 겹치면 announce가 입장 안내를 중간에 끊는다
+  const introRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -53,8 +56,17 @@ export default function ClassWaiting() {
       return;
     }
     setFailed(null);
-    void hapticSuccess();
-    void speakAsync(`입장 완료. ${className}, 곧 시작해요. 선생님이 시작하면 알려 드릴게요.`);
+    if (introRef.current === null) {
+      void hapticSuccess();
+      introRef.current = speakAsync(`입장 완료. ${className}, 곧 시작해요. 선생님이 시작하면 알려 드릴게요.`);
+    }
+    const intro = introRef.current;
+    const fail = (message: string, retryable: boolean) => {
+      setFailed({ message, retryable });
+      void intro.then(() => {
+        if (mountedRef.current) announce(message);
+      });
+    };
     liveLecture
       .join(validLectureId, {
         onOpen: () => {
@@ -78,14 +90,10 @@ export default function ClassWaiting() {
         if (!mountedRef.current) return;
         // 참여 기록이 없어 토큰이 거부됐다 — 다시 시도해도 같으니 코드 재입장을 안내한다
         if (error instanceof ApiError && error.code === "LECTURE_PARTICIPATION_REQUIRED") {
-          const message = "코드로 다시 입장해 주세요.";
-          setFailed({ message, retryable: false });
-          announce(message);
+          fail("코드로 다시 입장해 주세요.", false);
           return;
         }
-        const message = "음성 수업에 연결하지 못했어요. 다시 시도해 주세요.";
-        setFailed({ message, retryable: true });
-        announce(message);
+        fail("음성 수업에 연결하지 못했어요. 다시 시도해 주세요.", true);
       });
   }, [validLectureId, title, className, start]);
 
@@ -102,7 +110,7 @@ export default function ClassWaiting() {
     <ScreenShell>
       <View style={styles.center}>
         <IeumFace size={130} expression={failed ? "worried" : undefined} accessibilityLabel={failed ? "연결 실패 캐릭터" : "대기 중 캐릭터"} />
-        <Text style={{ fontSize: 15, fontWeight: "700", color: theme.color.primary }}>입장 완료</Text>
+        {!failed && <Text style={{ fontSize: 15, fontWeight: "700", color: theme.color.primary }}>입장 완료</Text>}
         {failed ? (
           <>
             <Text accessibilityRole="header" style={{ fontSize: 26 * fontScale, fontWeight: "900", lineHeight: 38, color: theme.color.text, textAlign: "center" }}>

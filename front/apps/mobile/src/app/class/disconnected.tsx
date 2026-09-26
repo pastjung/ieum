@@ -18,13 +18,14 @@ export default function ClassDisconnected() {
   const reset = useSessionStore((s) => s.reset);
   // 다시 연결할 방을 모르면 "다시 연결"을 내놓지 않는다 — undefined로 입장하게 된다
   const canReconnect = typeof lectureId === "string" && lectureId.trim() !== "";
+  // 자동으로 다시 잇지 않고 답도 서버에 저장하지 않으므로 그렇게 약속하지 않는다 — 할 일만 안내한다
   const guidance = canReconnect
-    ? "다시 잇는 중이에요. 제출한 답은 안전하게 저장돼 있어요."
+    ? "다시 연결을 눌러 주세요."
     : "다시 연결할 수업 정보가 없어요. 수업 나가기를 눌러 주세요.";
 
   useEffect(() => {
     void hapticError();
-    announce(`수업과 연결이 잠시 끊겼어요. ${guidance}`);
+    announce(`음성 연결이 끊겼어요. ${guidance}`);
   }, [guidance]);
 
   return (
@@ -32,7 +33,7 @@ export default function ClassDisconnected() {
       <View style={styles.center}>
         <IeumFace size={130} expression="worried" accessibilityLabel="연결 끊김 캐릭터" />
         <Text accessibilityRole="header" style={{ fontSize: 30 * fontScale, fontWeight: "900", lineHeight: 42, color: theme.color.text, textAlign: "center" }}>
-          수업과 연결이{"\n"}잠시 끊겼어요
+          음성 연결이{"\n"}끊겼어요
         </Text>
         <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted, lineHeight: 29, textAlign: "center" }}>
           {guidance}
@@ -41,7 +42,7 @@ export default function ClassDisconnected() {
       <View style={{ gap: 12 }}>
         {canReconnect && (
           <AppButton
-            label="지금 다시 연결"
+            label="다시 연결"
             onPress={() => router.replace({ pathname: "/class/waiting", params: { lectureId, title } })}
           />
         )}
