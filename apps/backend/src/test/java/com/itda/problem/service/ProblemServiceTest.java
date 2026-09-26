@@ -344,6 +344,44 @@ class ProblemServiceTest {
     verify(lectureProblemRepository, never()).save(any());
   }
 
+  /**
+   * 자음이 SKILL_01·SKILL_03 어디에도 안 걸려 있으면 ProblemDisplay가 표시 문구로 입력 글자를 그대로 낸다. 그 후보를 그대로 후보 목록에 실으면
+   * 강사가 그 문구를 다시 보내 같은 409를 반복하게 된다 — 후보에서 뺀다.
+   */
+  @Test
+  void 구분어를_못_붙이는_후보는_제외하고_남은_하나를_연결한다() {
+    givenLecture();
+    Problem unprefixable = problem(Level.CONSONANT, "ㄱ", 1L);
+    Problem onset = problem(Level.CONSONANT, "ㄱ", 2L);
+    List<Problem> candidates = List.of(unprefixable, onset);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("ㄱ", JAMO_LEVELS))
+        .willReturn(candidates);
+    given(linkedProblemReader.readAll(candidates))
+        .willReturn(List.of(linked(1L, "ㄱ"), linked(2L, "초성 ㄱ")));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("ㄱ"));
+
+    assertThat(savedLinkProblem()).isSameAs(onset);
+  }
+
+  @Test
+  void 후보가_모두_구분어를_못_붙이면_404다() {
+    givenLecture();
+    List<Problem> candidates =
+        List.of(problem(Level.CONSONANT, "ㄱ", 1L), problem(Level.CONSONANT, "ㄱ", 2L));
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("ㄱ", JAMO_LEVELS))
+        .willReturn(candidates);
+    given(linkedProblemReader.readAll(candidates))
+        .willReturn(List.of(linked(1L, "ㄱ"), linked(2L, "ㄱ")));
+
+    assertError(
+        () ->
+            problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("ㄱ")),
+        ErrorCode.PROBLEM_NOT_FOUND);
+
+    verify(lectureProblemRepository, never()).save(any());
+  }
+
   @Test
   void 구분어_없는_낱자에_후보가_하나면_바로_연결한다() {
     givenLecture();

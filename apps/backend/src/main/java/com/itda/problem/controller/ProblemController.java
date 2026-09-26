@@ -10,6 +10,8 @@ import com.itda.problem.service.RegisteredProblem;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
+import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +21,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequiredArgsConstructor
 public class ProblemController {
+
+  /** {@code LectureProblem}의 {@code @UniqueConstraint} 이름과 같아야 한다. */
+  private static final String LECTURE_PROBLEM_UNIQUE_CONSTRAINT =
+      "uk_lecture_problems_lecture_problem";
+
   private final ProblemService problemService;
 
   /** 201 새 연결 / 200 이미 연결됨 (API 명세 8.2.1절). */
@@ -32,11 +39,25 @@ public class ProblemController {
       registered = problemService.registerProblem(user, lectureId, registerProblemRequest);
     } catch (DataIntegrityViolationException e) {
       // 같은 문제를 동시에 연결하면 한쪽이 (lecture_id, problem_id) UNIQUE에 걸린다. 그 트랜잭션은 이미 롤백됐으므로
-      // 다시 불러 기존 연결(200)로 답한다.
-      registered = problemService.registerProblem(user, lectureId, registerProblemRequest);
+      // 새 트랜잭션에서 다시 읽어 기존 연결(200)로 답한다. 그 제약이 아니면(다른 무결성 위반) 그대로 올린다 — AI를
+      // 다시 부르거나 다른 오류를 200으로 감추지 않는다.
+      if (!isLectureProblemUniqueViolation(e)) {
+        throw e;
+      }
+      registered = problemService.findExistingLink(user, lectureId, registerProblemRequest);
     }
     return ResponseEntity.status(registered.created() ? HttpStatus.CREATED : HttpStatus.OK)
         .body(LinkedProblemResponse.from(registered.problem()));
+  }
+
+  private static boolean isLectureProblemUniqueViolation(DataIntegrityViolationException e) {
+    for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+      if (cause instanceof ConstraintViolationException violation) {
+        return violation.getKind() == ConstraintKind.UNIQUE
+            && LECTURE_PROBLEM_UNIQUE_CONSTRAINT.equals(violation.getConstraintName());
+      }
+    }
+    return false;
   }
 
   @PostMapping("/learning-sessions")

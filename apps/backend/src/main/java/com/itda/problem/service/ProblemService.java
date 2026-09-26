@@ -25,6 +25,7 @@ import com.itda.user.repository.UserJpaRepository;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -95,7 +96,39 @@ public class ProblemService {
     return new RegisteredProblem(linkedProblemReader.read(problem), created);
   }
 
+  /**
+   * (lecture_id, problem_id) UNIQUE 위반 복구 전용 (API 명세 8.2.1절). 실패한 트랜잭션은 이미 롤백됐으므로 새 트랜잭션에서 읽기만 한다.
+   *
+   * <p>AI를 부르지 않는다. 이 위반이 나려면 두 요청이 <b>같은</b> problem_id로 수렴했어야 하고, problems에는 target_text UNIQUE가
+   * 없어(같은 글자가 여럿일 수 있어) 그런 수렴은 그 문제가 이미 있었을 때만 일어난다 — 즉 이 시점에 문제는 이미 존재한다. 그런데도 없다면(경합 상대가 그사이
+   * rollback했거나 데이터가 바뀐 경우) AI로 새로 만들지 않고 404로 알린다 — 애초에 이 메서드를 부르게 한 경합의 전제가 깨진 이상 상태다.
+   */
+  @Transactional(readOnly = true)
+  public RegisteredProblem findExistingLink(
+      AuthenticatedUser user, Long lectureId, RegisterProblemRequest registerProblemRequest) {
+    Lecture lecture = validateInstructor(user, lectureId);
+    Problem problem =
+        resolveExistingProblem(ProblemTextQuery.parse(registerProblemRequest.targetText()));
+    lectureProblemRepository
+        .findByLecture_IdAndProblem_Id(lecture.getId(), problem.getId())
+        .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
+    return new RegisteredProblem(linkedProblemReader.read(problem), false);
+  }
+
   private Problem resolveProblem(ProblemTextQuery query) {
+    return resolveProblem(query, () -> createProblem(query.text()));
+  }
+
+  /** {@link #findExistingLink}의 복구 경로. 낱말이 없어도 AI로 만들지 않고 404로 알린다. */
+  private Problem resolveExistingProblem(ProblemTextQuery query) {
+    return resolveProblem(
+        query,
+        () -> {
+          throw new BusinessException(ErrorCode.PROBLEM_NOT_FOUND);
+        });
+  }
+
+  private Problem resolveProblem(ProblemTextQuery query, Supplier<Problem> onBareTextMissing) {
     String text = query.text();
     if (query.prefix() != null) {
       // 자모·약자는 고정 목록이다. 없으면 AI로 만들지 않고 404로 알린다.
@@ -110,7 +143,7 @@ public class ProblemService {
         .findFirst()
         // 약자만 있는 글자('억' 등)를 낱말로 또 만들지 않는다 — 같은 글자의 기존 문제를 먼저 쓴다.
         .or(() -> problemRepository.findAllByTargetTextOrderByIdAsc(text).stream().findFirst())
-        .orElseGet(() -> createProblem(text));
+        .orElseGet(onBareTextMissing);
   }
 
   private List<Problem> prefixedCandidates(Prefix prefix, String text) {
@@ -137,10 +170,19 @@ public class ProblemService {
       return firstOrNotFound(candidates);
     }
     // 표시 문구가 같은 중복 문제는 하나로 본다 — 같은 버튼을 두 번 보이지 않는다. id 오름차순이라 작은 id가 남는다.
+    // 표시 문구가 입력 글자와 같은(구분어를 붙이지 못한) 후보는 뺀다 — 그 후보를 후보 목록에 실으면 강사가 그 문구를 다시
+    // 보내 같은 409를 반복하게 된다. 자음이 SKILL_01·SKILL_03 중 어디에도 안 걸려 있으면 ProblemDisplay가 이 문구를 낸다.
     List<LinkedProblem> linked = linkedProblemReader.readAll(candidates);
     Map<String, Problem> byDisplayText = new LinkedHashMap<>();
     for (int i = 0; i < candidates.size(); i++) {
-      byDisplayText.putIfAbsent(linked.get(i).displayText(), candidates.get(i));
+      String displayText = linked.get(i).displayText();
+      if (displayText.equals(text)) {
+        continue;
+      }
+      byDisplayText.putIfAbsent(displayText, candidates.get(i));
+    }
+    if (byDisplayText.isEmpty()) {
+      throw new BusinessException(ErrorCode.PROBLEM_NOT_FOUND);
     }
     if (byDisplayText.size() == 1) {
       return byDisplayText.values().iterator().next();
