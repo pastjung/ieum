@@ -66,14 +66,14 @@ docker compose up --build --watch
 - backend의 자동 재시작 구조: `build --continuous`가 src 변경을 재컴파일하고, devtools가 바뀐 클래스를 감지해 JVM 재기동 없이 애플리케이션만 재시작한다 (수 초)
 - ai의 자동 재시작 구조: `uvicorn --reload`가 WatchFiles로 `app/` 변경을 감지해 서버 프로세스를 재시작한다 (1~2초). 로그에 `WatchFiles detected changes ... Reloading...`이 찍히면 정상 동작이다
 - dev 스테이지도 빌드 시점의 소스를 COPY로 포함한다 — compose watch의 sync는 변경분만 복사하므로, 이미지에 소스가 없으면 기동 자체가 실패한다. 기동 시 동기화는 `initial_sync: true`가 보장한다
-- 단독 개발 시에는 네이티브 실행도 가능하다: backend는 IDE bootRun(devtools 동일 적용), ai는 `.venv` + `uvicorn --reload`, web은 `npm run dev`
+- 단독 개발 시에는 네이티브 실행도 가능하다: backend는 IDE bootRun(devtools 동일 적용), ai는 `.venv` + `uvicorn --reload`, web은 web-deps 스테이지가 설치한 의존성으로 `pnpm dev:web`
 - sync는 호스트 → 컨테이너 단방향 복사다. 컨테이너 안에서 파일이 바뀌어도 호스트로 역류하지 않는다
 - backend는 `DB_HOST=db`, `REDIS_HOST=redis`로 두 저장소를 호출한다 (compose가 주입). 호스트에서 `./gradlew bootRun`으로 띄우면 각각 `localhost`가 기본값이므로, `docker compose up -d db redis`로 저장소만 먼저 띄우면 된다
 - 저장소 두 개는 버전을 패치까지 고정한다 (`mariadb:11.8.9`, `redis:8.2.9-alpine`) — docs/product/erd.md 7절이 문서 기준 버전과 digest 확인을 요구한다. digest는 compose 주석에 적어 둔다
 - Redis는 로컬에서 영속화하지 않는다(RDB·AOF 끔). 토큰 상태는 TTL로 만료되는 임시 데이터이고, 재시작으로 폐기된 토큰이 되살아나는 문제는 ERD 3.1.1이 운영 승인 사항으로 남겨 둔 미확정 계약이라 로컬에서 먼저 답을 정하지 않는다
 - 종료는 `docker compose down`을 사용한다. **`-v`를 붙이지 않는다** — gradle 의존성 캐시(다음 기동이 느려짐)뿐 아니라 `mariadb-data` 볼륨, 즉 **로컬 DB 데이터 전체가 삭제된다**
 
-주의: 로컬 Compose는 각 서비스의 dev 스테이지까지만 빌드하므로, 운영 스테이지(web의 `npm run build`, backend의 `bootJar`, ai의 runtime)는 로컬 개발 중 한 번도 실행되지 않는다. Dockerfile이나 빌드 관련 설정을 수정했다면 `docker build apps/<서비스>`(target 없이)로 운영 경로가 깨지지 않았는지 별도로 확인한다. release 배포 파이프라인이 생기면 이 확인은 CI가 대신한다.
+주의: 로컬 Compose는 각 서비스의 dev 스테이지까지만 빌드하므로, 운영 스테이지(web의 `pnpm --filter @ieum/web build`, backend의 `bootJar`, ai의 runtime)는 로컬 개발 중 한 번도 실행되지 않는다. Dockerfile이나 빌드 관련 설정을 수정했다면 `docker build apps/<서비스>`(target 없이, web은 `docker build --target web front`)로 운영 경로가 깨지지 않았는지 별도로 확인한다. release 배포 파이프라인이 생기면 이 확인은 CI가 대신한다.
 
 ## 5. 운영 Compose
 
@@ -127,7 +127,7 @@ EC2의 `.env` 작성 절차와 값의 의미는 deploy.md 6.2절을 따른다. `
 
 - 정적 파일 서빙 성능: 이벤트 기반 구조와 `sendfile` 같은 커널 수준 최적화로, 정적 콘텐츠 서빙에서 최고 수준의 처리량을 낸다. Node 기반 서버(serve, vite preview)로 같은 파일을 서빙하는 것보다 빠르고 메모리 사용량도 훨씬 적다
 - 이미지 크기: 빌드 도구(node, node_modules)를 최종 이미지에서 제외하고 nginx alpine + 산출물만 남겨 50MB 미만으로 유지된다
-- 설정의 코드화: gzip, 캐시 헤더, SPA 폴백 같은 웹 서빙 설정(`apps/web/nginx.conf`)이 소스와 함께 버전 관리되고, 배포·롤백 시 코드와 항상 함께 움직인다
+- 설정의 코드화: gzip, 캐시 헤더, SPA 폴백 같은 웹 서빙 설정(`front/apps/web/nginx.conf`)이 소스와 함께 버전 관리되고, 배포·롤백 시 코드와 항상 함께 움직인다
 
 호스트 Nginx(리버스 프록시)와 역할이 다르다는 점에 유의한다. 호스트 Nginx는 HTTPS 종료와 서비스 라우팅을, 컨테이너 내부 Nginx는 정적 파일 서빙만 담당한다.
 
@@ -165,4 +165,4 @@ EC2의 `.env` 작성 절차와 값의 의미는 deploy.md 6.2절을 따른다. `
 - [ ] web: src 수정 시 브라우저에 즉시 반영된다 (vite 핫리로드)
 - [ ] backend: java 파일 수정 시 수 초 내 자동 재시작된다 (로그에 devtools restart 확인)
 - [ ] ai: app 파일 수정 시 자동 재시작된다 (로그에 uvicorn reload 확인)
-- [ ] `docker build apps/web`, `docker build apps/backend`, `docker build apps/ai`가 각각 성공한다 (운영 이미지 전체 빌드)
+- [ ] `docker build --target web front`, `docker build apps/backend`, `docker build apps/ai`가 각각 성공한다 (운영 이미지 전체 빌드)

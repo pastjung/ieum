@@ -281,7 +281,7 @@ chmod 600 /home/ubuntu/app/.env.config /home/ubuntu/app/.env.tags
 ```bash
 cd ~/src && git pull
 TAG=manual-$(git rev-parse --short HEAD)
-docker build -t itda-web:$TAG apps/web
+docker build --target web -t itda-web:$TAG front
 docker build -t itda-backend:$TAG apps/backend    # 첫 빌드는 5~10분
 docker build -t itda-ai:$TAG apps/ai
 

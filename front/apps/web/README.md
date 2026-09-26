@@ -5,9 +5,9 @@
 ## 실행
 
 ```bash
-npm install
-npm run dev        # http://localhost:5173  (/api → localhost:8080 프록시)
-npm run build      # 타입체크 + 프로덕션 빌드
+cd front && pnpm install
+pnpm dev:web                          # http://localhost:5173  (/api → localhost:8080 프록시)
+pnpm --filter @ieum/web build         # 타입체크 + 프로덕션 빌드
 ```
 
 전체 스택 통합 실행(컨테이너): 루트에서 `docker compose up --build --watch` — [docs/infra/docker.md](../../docs/infra/docker.md)

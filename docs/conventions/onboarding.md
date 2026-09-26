@@ -26,7 +26,7 @@
 
 ## 3. 파트별 의존성
 
-- [ ] web: `cd apps/web && npm install`
+- [ ] web: `cd front && pnpm install` (앱과 같은 워크스페이스)
 - [ ] mobile: `cd apps/mobile && npm install`
 - [ ] ai: `cd apps/ai && python -m venv .venv` → `source .venv/Scripts/activate` → `python -m pip install -r requirements-dev.txt`
 - [ ] backend: 없음 — gradlew가 처음 실행될 때 알아서 받는다
