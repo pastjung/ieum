@@ -1,4 +1,4 @@
-import { AudioSession } from "@livekit/react-native";
+import { AndroidAudioTypePresets, AudioSession } from "@livekit/react-native";
 import { ApiError } from "@ieum/api-client";
 import type { MediaToken } from "@ieum/contracts";
 import { Room, RoomEvent } from "livekit-client";
@@ -108,6 +108,12 @@ export const liveLecture = {
       }
       throw error;
     }
+    if (generation !== joinGeneration) return;
+
+    // 학습자는 듣기만 한다. 기본값(통화 모드)이면 Android가 수화기·통화 음량으로 내보내므로
+    // 미디어 재생 프로필로 바꾼다. iOS는 registerGlobals의 자동 관리가 수신 전용일 때
+    // playback 카테고리를 고르므로 따로 설정하지 않는다. 방 접속 전에 설정해야 적용된다
+    await AudioSession.configureAudio({ android: { audioTypeOptions: AndroidAudioTypePresets.media } });
     if (generation !== joinGeneration) return;
 
     await AudioSession.startAudioSession();

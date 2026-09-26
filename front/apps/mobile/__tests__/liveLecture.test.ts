@@ -1,4 +1,4 @@
-import { AudioSession } from "@livekit/react-native";
+import { AndroidAudioTypePresets, AudioSession } from "@livekit/react-native";
 import { ApiError } from "@ieum/api-client";
 import { classService } from "@/services/classService";
 import { liveLecture } from "@/services/liveLecture";
@@ -47,7 +47,9 @@ jest.mock("livekit-client", () => ({
 let mockAudioRunning = false;
 
 jest.mock("@livekit/react-native", () => ({
+  AndroidAudioTypePresets: { communication: { audioMode: "inCommunication" }, media: { audioMode: "normal" } },
   AudioSession: {
+    configureAudio: jest.fn(async () => undefined),
     startAudioSession: jest.fn(async () => {
       mockAudioRunning = true;
     }),
@@ -62,7 +64,11 @@ jest.mock("@/services/classService", () => ({
 }));
 
 const mockedClass = classService as unknown as { getLecture: jest.Mock; issueMediaToken: jest.Mock };
-const mockedAudio = AudioSession as unknown as { startAudioSession: jest.Mock; stopAudioSession: jest.Mock };
+const mockedAudio = AudioSession as unknown as {
+  configureAudio: jest.Mock;
+  startAudioSession: jest.Mock;
+  stopAudioSession: jest.Mock;
+};
 
 function handlers() {
   return { onOpen: jest.fn(), onExit: jest.fn() };
@@ -103,6 +109,19 @@ describe("liveLecture", () => {
     expect(mockRooms[0].connect).toHaveBeenCalledWith("wss://s", "t");
     expect(h.onOpen).not.toHaveBeenCalled();
     expect(liveLecture.currentLectureId()).toBe("42");
+  });
+
+  it("오디오 세션을 열기 전에 듣기 전용 미디어 오디오로 설정한다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "SCHEDULED" });
+
+    await liveLecture.join("42", handlers());
+
+    expect(mockedAudio.configureAudio).toHaveBeenCalledWith({
+      android: { audioTypeOptions: AndroidAudioTypePresets.media },
+    });
+    const configuredAt = mockedAudio.configureAudio.mock.invocationCallOrder[0]!;
+    const startedAt = mockedAudio.startAudioSession.mock.invocationCallOrder[0]!;
+    expect(configuredAt).toBeLessThan(startedAt);
   });
 
   it("이미 시작된 수업이면 접속 직후 시작을 알린다", async () => {
