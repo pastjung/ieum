@@ -1,14 +1,11 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppActionRedirectPage } from '../pages/AppActionRedirectPage'
+import { LectureCreatePage } from '../pages/LectureCreatePage'
+import { LectureListPage } from '../pages/LectureListPage'
 import { LoginPage } from '../pages/LoginPage'
 import { SignupPage } from '../pages/SignupPage'
 import { AppShell } from './AppShell'
 import { RequireInstructor } from './RequireInstructor'
-
-// Task 5에서 LectureListPage로 교체한다
-function LecturesPlaceholder() {
-  return <p style={{ padding: 24 }}>수업 목록</p>
-}
 
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/lectures" replace /> },
@@ -19,7 +16,10 @@ export const router = createBrowserRouter([
     children: [
       {
         element: <AppShell />,
-        children: [{ path: '/lectures', element: <LecturesPlaceholder /> }],
+        children: [
+          { path: '/lectures', element: <LectureListPage /> },
+          { path: '/lectures/new', element: <LectureCreatePage /> },
+        ],
       },
     ],
   },
