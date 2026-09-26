@@ -14,14 +14,14 @@ export function createLectureApi(client: ApiClient) {
       return client.post<InstructorLecture>('/lectures', body)
     },
 
-    get: (lectureId: string) => client.get<InstructorLecture>(`/lectures/${lectureId}`),
+    get: (lectureId: string) => client.get<InstructorLecture>(`/lectures/${encodeURIComponent(lectureId)}`),
 
     /** 같은 상태를 다시 보내면 서버가 방 작업만 재시도한다 — 503 복구 경로 (API 명세 8.5절) */
     changeStatus: (lectureId: string, status: 'OPEN' | 'CLOSED') =>
-      client.put<InstructorLecture>(`/lectures/${lectureId}/status`, { status }),
+      client.put<InstructorLecture>(`/lectures/${encodeURIComponent(lectureId)}/status`, { status }),
 
     /** 강사 토큰은 OPEN일 때만 발급된다. 발급할 때 서버가 방을 다시 열어 metadata를 복구한다 */
-    issueMediaToken: (lectureId: string) => client.post<MediaToken>(`/lectures/${lectureId}/media-tokens`),
+    issueMediaToken: (lectureId: string) => client.post<MediaToken>(`/lectures/${encodeURIComponent(lectureId)}/media-tokens`),
   }
 }
 

@@ -45,6 +45,20 @@ describe('lectureApi', () => {
     expect(client.post).toHaveBeenCalledWith('/lectures/42/media-tokens')
   })
 
+  it('lectureId를 경로에 넣을 때 인코딩한다', async () => {
+    const client = fakeClient()
+    const lectures = createLectureApi(client as unknown as ApiClient)
+    const id = '42/../etc'
+    await lectures.get(id)
+    await lectures.changeStatus(id, 'OPEN')
+    await lectures.issueMediaToken(id)
+
+    const encoded = encodeURIComponent(id)
+    expect(client.get).toHaveBeenCalledWith(`/lectures/${encoded}`)
+    expect(client.put).toHaveBeenCalledWith(`/lectures/${encoded}/status`, { status: 'OPEN' })
+    expect(client.post).toHaveBeenCalledWith(`/lectures/${encoded}/media-tokens`)
+  })
+
   it('datetime-local 값을 UTC ISO로 바꾼다', () => {
     const local = '2026-09-26T10:40'
     expect(toScheduledAtUtc(local)).toBe(new Date(local).toISOString())

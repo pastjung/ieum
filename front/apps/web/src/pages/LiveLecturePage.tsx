@@ -195,6 +195,7 @@ export function LiveLecturePage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [joining, setJoining] = useState(false)
+  const [endFailed, setEndFailed] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const roomRef = useRef<InstructorRoom | null>(null)
   // joinVoice 호출을 직렬화하는 세대 번호. 진입 자동 접속과 "음성 다시 연결" 클릭이
@@ -215,7 +216,10 @@ export function LiveLecturePage() {
       if (seq !== joinSeqRef.current) return // 더 나중 호출이나 언마운트에 밀려났다
       const token = await lectureApi.issueMediaToken(lectureId)
       if (seq !== joinSeqRef.current) return
-      const room = await connectInstructorRoom(token, setRoomState)
+      const room = await connectInstructorRoom(token, (state) => {
+        // 이 방이 더 이상 최신 접속이 아니면(다른 접속으로 대체됐거나 언마운트됐으면) 상태를 덮어쓰지 않는다
+        if (seq === joinSeqRef.current) setRoomState(state)
+      })
       if (seq !== joinSeqRef.current) {
         // 이 사이에 더 나중 호출이 이미 새 방을 roomRef에 넣었거나 언마운트됐다 —
         // 내가 만든 방은 아무도 참조하지 않으므로 여기서 바로 정리한다 (누수 방지)
@@ -231,6 +235,11 @@ export function LiveLecturePage() {
 
   useEffect(() => {
     let cancelled = false
+    if (!/^\d+$/.test(lectureId)) {
+      // 숫자가 아닌 lectureId는 서버에 물어볼 필요 없이 바로 "찾을 수 없음"으로 처리한다
+      setError(errorMessage(new ApiError(404, 'LECTURE_NOT_FOUND', 'invalid lectureId')))
+      return
+    }
     lectureApi
       .get(lectureId)
       .then(async (loaded) => {
@@ -292,6 +301,11 @@ export function LiveLecturePage() {
         // 상태는 저장됐고 방 삭제만 실패했다 — 같은 버튼으로 재시도한다 (API 명세 8.5절)
         if (e instanceof ApiError && e.code === 'MEDIA_SERVER_UNAVAILABLE') {
           setLecture((prev) => (prev ? { ...prev, status: 'CLOSED' } : prev))
+          setEndFailed(true)
+          // 서버가 방 삭제에 실패했더라도 화면은 CLOSED다 — 진행 중이던 접속을 무효화하고
+          // 마이크 송출을 멈춰, 삭제되지 않은 방에 계속 송출되는 일이 없게 한다
+          joinSeqRef.current += 1
+          await releaseRoom()
         }
         throw e
       }
@@ -396,8 +410,13 @@ export function LiveLecturePage() {
               수업 시작
             </button>
           ) : (
-            <button type="button" disabled={busy} onClick={end} style={{ ...buttonStyle('dangerOutline', 'sm'), fontSize: 13.5, ...(busy ? dimmed : {}) }}>
-              {lecture.status === 'CLOSED' ? '종료 다시 시도' : '수업 종료'}
+            <button
+              type="button"
+              disabled={busy || joining}
+              onClick={end}
+              style={{ ...buttonStyle('dangerOutline', 'sm'), fontSize: 13.5, ...(busy || joining ? dimmed : {}) }}
+            >
+              {endFailed ? '종료 다시 시도' : '수업 종료'}
             </button>
           )}
         </div>
