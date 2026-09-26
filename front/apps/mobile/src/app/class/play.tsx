@@ -73,6 +73,11 @@ export default function ClassPlay() {
     setCells([]);
   }, [problemId]);
 
+  // 제출이 채점되면(서버 응답) 채점 화면으로 간다. 결과 낭독은 채점 화면이 한다
+  useEffect(() => {
+    if (phase?.kind === "graded") router.replace("/class/grade");
+  }, [phase, router]);
+
   // 마이크 버튼이 있는 유일한 화면이다 — 떠 있는 동안만 onSpeakingChanged가 "버튼을 눌러 켜세요"라고 말한다 (M5)
   useEffect(() => {
     setLecturePlayScreenActive(true);
