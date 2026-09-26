@@ -17,17 +17,19 @@ interface Props {
 
 const SIZE = 96;
 
-// 양손 파지 — 왼손 위→아래 1·2·3, 오른손 위→아래 4·5·6 (ERD 「6점 번호」 절).
-// 세로 패드(`DotPad`)와 같은 이유로 번호만 제자리에 돌렸다. 사선 들여쓰기는 그대로 둔다.
+// 양손 파지 — 왼쪽부터 3·2·1 | 4·5·6. 퍼킨스 점자타자기 자판과 같은 순서라, 두 손의 검지가
+// 가운데(1·4번)에 온다. 위아래는 그대로 1·4번이 위, 3·6번이 아래다.
+// 배치만 바꾼 것이라 점 번호와 6비트 값은 그대로다 — 번호는 버튼이 들고 있고, 터치는 버튼의
+// 실제 위치로 번호를 찾는다(`useMultiTouchDots`). 칸의 점 번호 정의는 ERD 「6점 번호」 절이다.
 const leftPos: Partial<Record<Dot, object>> = {
-  1: { left: "6%", top: "8%" },
-  2: { left: "30%", top: "34%" },
-  3: { left: "54%", bottom: "10%" },
+  1: { right: "6%", top: "8%" },
+  2: { right: "30%", top: "34%" },
+  3: { right: "54%", bottom: "10%" },
 };
 const rightPos: Partial<Record<Dot, object>> = {
-  4: { right: "6%", top: "8%" },
-  5: { right: "30%", top: "34%" },
-  6: { right: "54%", bottom: "10%" },
+  4: { left: "6%", top: "8%" },
+  5: { left: "30%", top: "34%" },
+  6: { left: "54%", bottom: "10%" },
 };
 
 /**
