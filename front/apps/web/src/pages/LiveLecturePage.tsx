@@ -306,6 +306,8 @@ export function LiveLecturePage() {
           // 마이크 송출을 멈춰, 삭제되지 않은 방에 계속 송출되는 일이 없게 한다
           joinSeqRef.current += 1
           await releaseRoom()
+          setMic(false)
+          setRoomState('disconnected')
         }
         throw e
       }
