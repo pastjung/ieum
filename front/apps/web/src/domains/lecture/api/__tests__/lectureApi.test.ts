@@ -45,18 +45,33 @@ describe('lectureApi', () => {
     expect(client.post).toHaveBeenCalledWith('/lectures/42/media-tokens')
   })
 
-  it('lectureId를 경로에 넣을 때 인코딩한다', async () => {
+  it('발언 허용·회수를 학생별 경로로 보낸다', async () => {
+    const client = fakeClient()
+    const lectures = createLectureApi(client as unknown as ApiClient)
+    await lectures.setSpeaking('42', '7', true)
+    await lectures.setSpeaking('42', '7', false)
+
+    expect(client.put).toHaveBeenNthCalledWith(1, '/lectures/42/participants/7/speaking', { allowed: true })
+    expect(client.put).toHaveBeenNthCalledWith(2, '/lectures/42/participants/7/speaking', { allowed: false })
+  })
+
+  it('lectureId와 userId를 경로에 넣을 때 인코딩한다', async () => {
     const client = fakeClient()
     const lectures = createLectureApi(client as unknown as ApiClient)
     const id = '42/../etc'
+    const userId = '7/../1'
     await lectures.get(id)
     await lectures.changeStatus(id, 'OPEN')
     await lectures.issueMediaToken(id)
+    await lectures.setSpeaking(id, userId, true)
 
     const encoded = encodeURIComponent(id)
     expect(client.get).toHaveBeenCalledWith(`/lectures/${encoded}`)
     expect(client.put).toHaveBeenCalledWith(`/lectures/${encoded}/status`, { status: 'OPEN' })
     expect(client.post).toHaveBeenCalledWith(`/lectures/${encoded}/media-tokens`)
+    expect(client.put).toHaveBeenCalledWith(`/lectures/${encoded}/participants/${encodeURIComponent(userId)}/speaking`, {
+      allowed: true,
+    })
   })
 
   it('datetime-local 값을 UTC ISO로 바꾼다', () => {
