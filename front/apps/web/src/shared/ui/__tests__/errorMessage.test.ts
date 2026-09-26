@@ -23,4 +23,18 @@ describe('errorMessage', () => {
   it('알 수 없는 오류', () => {
     expect(errorMessage(new Error('boom'))).toBe('요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.')
   })
+
+  it('마이크 권한 거부', () => {
+    const denied = new DOMException('permission denied', 'NotAllowedError')
+    expect(errorMessage(denied)).toBe('마이크를 사용할 수 없어요. 브라우저의 마이크 권한을 허용해 주세요.')
+  })
+
+  it('마이크 장치 없음', () => {
+    const notFound = new DOMException('no device', 'NotFoundError')
+    expect(errorMessage(notFound)).toBe('마이크를 사용할 수 없어요. 브라우저의 마이크 권한을 허용해 주세요.')
+  })
+
+  it('아이디·비밀번호 형식 오류', () => {
+    expect(errorMessage(new ApiError(400, 'INVALID_ACCOUNT_INPUT', 'server text'))).toBe('아이디와 비밀번호 형식을 확인해 주세요.')
+  })
 })
