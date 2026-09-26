@@ -1,4 +1,6 @@
 import { AudioSession } from "@livekit/react-native";
+import { ApiError } from "@ieum/api-client";
+import type { MediaToken } from "@ieum/contracts";
 import { Room, RoomEvent } from "livekit-client";
 import { classService } from "./classService";
 import { classifyDisconnect, isLectureOpen, type RoomExit } from "./lectureSignals";
@@ -66,6 +68,8 @@ async function discardSilently(previous: Session): Promise<void> {
   previous.room.removeAllListeners();
   if (session === previous) session = null;
   await previous.room.disconnect();
+  // 새 입장이 실패해도 이전 방의 오디오가 켜진 채 남지 않게 한다 (소유 확인으로 새 세대의 오디오는 건드리지 않는다)
+  releaseAudio(previous.generation);
 }
 
 /** 낡은 세대로 판명된 join 시도가 만들어 둔 것을 핸들러 호출 없이 정리한다 */
@@ -86,7 +90,24 @@ export const liveLecture = {
     const lecture = await classService.getLecture(lectureId);
     if (generation !== joinGeneration) return; // 그 사이 새 입장·퇴장이 이 요청을 대체했다
 
-    const token = await classService.issueMediaToken(lectureId);
+    // 이미 끝난 수업이면 토큰을 받지 않고 종료로 끝낸다 (방도 오디오도 만들지 않는다)
+    if (lecture.status === "CLOSED") {
+      handlers.onExit("ended");
+      return;
+    }
+
+    let token: MediaToken;
+    try {
+      token = await classService.issueMediaToken(lectureId);
+    } catch (error) {
+      if (generation !== joinGeneration) return;
+      // 스냅샷 뒤에 수업이 닫혔다 — 재시도해도 같으니 종료로 안내한다
+      if (error instanceof ApiError && error.code === "INVALID_LECTURE_STATE") {
+        handlers.onExit("ended");
+        return;
+      }
+      throw error;
+    }
     if (generation !== joinGeneration) return;
 
     await AudioSession.startAudioSession();
@@ -121,6 +142,8 @@ export const liveLecture = {
       room.removeAllListeners();
       if (session === current) session = null;
       releaseAudio(generation);
+      // 접속 중에 나가거나 새 입장이 이 요청을 대체했다 — 실패가 아니라 취소이므로 조용히 끝낸다
+      if (generation !== joinGeneration) return;
       throw error;
     }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import { ApiError } from "@ieum/api-client";
 import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
@@ -73,8 +74,15 @@ export default function ClassWaiting() {
           else if (exit === "lost") router.replace({ pathname: "/class/disconnected", params: { lectureId: validLectureId, title } });
         },
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!mountedRef.current) return;
+        // 참여 기록이 없어 토큰이 거부됐다 — 다시 시도해도 같으니 코드 재입장을 안내한다
+        if (error instanceof ApiError && error.code === "LECTURE_PARTICIPATION_REQUIRED") {
+          const message = "코드로 다시 입장해 주세요.";
+          setFailed({ message, retryable: false });
+          announce(message);
+          return;
+        }
         const message = "음성 수업에 연결하지 못했어요. 다시 시도해 주세요.";
         setFailed({ message, retryable: true });
         announce(message);

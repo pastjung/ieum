@@ -1,15 +1,24 @@
 import { AudioSession } from "@livekit/react-native";
+import { ApiError } from "@ieum/api-client";
 import { classService } from "@/services/classService";
 import { liveLecture } from "@/services/liveLecture";
 
 type Listener = (...args: unknown[]) => void;
 
 const mockRooms: MockRoom[] = [];
+// 설정되어 있으면 다음 connect()가 이 프라미스를 기다린다(거부되면 connect도 거부된다)
+let mockConnectGate: Promise<undefined> | null = null;
+let mockConnectReached: (() => void) | null = null;
 
 class MockRoom {
   metadata: string | undefined = undefined;
   listeners = new Map<string, Listener[]>();
-  connect = jest.fn(async () => undefined);
+  connect = jest.fn(async () => {
+    const gate = mockConnectGate;
+    mockConnectGate = null;
+    mockConnectReached?.();
+    if (gate) await gate;
+  });
   disconnect = jest.fn(async () => {
     this.emit("disconnected", 1);
   });
@@ -34,8 +43,18 @@ jest.mock("livekit-client", () => ({
   RoomEvent: { RoomMetadataChanged: "roomMetadataChanged", Disconnected: "disconnected" },
 }));
 
+// 오디오 세션이 지금 켜져 있는지 — start/stop 호출 순서를 그대로 따라간다
+let mockAudioRunning = false;
+
 jest.mock("@livekit/react-native", () => ({
-  AudioSession: { startAudioSession: jest.fn(async () => undefined), stopAudioSession: jest.fn(async () => undefined) },
+  AudioSession: {
+    startAudioSession: jest.fn(async () => {
+      mockAudioRunning = true;
+    }),
+    stopAudioSession: jest.fn(async () => {
+      mockAudioRunning = false;
+    }),
+  },
 }));
 
 jest.mock("@/services/classService", () => ({
@@ -49,12 +68,14 @@ function handlers() {
   return { onOpen: jest.fn(), onExit: jest.fn() };
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void } {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 /** 대기 중인 마이크로태스크(예: 이미 resolve된 프라미스 체인)를 흘려보낸다 */
@@ -66,6 +87,9 @@ beforeEach(async () => {
   await liveLecture.leave();
   mockRooms.length = 0;
   jest.clearAllMocks();
+  mockAudioRunning = false;
+  mockConnectGate = null;
+  mockConnectReached = null;
   mockedClass.issueMediaToken.mockResolvedValue({ serverUrl: "wss://s", token: "t", expiresAt: "x" });
 });
 
@@ -246,5 +270,80 @@ describe("liveLecture", () => {
     expect(a.onOpen).not.toHaveBeenCalled();
     expect(a.onExit).not.toHaveBeenCalled();
     expect(liveLecture.currentLectureId()).toBe("42");
+  });
+
+  it("이미 끝난 수업이면 토큰을 받지 않고 수업 종료로 알린다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "CLOSED" });
+    const h = handlers();
+
+    await liveLecture.join("42", h);
+
+    expect(h.onExit).toHaveBeenCalledTimes(1);
+    expect(h.onExit).toHaveBeenCalledWith("ended");
+    expect(h.onOpen).not.toHaveBeenCalled();
+    expect(mockedClass.issueMediaToken).not.toHaveBeenCalled();
+    expect(mockRooms).toHaveLength(0);
+    expect(mockedAudio.startAudioSession).not.toHaveBeenCalled();
+    expect(liveLecture.currentLectureId()).toBeNull();
+  });
+
+  it("토큰 발급이 수업 상태 오류(409)면 수업 종료로 알린다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "OPEN" });
+    mockedClass.issueMediaToken.mockRejectedValue(new ApiError(409, "INVALID_LECTURE_STATE", "종료된 수업"));
+    const h = handlers();
+
+    await liveLecture.join("42", h);
+
+    expect(h.onExit).toHaveBeenCalledTimes(1);
+    expect(h.onExit).toHaveBeenCalledWith("ended");
+    expect(mockRooms).toHaveLength(0);
+    expect(mockedAudio.startAudioSession).not.toHaveBeenCalled();
+  });
+
+  it("참여 기록이 없어 토큰이 거부(403)되면 그 오류를 던진다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "OPEN" });
+    const denied = new ApiError(403, "LECTURE_PARTICIPATION_REQUIRED", "참여 필요");
+    mockedClass.issueMediaToken.mockRejectedValue(denied);
+    const h = handlers();
+
+    await expect(liveLecture.join("42", h)).rejects.toBe(denied);
+    expect(h.onExit).not.toHaveBeenCalled();
+    expect(mockRooms).toHaveLength(0);
+  });
+
+  it("연결된 방을 두고 다시 입장하다 토큰에서 실패하면 오디오 세션이 남지 않는다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "OPEN" });
+    await liveLecture.join("42", handlers());
+    expect(mockAudioRunning).toBe(true);
+
+    mockedClass.issueMediaToken.mockRejectedValueOnce(new Error("503"));
+    await expect(liveLecture.join("42", handlers())).rejects.toThrow("503");
+
+    expect(mockRooms[0].disconnect).toHaveBeenCalled();
+    expect(mockAudioRunning).toBe(false);
+    expect(liveLecture.currentLectureId()).toBeNull();
+  });
+
+  it("방 접속 중에 나가면 접속 실패를 던지지 않고 조용히 끝난다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "SCHEDULED" });
+    const connectGate = deferred<undefined>();
+    const reachedConnect = deferred<void>();
+    mockConnectGate = connectGate.promise;
+    mockConnectReached = () => reachedConnect.resolve();
+    const h = handlers();
+
+    const joinPromise = liveLecture.join("42", h);
+    // join이 방을 만들고 connect 대기에 들어갈 때까지 기다린다
+    await reachedConnect.promise;
+
+    // 실제 LiveKit은 접속 중에 disconnect()하면 connect()가 거부된다
+    const leaving = liveLecture.leave();
+    connectGate.reject(new Error("Client initiated disconnect"));
+    await leaving;
+
+    await expect(joinPromise).resolves.toBeUndefined();
+    expect(h.onOpen).not.toHaveBeenCalled();
+    expect(mockAudioRunning).toBe(false);
+    expect(liveLecture.currentLectureId()).toBeNull();
   });
 });
