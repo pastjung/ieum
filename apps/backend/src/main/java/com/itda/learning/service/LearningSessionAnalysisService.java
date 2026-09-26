@@ -255,7 +255,8 @@ public class LearningSessionAnalysisService {
         memory.getTotalCorrect(),
         memory.getLastPracticedAt(),
         memory.getMasteryProbability(),
-        errorCountsByMemoryId.getOrDefault(memory.getId(), Map.of()));
+        errorCountsByMemoryId.getOrDefault(memory.getId(), Map.of()),
+        memory.getRecentResults());
   }
 
   private LearningAttemptAnalysisFastApiResponse requestAttemptAnalysis(
@@ -333,10 +334,20 @@ public class LearningSessionAnalysisService {
                 state.nCorrect(),
                 attemptedAt,
                 state.masteryProb());
+        memory.applyAnalysisSnapshot(
+            state.nAttempts(),
+            state.nCorrect(),
+            attemptedAt,
+            state.masteryProb(),
+            state.recentResults());
         memoriesBySkillId.put(state.learningSkillId(), memory);
       } else {
         memory.applyAnalysisSnapshot(
-            state.nAttempts(), state.nCorrect(), attemptedAt, state.masteryProb());
+            state.nAttempts(),
+            state.nCorrect(),
+            attemptedAt,
+            state.masteryProb(),
+            state.recentResults());
       }
       updatedMemories.add(memory);
     }

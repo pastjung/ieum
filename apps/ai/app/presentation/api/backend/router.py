@@ -100,6 +100,9 @@ class SkillStateSchema(CamelModel):
     last_practiced_at: datetime | None = None  # LocalDateTime(타임존 없음) → UTC 로 해석
     mastery_prob: float | None = None
     error_counts: ErrorCountSchema | None = None
+    recent_results: str | None = Field(
+        default=None, max_length=5, pattern=r"^[01]*$"
+    )  # 선택. 없으면 빈 문자열
 
 
 class ReviewAnalyzeRequest(CamelModel):
@@ -148,6 +151,7 @@ class SkillStateOutSchema(CamelModel):
     last_practiced_at: str  # LocalDateTime 형식(Z 없음), UTC
     mastery_prob: float
     error_counts: dict[str, int]
+    recent_results: str  # 최근 5회 정오 ('01101'), 오래된 것부터. Spring 은 저장·전달만
 
 
 class AttemptAnalyzeResponse(CamelModel):
@@ -212,6 +216,7 @@ def _to_states(items: list[SkillStateSchema]) -> list[SkillState]:
                 last_practiced_at=_utc_naive(s.last_practiced_at),
                 mastery_prob=s.mastery_prob,
                 error_counts={k: v for k, v in errs.items() if v},
+                recent_results=s.recent_results or "",
             )
         )
     return out
@@ -227,6 +232,7 @@ def _state_out(s: SkillState) -> SkillStateOutSchema:
         ),
         mastery_prob=s.mastery_prob if s.mastery_prob is not None else 0.0,
         error_counts=dict(s.error_counts),
+        recent_results=s.recent_results,
     )
 
 

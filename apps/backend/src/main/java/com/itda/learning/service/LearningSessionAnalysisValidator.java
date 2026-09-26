@@ -94,7 +94,8 @@ final class LearningSessionAnalysisValidator {
           || state.nCorrect() < 0
           || state.nCorrect() > state.nAttempts()
           || !isProbability(state.masteryProb())
-          || state.errorCounts() == null) {
+          || state.errorCounts() == null
+          || !isRecentResults(state.recentResults())) {
         throw analysisUnavailable();
       }
       validateErrorCounts(state.errorCounts(), true);
@@ -117,6 +118,12 @@ final class LearningSessionAnalysisValidator {
       }
     }
     return total;
+  }
+
+  /** recentResults: 없거나(빈 문자열) '0'/'1' 로만 된 5자 이하 */
+  private static boolean isRecentResults(String value) {
+    return value == null
+        || (value.length() <= 5 && value.chars().allMatch(c -> c == '0' || c == '1'));
   }
 
   static ErrorType parseErrorType(String value) {
