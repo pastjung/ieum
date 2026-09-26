@@ -92,6 +92,8 @@ export default function ClassWaiting() {
           if (allowed) void hapticSuccess();
           announce(allowed ? speakingAllowedAnnouncement() : SPEAKING_REVOKED_MESSAGE);
         },
+        // 조회·풀이 전환은 Task 4에서 lectureProblemSync.refresh()로 잇는다
+        onCurrentProblemChanged: () => undefined,
       })
       .catch((error: unknown) => {
         if (!mountedRef.current) return;

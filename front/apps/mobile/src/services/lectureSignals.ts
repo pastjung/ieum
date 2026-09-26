@@ -20,6 +20,23 @@ export function isLectureOpen(metadata: string | undefined | null): boolean {
   }
 }
 
+/**
+ * 방 metadata의 현재 문제 ID. 강사가 출제하면 서버가 {"status":"OPEN","currentProblemId":"26578"}로 쓴다.
+ * 없거나 null·빈 문자열·문자열이 아니면 null — ID는 계약상 10진수 문자열이다.
+ * 이 값은 "다시 조회하라"는 신호일 뿐이다. 문제 내용은 GET /lectures/{id}로 받는다.
+ */
+export function currentProblemIdFrom(metadata: string | undefined | null): string | null {
+  if (!metadata) return null;
+  try {
+    const parsed: unknown = JSON.parse(metadata);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const id = (parsed as { currentProblemId?: unknown }).currentProblemId;
+    return typeof id === "string" && id !== "" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 음성 장애를 수업 종료로 오인하지 않는다 — 종료는 방 삭제일 때만이다 */
 export function classifyDisconnect(reason: number | undefined, leftByUser: boolean): RoomExit {
   if (reason === ROOM_DELETED_REASON) return "ended";
