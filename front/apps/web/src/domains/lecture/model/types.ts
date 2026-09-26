@@ -32,3 +32,9 @@ export interface CreateLectureInput {
   description?: string
   scheduledAt?: string
 }
+
+/** 발언 허용·회수 응답 (API 명세 8.5절). 화면은 이 응답이 아니라 LiveKit 권한 변경 이벤트로 갱신한다 */
+export interface SpeakingResult {
+  userId: string
+  allowed: boolean
+}

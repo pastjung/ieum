@@ -7,6 +7,8 @@ const MESSAGES: Record<string, string> = {
   LECTURE_NOT_FOUND: '수업을 찾을 수 없어요.',
   INVALID_LECTURE_STATE: '지금 수업 상태에서는 할 수 없는 작업이에요. 새로고침해 주세요.',
   MEDIA_SERVER_UNAVAILABLE: '음성 서버에 연결하지 못했어요. 같은 버튼을 다시 눌러 주세요.',
+  LECTURE_PARTICIPANT_NOT_CONNECTED: '지금 연결돼 있지 않은 학생이에요.',
+  LECTURE_PARTICIPANT_NOT_FOUND: '수업에 참여 중인 학생이 아니에요.',
   INVALID_REQUEST_INPUT: '입력값을 확인해 주세요.',
   NETWORK_UNAVAILABLE: '서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.',
   INVALID_ACCOUNT_INPUT: '아이디와 비밀번호 형식을 확인해 주세요.',

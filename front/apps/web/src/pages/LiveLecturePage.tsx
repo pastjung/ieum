@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@ieum/api-client'
 import { lectureApi } from '../domains/lecture/api/lectureApi'
 import { connectInstructorRoom, type InstructorRoom, type RoomState } from '../domains/lecture/live/instructorRoom'
+import type { RosterStudent } from '../domains/lecture/live/roster'
 import {
   mockBankResult,
   mockCurrentProblem,
@@ -72,7 +73,6 @@ const LEGEND: { label: string; swatch: CSSProperties }[] = [
   { label: '정답', swatch: { background: c.primarySoft, border: `1px solid ${c.primaryStrong}` } },
   { label: '오답', swatch: { background: c.warningSoft, border: `1px solid ${c.warningLine}` } },
   { label: '미착수', swatch: { background: c.bg, border: `1px solid ${c.borderSoft}` } },
-  { label: '미입장', swatch: { border: `1.5px solid ${c.borderStrong}` } },
 ]
 
 function BrailleCell({ dots }: { dots: readonly number[] }) {
@@ -100,39 +100,108 @@ function BrailleCell({ dots }: { dots: readonly number[] }) {
   )
 }
 
-function StudentCard({ student }: { student: MockStudent }) {
-  const look = STUDENT_LOOK[student.state]
+/** 답안 상태는 아직 목이다(문제 출제·답안 API는 범위 밖). 미입장 예시는 실제 명단과 모순되므로 뺀다 */
+const MOCK_ANSWERS = mockStudents.filter((s) => s.state !== 'absent')
+
+/** 같은 학생에게는 정렬 순서가 바뀌어도 같은 예시 답안을 보여 준다 */
+function mockAnswerFor(userId: string): MockStudent {
+  return MOCK_ANSWERS[Number(userId) % MOCK_ANSWERS.length]
+}
+
+interface StudentCardProps {
+  student: RosterStudent
+  /** 수업 중이고 음성 방에 연결돼 있을 때만 발언을 바꿀 수 있다 */
+  canControl: boolean
+  /** 이 학생의 발언 요청이 진행 중 */
+  pending: boolean
+  disabled: boolean
+  onToggleSpeaking: () => void
+}
+
+function StudentCard({ student, canControl, pending, disabled, onToggleSpeaking }: StudentCardProps) {
+  const answer = mockAnswerFor(student.userId)
+  const look = STUDENT_LOOK[answer.state]
+  const action = student.speakingAllowed ? '발언 끄기' : '발언 허용'
   return (
     <li
       style={{
-        position: 'relative',
         borderRadius: theme.radius.control,
         padding: 12,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
-        ...look.card,
+        gap: 8,
+        background: c.surface,
+        border: `1.5px solid ${student.isSpeaking ? c.primary : c.border}`,
+        boxShadow: student.isSpeaking ? `0 0 0 3px ${c.primarySoft}` : 'none',
       }}
     >
-      <span style={{ fontSize: 14, fontWeight: 800, color: look.name }}>{student.name}</span>
-      {student.glyph && <span style={{ fontSize: 24, lineHeight: 1, color: look.accent }}>{student.glyph}</span>}
-      <span style={{ fontSize: 11.5, fontWeight: 700, color: look.accent, fontFamily: student.state === 'correct' ? mono : undefined }}>
-        {student.detail}
-      </span>
-      <span
-        role="img"
-        aria-label={student.deviceConnected ? '장치 연결됨' : '장치 끊김'}
+      {/* 실제: 이름·손들기·발언 허용·마이크·말하는 중 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {student.name}
+        </span>
+        {student.handUp && (
+          <span role="img" aria-label="손 들었어요" style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>
+            ✋
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700 }}>
+        {student.speakingAllowed && (
+          <span style={{ padding: '2px 8px', borderRadius: theme.radius.pill, background: c.primarySoft, color: c.primaryDark }}>
+            발언 허용
+          </span>
+        )}
+        <span style={{ color: student.micOn ? c.primaryDark : c.textMuted }}>{student.micOn ? '🎙 마이크 켜짐' : '마이크 꺼짐'}</span>
+        {student.isSpeaking && <span style={{ color: c.primaryDark }}>말하는 중</span>}
+      </div>
+      {/* 목: 답안 상태 예시 — 점선 칸으로 실제 정보와 구분한다 */}
+      <div
         style={{
-          position: 'absolute',
-          right: 9,
-          bottom: 9,
-          width: 11,
-          height: 11,
-          borderRadius: '50%',
-          background: student.deviceConnected ? c.primaryDark : c.live,
-          border: '2px solid #FFFFFF',
+          ...look.card,
+          border: `1px dashed ${c.borderStrong}`,
+          borderRadius: theme.radius.small,
+          padding: '6px 8px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
         }}
-      />
+      >
+        <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted }}>예시</span>
+        {answer.glyph && <span style={{ fontSize: 18, lineHeight: 1, color: look.accent }}>{answer.glyph}</span>}
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: look.accent, fontFamily: answer.state === 'correct' ? mono : undefined }}>
+          {answer.detail}
+        </span>
+        <span
+          role="img"
+          aria-label={answer.deviceConnected ? '장치 연결됨(예시)' : '장치 끊김(예시)'}
+          style={{
+            marginLeft: 'auto',
+            width: 9,
+            height: 9,
+            borderRadius: '50%',
+            flexShrink: 0,
+            background: answer.deviceConnected ? c.primaryDark : c.live,
+          }}
+        />
+      </div>
+      {canControl && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onToggleSpeaking}
+          aria-label={pending ? `${student.name} 처리 중` : `${student.name} ${action}`}
+          aria-busy={pending}
+          style={{
+            ...buttonStyle(student.speakingAllowed ? 'dangerOutline' : 'mintOutline', 'sm'),
+            padding: '6px 10px',
+            fontSize: 12,
+            ...(disabled ? dimmed : {}),
+          }}
+        >
+          {pending ? '처리 중…' : action}
+        </button>
+      )}
     </li>
   )
 }
@@ -196,6 +265,9 @@ export function LiveLecturePage() {
   const [busy, setBusy] = useState(false)
   const [joining, setJoining] = useState(false)
   const [endFailed, setEndFailed] = useState(false)
+  const [students, setStudents] = useState<RosterStudent[]>([])
+  const [audioBlocked, setAudioBlocked] = useState(false)
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const roomRef = useRef<InstructorRoom | null>(null)
   // joinVoice 호출을 직렬화하는 세대 번호. 진입 자동 접속과 "음성 다시 연결" 클릭이
@@ -214,12 +286,29 @@ export function LiveLecturePage() {
     try {
       await releaseRoom()
       if (seq !== joinSeqRef.current) return // 더 나중 호출이나 언마운트에 밀려났다
+      // 이전 방의 학생 목록·재생 상태는 그 방의 콜백이 이미 세대 번호로 막혀 있어 여기서 비운다
+      setStudents([])
+      setAudioBlocked(false)
       const token = await lectureApi.issueMediaToken(lectureId)
       if (seq !== joinSeqRef.current) return
-      const room = await connectInstructorRoom(token, (state) => {
-        // 이 방이 더 이상 최신 접속이 아니면(다른 접속으로 대체됐거나 언마운트됐으면) 상태를 덮어쓰지 않는다
-        if (seq === joinSeqRef.current) setRoomState(state)
-      })
+      // 이 방이 더 이상 최신 접속이 아니면(다른 접속으로 대체됐거나 언마운트됐으면) 어떤 콜백도 화면을 덮어쓰지 않는다
+      const room = await connectInstructorRoom(
+        token,
+        (state) => {
+          if (seq === joinSeqRef.current) setRoomState(state)
+        },
+        {
+          onRoster: (next) => {
+            if (seq === joinSeqRef.current) setStudents(next)
+          },
+          onAudioPlayback: (playing) => {
+            if (seq === joinSeqRef.current) setAudioBlocked(!playing)
+          },
+          // 마이크 권한 프롬프트가 열려 있는 동안에도 확인한다 — 그 사이 언마운트되거나
+          // 다음 접속(음성 다시 연결)에 밀려나면 학생 오디오를 붙이지 않고 방을 바로 끊는다
+          isStale: () => seq !== joinSeqRef.current,
+        },
+      )
       if (seq !== joinSeqRef.current) {
         // 이 사이에 더 나중 호출이 이미 새 방을 roomRef에 넣었거나 언마운트됐다 —
         // 내가 만든 방은 아무도 참조하지 않으므로 여기서 바로 정리한다 (누수 방지)
@@ -228,6 +317,8 @@ export function LiveLecturePage() {
       }
       roomRef.current = room
       setMic(true)
+      setStudents(room.roster())
+      setAudioBlocked(!room.canPlaybackAudio())
     } finally {
       if (seq === joinSeqRef.current) setJoining(false)
     }
@@ -292,6 +383,26 @@ export function LiveLecturePage() {
       setMic(room.micEnabled())
     })
 
+  // 화면은 응답이 아니라 LiveKit 권한·속성 변경 이벤트(onRoster)로 갱신된다 — 권한이 유일한 상태다
+  const toggleSpeaking = (student: RosterStudent) =>
+    run(async () => {
+      setPendingUserId(student.userId)
+      try {
+        await lectureApi.setSpeaking(lectureId, student.userId, !student.speakingAllowed)
+      } finally {
+        setPendingUserId(null)
+      }
+    })
+
+  // 사용자 클릭 안에서 불러야 브라우저가 재생을 허락한다
+  const enableAudio = () =>
+    run(async () => {
+      const room = roomRef.current
+      if (!room) return
+      const playing = await room.startAudio()
+      if (roomRef.current === room) setAudioBlocked(!playing)
+    })
+
   const end = () => {
     if (!window.confirm('수업을 종료할까요? 학생들의 음성 연결도 끝납니다.')) return
     void run(async () => {
@@ -308,6 +419,8 @@ export function LiveLecturePage() {
           await releaseRoom()
           setMic(false)
           setRoomState('disconnected')
+          setStudents([])
+          setAudioBlocked(false)
         }
         throw e
       }
@@ -344,6 +457,7 @@ export function LiveLecturePage() {
 
   const badge = STATUS_BADGE[lecture.status]
   const open = lecture.status === 'OPEN'
+  const canControl = open && roomState === 'connected'
   const indicator = micIndicator(lecture.status, roomState, mic)
   const elapsedEnd = lecture.status === 'CLOSED' && lecture.endedAt ? Date.parse(lecture.endedAt) : now
   const elapsed = lecture.startedAt ? formatElapsed(elapsedEnd - Date.parse(lecture.startedAt)) : '--:--'
@@ -501,11 +615,30 @@ export function LiveLecturePage() {
             </div>
           </div>
 
-          {/* 목: 학생 진행 상태 — 학습자는 숨김 참가자라 실제 입장 여부도 알 수 없다 */}
+          {/* 실제: 입장한 학생(LiveKit 참가자)·손들기·발언 허용·마이크 / 목: 카드 안 점선 "예시" 칸의 답안 상태 */}
           <section style={{ ...cardStyle, flex: 1, minHeight: 0, padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>학생 진행 상태</h2>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: c.textSub }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>학생 · {students.length}명</h2>
+                {canControl && audioBlocked && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={enableAudio}
+                    style={{
+                      ...buttonStyle('primary', 'sm'),
+                      padding: '6px 14px',
+                      fontSize: 12.5,
+                      boxShadow: `0 2px 0 ${c.primaryStrong}`,
+                      ...(busy ? dimmed : {}),
+                    }}
+                  >
+                    학생 소리 켜기
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, fontSize: 12, color: c.textSub }}>
+                <span style={{ fontWeight: 700 }}>답안 상태(예시)</span>
                 {LEGEND.map((item) => (
                   <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <span style={{ width: 9, height: 9, borderRadius: 2, ...item.swatch }} />
@@ -514,26 +647,39 @@ export function LiveLecturePage() {
                 ))}
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ width: 9, height: 9, borderRadius: '50%', background: c.primaryDark }} />
-                  우측 아래 점 = 장치 연결 여부
+                  점 = 장치 연결 여부
                 </span>
               </div>
             </div>
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                flex: 1,
-                display: 'grid',
-                gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
-                gridAutoRows: 'minmax(104px, 1fr)',
-                gap: 10,
-              }}
-            >
-              {mockStudents.map((student) => (
-                <StudentCard key={student.name} student={student} />
-              ))}
-            </ul>
+            {students.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 14, color: c.textSub }}>아직 입장한 학생이 없어요</p>
+            ) : (
+              <ul
+                style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  flex: 1,
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))',
+                  alignContent: 'start',
+                  gap: 10,
+                }}
+              >
+                {students.map((student) => (
+                  <StudentCard
+                    key={student.userId}
+                    student={student}
+                    canControl={canControl}
+                    pending={pendingUserId === student.userId}
+                    disabled={busy || joining}
+                    onToggleSpeaking={() => void toggleSpeaking(student)}
+                  />
+                ))}
+              </ul>
+            )}
           </section>
         </main>
 
@@ -601,7 +747,7 @@ export function LiveLecturePage() {
                 장치 선택
               </button>
             </div>
-            <div style={{ fontSize: 11.5, color: c.darkTextSub }}>강사 → 학생 단방향 음성 · 녹음·저장 없음</div>
+            <div style={{ fontSize: 11.5, color: c.darkTextSub }}>발언을 허용한 학생만 말할 수 있어요 · 녹음·저장 없음</div>
           </section>
 
           {/* 목: 담아둔 세트 */}

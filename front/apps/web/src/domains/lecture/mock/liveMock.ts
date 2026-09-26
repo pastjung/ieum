@@ -1,6 +1,6 @@
 /**
  * 03 실시간 수업 화면의 목 데이터. 문제 출제·답안·학생 진행 상태 API는 MVP 범위 밖이다.
- * 학습자는 음성 방에서 숨김 참가자라 실제 입장 여부도 여기서는 알 수 없다.
+ * 학생 명단은 실제 LiveKit 참가자로 바뀌었고, mockStudents는 학생 카드 안 "예시" 답안 칸에만 쓴다.
  * 값은 와이어프레임 `이음 강사웹.html` 03 화면을 그대로 옮겼다.
  */
 export type MockStudentState = 'correct' | 'wrong' | 'idle' | 'absent'

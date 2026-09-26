@@ -1,6 +1,6 @@
 import type { ApiClient } from '@ieum/api-client'
 import { api } from '../../../shared/api/apiClient'
-import type { CreateLectureInput, InstructorLecture, LecturePage, MediaToken } from '../model/types'
+import type { CreateLectureInput, InstructorLecture, LecturePage, MediaToken, SpeakingResult } from '../model/types'
 
 export function createLectureApi(client: ApiClient) {
   return {
@@ -22,6 +22,16 @@ export function createLectureApi(client: ApiClient) {
 
     /** 강사 토큰은 OPEN일 때만 발급된다. 발급할 때 서버가 방을 다시 열어 metadata를 복구한다 */
     issueMediaToken: (lectureId: string) => client.post<MediaToken>(`/lectures/${encodeURIComponent(lectureId)}/media-tokens`),
+
+    /**
+     * 학생 발언 허용(true)·회수(false). 멱등이며 서버는 저장하지 않는다 — LiveKit 참가자 권한이 유일한 상태다.
+     * 허용·회수 모두 서버가 학생의 손(`hand`)을 내린다
+     */
+    setSpeaking: (lectureId: string, userId: string, allowed: boolean) =>
+      client.put<SpeakingResult>(
+        `/lectures/${encodeURIComponent(lectureId)}/participants/${encodeURIComponent(userId)}/speaking`,
+        { allowed },
+      ),
   }
 }
 
