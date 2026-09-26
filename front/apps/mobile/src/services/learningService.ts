@@ -18,6 +18,9 @@ import {
 import { api } from "./apiClient";
 import type { ServerSessionMeta } from "@/stores/sessionStore";
 
+/** 진행 중 세션의 종류. 새 세션은 같은 종류의 진행 중 세션만 닫으므로 종류마다 하나씩 남을 수 있다 */
+export type InProgressKind = "learning" | "review";
+
 /**
  * 마지막 글자의 받침 유무로 "을"/"를"을 고른다.
  *
@@ -95,14 +98,20 @@ export const learningService = {
   },
 
   /**
-   * 진행 중인 학습 세션. 없으면 null.
+   * 진행 중인 세션 중 `kind` 종류의 것. 없으면 null.
    *
    * 홈의 "이어서 학습"이 오랫동안 목 데이터("3단계 자음과 모음 · 7 / 10 문항")를 보여주고,
    * 누르면 진행 중이던 세션이 아니라 새 자음 세션을 만들었다. 이어받을 세션의 식별자를
    * 알 방법이 없었기 때문이다.
+   *
+   * **종류를 반드시 고른다.** 고르지 않으면 서버는 두 종류 중 최근 것 하나만 준다. 단계 학습과
+   * 복습이 함께 진행 중일 때 오래된 쪽이 가려져 이어받을 수 없고, 세션 안내 화면은 새 세션이
+   * 그것을 닫는다는 것을 묻지도 못한다.
    */
-  async getInProgressSession(): Promise<InProgressSession | null> {
-    const payload = await api.get<unknown>("/learning-sessions/in-progress");
+  async getInProgressSession(kind: InProgressKind): Promise<InProgressSession | null> {
+    const payload = await api.get<unknown>(
+      `/learning-sessions/in-progress?review=${kind === "review"}`,
+    );
     // 204는 본문이 없다 — 진행 중인 것이 없다는 뜻이다
     if (payload === undefined || payload === null || payload === "") {
       return null;
