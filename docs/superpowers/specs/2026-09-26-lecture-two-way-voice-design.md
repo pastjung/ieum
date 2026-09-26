@@ -50,6 +50,7 @@ backend  ── updateParticipant(permission{canPublish: false, ...}, attributes
 
 - 숨김을 해제하면 학습자끼리도 서로의 표시 이름(username)을 본다. 양방향 수업에서는 서로 목소리를 듣는 것이 전제이므로 받아들인다.
   identity(`user-{userId}`)는 그대로다.
+- 트레이드오프: `canUpdateOwnMetadata` 는 학습자가 자기 표시 이름·metadata·모든 속성(`speaking` 포함)을 스스로 바꾸는 것도 허용한다. 발언 통제는 서버 권한(`permissions.canPublish`)만으로 이뤄지므로 깨지지 않지만, 다른 학습자·강사 화면에 잘못된 이름이나 상태가 보일 수 있다(악용 여지 포함).
 - 재접속하면 새 토큰이라 발언 허용은 초기화된다(범위 밖 참고).
 
 ### 3.2 새 API
@@ -74,12 +75,12 @@ backend  ── updateParticipant(permission{canPublish: false, ...}, attributes
 
 ### 3.3 참가자 속성 규약 (클라이언트 공통)
 
-| 키 | 값 | 쓰는 쪽 |
+| 키 | 값 | 쓰는 쪽(의도) |
 | --- | --- | --- |
 | `hand` | `up` / `down` | 학생(손들기·내리기), 백엔드(허용·회수 시 `down`) |
-| `speaking` | `allowed` / `none` | 백엔드만 |
+| `speaking` | `allowed` / `none` | 백엔드(허용·회수 시 갱신) |
 
-클라이언트는 `speaking`을 표시 용도로만 쓰고, 실제 송출 가능 여부는 LiveKit 권한(`participant.permissions.canPublish`)으로 판단한다.
+"쓰는 쪽"은 의도일 뿐 강제가 아니다. 학생 토큰의 `canUpdateOwnMetadata` 는 attributes 전체에 적용되어, 학생이 `speaking`을 포함한 자기 이름·metadata·속성을 기술적으로 바꿀 수 있다. 그래서 클라이언트는 `speaking`과 표시 이름(`name`)을 신뢰할 수 없는 표시용 데이터로만 쓰고, 실제 송출(마이크) 가능 여부는 반드시 LiveKit 권한(`participant.permissions.canPublish` + `canPublishSources`)으로만 판단한다. 참가자 식별은 표시 이름이 아니라 identity `user-{userId}`를 신뢰 가능한 키로 쓴다.
 
 ## 4. 강사 웹 (03 화면)
 

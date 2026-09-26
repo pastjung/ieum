@@ -1142,7 +1142,7 @@ OpenVidu 3.x(LiveKit 기반)를 사용한다. 음성 토큰은 participants 행�
 | 활성 참여 LEARNER (left_at NULL) | SCHEDULED, OPEN | 입장, subscribe, 자기 참가자 속성 갱신(손들기 — 8.5.1절). 입장 시에는 publish·데이터 전송 불가 |
 
 - 방 이름은 `lecture-{lectureId}`, 참가자 identity는 `user-{userId}`, 표시 이름은 username이다.
-- 학습자는 숨지 않고 입장한다. 강사가 참가자 목록에서 학습자를 보고 발언을 허용해야 하며, 서로 목소리를 듣는 수업이므로 학습자끼리도 표시 이름(username)을 본다. HTTP Snapshot에서 다른 참여자를 노출하지 않는 규칙(8.2절)은 그대로다.
+- 학습자는 숨지 않고 입장한다. 강사가 참가자 목록에서 학습자를 보고 발언을 허용해야 하며, 서로 목소리를 듣는 수업이므로 학습자끼리도 표시 이름(username)을 본다. HTTP Snapshot에서 다른 참여자를 노출하지 않는 규칙(8.2절)은 그대로다. 트레이드오프: 학습자는 `canUpdateOwnMetadata` 로 자기 표시 이름·metadata·속성(예: `speaking`)을 스스로 바꿀 수 있어, 다른 학습자에게 잘못된 이름이나 상태가 보일 수 있다(악용 여지 포함). 실제 발언 여부는 서버 권한(아래)만이 결정하므로 발언 통제는 깨지지 않는다.
 - 토큰 유효기간은 10분이다. 접속 중 갱신은 OpenVidu가 처리하며, 클라이언트는 재접속할 때만 새 토큰을 받는다. JWT `exp` 와 응답 `expiresAt` 은 같은 시각이다.
 - 강사가 OPEN으로 바꾸면 서버가 방을 만들고 방 metadata를 `{"status":"OPEN"}` 으로 설정한다. 학습자는 SCHEDULED에서 미리 접속해 대기할 수 있으므로 클라이언트는 접속 시 metadata와 metadata 변경 이벤트로 시작을 안다.
 - 강사가 CLOSED로 바꾸면 서버가 방을 삭제한다. 클라이언트는 연결 해제 사유 `ROOM_DELETED` 를 수업 종료로, 그 밖의 해제를 음성 장애로 구분한다. 음성 장애가 곧 수업 종료는 아니며 `GET /api/v1/lectures/{lectureId}` 로 상태를 확인한다.
@@ -1166,12 +1166,13 @@ OpenVidu 3.x(LiveKit 기반)를 사용한다. 음성 토큰은 participants 행�
 
 참가자 속성(LiveKit participant attributes, 문자열 map)은 다음과 같다.
 
-| 키 | 값 | 쓰는 쪽 |
+| 키 | 값 | 쓰는 쪽(의도) |
 | --- | --- | --- |
 | `hand` | `up` / `down` | 학습자(손들기·내리기), 서버(허용·회수 시 `down`) |
-| `speaking` | `allowed` / `none` | 서버만 |
+| `speaking` | `allowed` / `none` | 서버(허용·회수 시 갱신) |
 
-- `speaking` 은 표시용이다. 실제 송출 가능 여부는 LiveKit 참가자 권한(`permissions.canPublish` 와 `canPublishSources` 의 MICROPHONE)으로 판단한다.
+- "쓰는 쪽"은 설계 의도일 뿐 강제가 아니다. 학습자 토큰의 `canUpdateOwnMetadata` 는 attributes 전체에 적용되므로, 학습자는 기술적으로 `speaking` 을 포함한 자기 참가자의 이름·metadata·모든 속성을 스스로 바꿀 수 있다. 서버는 발언 허용·회수 API를 호출할 때만 `hand`·`speaking` 을 덮어써 되돌린다.
+- 그러므로 클라이언트는 `speaking` 과 표시 이름(`name`)을 **신뢰할 수 없는 표시용 데이터**로만 쓴다. 실제 송출(마이크) 가능 여부는 반드시 LiveKit 참가자 권한(`permissions.canPublish` 와 `canPublishSources` 의 MICROPHONE)만으로 판단하고, 참가자를 식별할 때는 표시 이름이 아니라 identity `user-{userId}` 를 신뢰 가능한 키로 쓴다.
 - 발언 허용·손들기 상태는 DB에 저장하지 않는다. LiveKit 참가자 권한·속성이 유일한 상태이며, 학습자가 재접속하면(새 토큰) 초기화된다.
 - 참가자 identity `user-{userId}` 에서 `user-` 를 떼면 이 API의 `userId` 다.
 
