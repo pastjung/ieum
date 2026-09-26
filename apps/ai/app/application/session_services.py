@@ -7,15 +7,23 @@
 학습자 상태(skillStates)는 Spring 이 저장·전달하고, 이 서비스는 상태를 갖지 않는다.
 """
 
+import json
+import logging
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from app.domain.skills.models import SkillCatalog
 from app.infrastructure.braille_core.drill_items import build_drill_item
 from app.infrastructure.braille_core.estimate import BKTEstimator, label_of
 from app.infrastructure.braille_core.grader import grade, josa, speak_kc
+from app.infrastructure.braille_core.shadow_model import (
+    JsonTreeModel,
+    ShadowPredictor,
+    features_for,
+)
 
 MAX_WEAK = 5  # weakSkills 최대 개수
 EXPLAIN = {
@@ -38,6 +46,25 @@ EXPLAIN = {
 }
 
 
+RECENT_RESULTS_LEN = 5  # recentResults 에 남기는 최근 관측 수
+SHADOW_MODEL_PATH = (
+    Path(__file__).resolve().parents[1] / "infrastructure" / "data" / "lgbm_shadow_v1.json"
+)
+shadow_log = logging.getLogger("itda.shadow")
+_shadow_cache: dict[str, ShadowPredictor | None] = {}
+
+
+def load_shadow_predictor() -> ShadowPredictor | None:
+    """그림자 모델. 파일이 없거나 깨져도 서비스는 그대로 돈다 (None)."""
+    if "p" not in _shadow_cache:
+        try:
+            _shadow_cache["p"] = ShadowPredictor(JsonTreeModel.load(SHADOW_MODEL_PATH))
+        except Exception as e:  # noqa: BLE001 — 그림자 모델 문제는 응답에 영향을 주면 안 된다
+            shadow_log.warning("shadow model unavailable: %s", e)
+            _shadow_cache["p"] = None
+    return _shadow_cache["p"]
+
+
 @dataclass
 class SkillState:
     """Spring 의 SkillState 와 1:1 (내부 표현)."""
@@ -48,6 +75,7 @@ class SkillState:
     last_practiced_at: datetime | None = None
     mastery_prob: float | None = None
     error_counts: dict[str, int] = field(default_factory=dict)
+    recent_results: str = ""  # 최근 5회 정오, 오래된 것부터 ('0'=틀림 '1'=맞음). 학습 모델 특징용
 
     def to_estimate(self, kc: str) -> dict[str, Any]:
         return {
@@ -245,9 +273,89 @@ class SessionService:
                     last_practiced_at=now,
                     mastery_prob=round(p, 4),
                     error_counts=counts,
+                    recent_results=(s.recent_results + ("1" if r.correct else "0"))[
+                        -RECENT_RESULTS_LEN:
+                    ],
                 )
             )
         return updated
+
+    # ── 그림자 모델: 응답에는 쓰지 않고 로그에만 남긴다 ─────────────────────
+    def _log_shadow(
+        self,
+        attempt: Attempt,
+        graded: dict[str, Any],
+        results: list[SkillResult],
+        skill_states: list[SkillState],
+        now: datetime,
+    ) -> None:
+        """이 문항을 풀기 전 상태로 '확률 갱신식(BKT)'과 '학습 모델(LightGBM)'이 각각 예측한 P(맞힘)과
+        실제 결과를 한 줄 JSON 으로 남긴다. 파일럿 로그를 모아 실제 학습자에게서 누가 더 맞는지 비교한다."""
+        predictor = load_shadow_predictor()
+        if predictor is None or not results:
+            return
+        try:
+            by_id = {s.learning_skill_id: s for s in skill_states}
+            st_dicts = [
+                {
+                    "learning_skill_id": s.learning_skill_id,
+                    "n_attempts": s.n_attempts,
+                    "n_correct": s.n_correct,
+                    "last_practiced_at": s.last_practiced_at,
+                    "mastery_prob": s.mastery_prob,
+                    "error_counts": s.error_counts,
+                    "recent_results": s.recent_results,
+                }
+                for s in skill_states
+            ]
+            item_ids = [r.learning_skill_id for r in results]
+            is_drill = build_drill_item(attempt.target_text, attempt.expected_patterns) is not None
+            rows: list[dict[str, Any]] = []
+            for r in results:
+                skill = self.catalog.by_id(r.learning_skill_id)
+                if skill is None:
+                    continue
+                st = by_id.get(r.learning_skill_id)
+                p_bkt = self.estimator.prior()
+                if st is not None and st.mastery_prob is not None:
+                    p_bkt = st.mastery_prob
+                    if st.last_practiced_at is not None:
+                        p_bkt = self.estimator._decay(p_bkt, st.to_estimate(skill.kc), now)
+                x = features_for(
+                    r.learning_skill_id,
+                    skill.level,
+                    next(
+                        (d for d in st_dicts if d["learning_skill_id"] == r.learning_skill_id), None
+                    ),
+                    st_dicts,
+                    item_ids,
+                    len(graded["expected_cells"]),
+                    is_drill,
+                    now,
+                )
+                rows.append(
+                    {
+                        "skill": r.learning_skill_id,
+                        "p_bkt": round(p_bkt, 4),
+                        "p_lgbm": round(predictor.predict(x), 4),
+                        "correct": r.correct,
+                    }
+                )
+            shadow_log.info(
+                json.dumps(
+                    {
+                        "event": "shadow_prediction",
+                        "model": predictor.version,
+                        "ts": now.isoformat(),
+                        "text": attempt.target_text,
+                        "n_cells": len(graded["expected_cells"]),
+                        "skills": rows,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        except Exception as e:  # noqa: BLE001
+            shadow_log.warning("shadow prediction skipped: %s", e)
 
     # ── ① 문항 하나 ────────────────────────────────────────────────────────
     def analyze_attempt(
@@ -257,6 +365,7 @@ class SessionService:
         warnings: list[str] = []
         graded = self._grade(attempt, warnings)
         results = self._skill_results(graded)
+        self._log_shadow(attempt, graded, results, skill_states, now)
 
         updated = self.apply_results(results, skill_states, now)
         fb = graded["feedback"]

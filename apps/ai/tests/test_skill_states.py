@@ -24,9 +24,7 @@ def _update(results, states=None):
 
 
 def test_기록이_없던_요소도_갱신된다():
-    res = _update(
-        [{"learningSkillId": SKILL_ID, "correct": False, "errorCounts": {"dot_missing": 1}}]
-    )
+    res = _update([{"learningSkillId": SKILL_ID, "correct": False, "errorCounts": {"dot_missing": 1}}])
 
     assert res.status_code == 200
     updated = res.json()["updatedSkillStates"]
