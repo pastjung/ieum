@@ -55,12 +55,15 @@ public class LectureMediaService {
     } else {
       throw LectureService.notFound();
     }
+    String room = LectureRoom.nameOf(lectureId);
+    if (publisher) {
+      // 마지막 참가자가 나가면 LiveKit이 방을 닫아 OPEN metadata가 사라진다. 강사가 재접속할 때 방을 다시 열어
+      // 뒤이어 접속하는 학습자도 시작 신호를 받게 한다. 여러 번 불러도 결과가 같다 (API 명세 8.5절).
+      liveRoomGateway.openRoom(room);
+    }
     return liveRoomGateway.issueToken(
         new MediaTokenRequest(
-            LectureRoom.nameOf(lectureId),
-            LectureRoom.identityOf(user.userId()),
-            displayName(user.userId()),
-            publisher));
+            room, LectureRoom.identityOf(user.userId()), displayName(user.userId()), publisher));
   }
 
   private String displayName(long userId) {

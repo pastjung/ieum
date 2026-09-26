@@ -83,6 +83,37 @@ class LectureMediaServiceTest {
   }
 
   @Test
+  void 강사가_토큰을_받을_때_방을_다시_열어_metadata를_복구한다() {
+    // departure timeout으로 방이 닫혔거나 metadata 없이 자동 생성된 방이어도 강사 재접속이 OPEN 신호를 되살린다.
+    lecture.open(NOW);
+
+    service.issue(INSTRUCTOR, LECTURE_ID);
+
+    assertThat(gateway.openedRooms).containsExactly("lecture-42");
+  }
+
+  @Test
+  void 방을_다시_열지_못하면_503이고_토큰을_발급하지_않는다() {
+    lecture.open(NOW);
+    gateway.failRoomOperations = true;
+
+    assertThatThrownBy(() -> service.issue(INSTRUCTOR, LECTURE_ID))
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
+    assertThat(gateway.issuedRequests).isEmpty();
+  }
+
+  @Test
+  void 학습자_토큰_발급은_방을_조작하지_않는다() {
+    participate(true);
+    lecture.open(NOW);
+
+    service.issue(LEARNER, LECTURE_ID);
+
+    assertThat(gateway.openedRooms).isEmpty();
+  }
+
+  @Test
   void 시작_전에는_강사도_토큰을_받을_수_없다() {
     assertThatThrownBy(() -> service.issue(INSTRUCTOR, LECTURE_ID))
         .extracting("errorCode")
