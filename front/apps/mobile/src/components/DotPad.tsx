@@ -31,8 +31,8 @@ interface Props {
 const positions: Record<Dot, object> = {
   3: { left: "3%", top: "5%" },
   6: { right: "3%", top: "5%" },
-  2: { left: "10%", top: "42%" },
-  5: { right: "10%", top: "42%" },
+  2: { left: "10%", top: "38%" },
+  5: { right: "10%", top: "38%" },
   1: { left: "14%", bottom: "3%" },
   4: { right: "14%", bottom: "3%" },
 };
