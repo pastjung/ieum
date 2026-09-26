@@ -250,7 +250,11 @@ export default function SessionIntro() {
         </View>
         {/*
           이어서 풀기를 주 버튼으로 둔다. TalkBack 포커스가 먼저 닿는 자리이고, 잃는 것이
-          없는 선택이기 때문이다 — 새로 시작하기는 되돌릴 수 없다
+          없는 선택이기 때문이다.
+
+          새로 시작하기는 길게 누르지 않아도 된다. 누르면 세션 안내로 넘어갈 뿐이고, 진행 중인
+          세션은 거기서 "시작하기"를 눌러 새 세션이 만들어질 때 닫힌다. 예전에는 길게 눌러야 해서
+          짧게 누르면 화면에 아무 변화가 없어 버튼이 고장 난 것처럼 보였다.
         */}
         <View style={{ gap: 12 }}>
           <AppButton
@@ -265,9 +269,7 @@ export default function SessionIntro() {
           <AppButton
             label="새로 시작하기"
             variant="secondary"
-            requireLongPress
             accessibilityHint="진행 중인 학습을 끝내고 새로 시작해요"
-            onShortPress={() => announce("길게 누르면 새로 시작해요.")}
             onPress={() => setConfirmed(true)}
           />
         </View>
