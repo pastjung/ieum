@@ -4,6 +4,7 @@ import type { MediaToken } from "@ieum/contracts";
 import { Room, RoomEvent } from "livekit-client";
 import { useLectureVoiceStore } from "@/stores/lectureVoiceStore";
 import { classService } from "./classService";
+import { pauseItdaForLecture } from "./itda";
 import { canSpeak, classifyDisconnect, handFromAttributes, isLectureOpen, type RoomExit } from "./lectureSignals";
 
 export interface LiveLectureHandlers {
@@ -81,12 +82,25 @@ function applyAudioProfile(current: Session, speaking: boolean): void {
   void AudioSession.configureAudio({ android: { audioTypeOptions } }).catch(() => undefined);
 }
 
+/**
+ * 내 마이크 상태를 끄고 잇다에게 마이크를 돌려준다.
+ * unpublish=true면 트랙도 내린다(회수 때 — LiveKit이 이미 내렸어도 무해하다).
+ * 방을 떠날 때는 disconnect가 로컬 트랙을 멈추므로 false로 부른다.
+ */
+function releaseMic(current: Session, unpublish: boolean): void {
+  const wasOn = current.micOn;
+  current.micOn = false;
+  if (wasOn && unpublish) void current.room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
+  pauseItdaForLecture(false); // 쉬고 있지 않았다면 아무 일도 없다
+}
+
 /** 로컬 참가자의 발언 권한이 바뀌었다 — 값이 실제로 바뀔 때만 반영하고 알린다 */
 function applySpeaking(current: Session, allowed: boolean): void {
   if (!isLive(current) || current.speakingAllowed === allowed) return;
   current.speakingAllowed = allowed;
   // 허용·회수 때 백엔드가 hand를 down으로 바꾼다. 속성 이벤트가 늦게 와도 버튼이 맞게 보이게 미리 내린다
   current.handUp = false;
+  if (!allowed) releaseMic(current, true);
   applyAudioProfile(current, allowed);
   syncVoice(current);
   current.handlers.onSpeakingChanged(allowed);
@@ -104,6 +118,7 @@ function finish(current: Session, exit: RoomExit): void {
   const wasLive = session === current;
   current.exited = true;
   current.room.removeAllListeners();
+  releaseMic(current, false);
   if (session === current) session = null;
   if (wasLive) useLectureVoiceStore.getState().reset();
   releaseAudio(current.generation);
@@ -114,6 +129,7 @@ async function discardSilently(previous: Session): Promise<void> {
   // 이전 핸들러가 불리지 않게 먼저 표시하고 끊는다
   previous.exited = true;
   previous.room.removeAllListeners();
+  releaseMic(previous, false);
   if (session === previous) {
     session = null;
     useLectureVoiceStore.getState().reset();
@@ -249,6 +265,59 @@ export const liveLecture = {
     await current.room.disconnect();
     // disconnect가 Disconnected 이벤트를 내지 않는 경우에도 한 번은 알린다
     finish(current, "left");
+  },
+
+  /** 손들기(true)·내리기(false). 발언이 허용된 동안에는 들지 않는다. 선생님께 전해지면 true */
+  async raiseHand(up: boolean): Promise<boolean> {
+    const current = session;
+    if (!current || !isLive(current)) return false;
+    if (up && current.speakingAllowed) return false;
+    try {
+      await current.room.localParticipant.setAttributes({ hand: up ? "up" : "down" });
+    } catch {
+      return false;
+    }
+    if (!isLive(current)) return false;
+    current.handUp = up;
+    syncVoice(current);
+    return true;
+  },
+
+  /**
+   * 내 마이크를 켜고(true) 끈다(false). 켜기는 선생님이 허용했을 때만 된다.
+   * 원하는 상태가 되면 true, 허용 안 됨·겹친 호출·실패·그 사이 회수나 퇴장이면 false.
+   * 마이크 런타임 권한(RECORD_AUDIO)은 부르는 쪽이 먼저 확인한다(micPermission).
+   */
+  async setMicrophone(on: boolean): Promise<boolean> {
+    const current = session;
+    if (!current || !isLive(current) || current.micBusy) return false;
+    if (on && !current.speakingAllowed) return false;
+    if (current.micOn === on) return true;
+
+    current.micBusy = true;
+    // 잇다(음성 인식)가 마이크를 먼저 놓아야 수업 마이크가 소리를 얻는다
+    if (on) pauseItdaForLecture(true);
+    try {
+      await current.room.localParticipant.setMicrophoneEnabled(on);
+    } catch {
+      current.micBusy = false;
+      if (on) pauseItdaForLecture(false);
+      return false;
+    }
+    current.micBusy = false;
+
+    // 켜는 사이 방을 떠났거나 선생님이 거뒀다 — 켜진 채 남기지 않는다
+    if (on && (!isLive(current) || !current.speakingAllowed)) {
+      void current.room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
+      pauseItdaForLecture(false);
+      return false;
+    }
+    if (!isLive(current)) return false;
+
+    current.micOn = on;
+    if (!on) pauseItdaForLecture(false);
+    syncVoice(current);
+    return true;
   },
 
   currentLectureId(): string | null {
