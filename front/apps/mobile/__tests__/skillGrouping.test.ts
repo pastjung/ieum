@@ -29,6 +29,17 @@ describe("요소 이름 표시", () => {
     expect(skillDisplayName(skill(1, "첫소리 기본 자음", "ㄱ", 0.1))).toBe("첫소리 기본 자음 ㄱ");
   });
 
+  it("이름이 이미 대상 글자로 끝나면 다시 붙이지 않는다", () => {
+    // QA: 이름이 "초성 ㅈ"인 행에 대상 글자를 또 붙여 "초성 ㅈ ㅈ"으로 나왔다
+    expect(skillDisplayName(skill(1, "초성 ㅈ", "ㅈ", 0.1))).toBe("초성 ㅈ");
+    expect(skillDisplayName(skill(2, "받침 ㄱ ", " ㄱ", 0.1))).toBe("받침 ㄱ");
+  });
+
+  it("이름 안에 대상 글자가 섞여 있어도 마지막 단어가 아니면 붙인다", () => {
+    // 우연히 같은 글자가 앞쪽에 있는 분류명까지 줄이면 요소끼리 구별되지 않는다
+    expect(skillDisplayName(skill(1, "ㄱ 뒤 된소리", "ㄲ", 0.1))).toBe("ㄱ 뒤 된소리 ㄲ");
+  });
+
   it("대상 글자가 없으면 이름만 쓴다", () => {
     expect(skillDisplayName(skill(1, "약자를 쓰지 않는 경우", "", 0.1))).toBe(
       "약자를 쓰지 않는 경우",
