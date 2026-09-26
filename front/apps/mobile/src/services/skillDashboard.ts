@@ -46,13 +46,19 @@ const EMPTY: SkillDashboard = {
 /**
  * 요소 한 줄에 쓸 이름.
  *
- * <p>`learning_skills.name`은 규칙의 **분류**다. 같은 값이 여러 행에 걸쳐 있어 — "첫소리 기본
- * 자음"만 14행, "단독 자모"는 35행 — 이름만 쓰면 화면에 같은 줄이 반복돼 학습자가 구별할 수
- * 없다. 그 분류 안에서 다루는 글자를 붙여 구별한다.
+ * <p>`learning_skills.name`은 대개 규칙의 **분류**다. 같은 값이 여러 행에 걸쳐 있어 — "첫소리
+ * 기본 자음"만 14행, "단독 자모"는 35행 — 이름만 쓰면 화면에 같은 줄이 반복돼 학습자가 구별할
+ * 수 없다. 그 분류 안에서 다루는 글자를 붙여 구별한다.
+ *
+ * <p>다만 "초성 ㅈ"처럼 이름이 이미 그 글자로 끝나는 행도 있다. 거기에 또 붙이면 "초성 ㅈ ㅈ"이
+ * 된다 — 마지막 단어가 대상 글자와 같으면 붙이지 않는다.
  */
 export function skillDisplayName(skill: SkillMastery): string {
+  const name = skill.name.trim();
   const target = skill.target.trim();
-  return target ? `${skill.name} ${target}` : skill.name;
+  if (!target) return name;
+  const words = name.split(/\s+/);
+  return words[words.length - 1] === target ? name : `${name} ${target}`;
 }
 
 function toRow(skill: SkillMastery): SkillRow {
