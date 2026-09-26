@@ -103,72 +103,47 @@ describe("서버 분석과 로컬 결과 중 무엇을 쓸지 고른다", () => 
     expect(result?.steps[1].speech).toContain("두 번째 칸");
   });
 
-  it("규칙 설명은 violatedSkills 에서 가져온다 (AI 문장이 아니다)", () => {
-    // AI의 두 문장은 어느 것도 규칙이 아니다:
-    //   tts    — AI가 자체 채점한 점 수준 서술. 우리 XOR 설명과 겹치고 백엔드 채점과 갈릴 수 있다
-    //   detail — 대개 "모음 유는 1, 4, 6점입니다" 같은 점 나열. 우리 문장의 되풀이다
-    // 진짜 규칙 문장은 learning_skills에 있고 백엔드가 violatedSkills로 실어 준다
+  it("어긴 학습요소의 이름·설명을 규칙 문장으로 붙이지 않는다", () => {
+    // QA: 설명이 이름과 같은 학습요소에서 "초성 ㅎ. 초성 ㅎ"처럼 같은 말이 되풀이됐다.
+    // 설명이 제대로 있는 요소도 붙이지 않는다 — 칸 설명이 무엇을 고칠지 이미 말한다
+    const cells = [cell(1, 0b011010, 0b010010, [4], [])];
+    const result = selectGradeFeedback(
+      analysis({
+        correct: false,
+        cells,
+        violatedSkills: [
+          { id: "20", name: "초성 ㅎ", description: "초성 ㅎ" },
+          { id: "23", name: "된소리", description: "첫소리 ㄲ은 된소리표를 붙인다." },
+        ],
+      }),
+      null,
+    );
+    const speech = result?.steps.map((s) => `${s.speech} ${s.detail}`).join(" ") ?? "";
+
+    expect(speech).toContain("4번 점이 빠졌어요");
+    expect(speech).not.toContain("초성 ㅎ");
+    expect(speech).not.toContain("된소리");
+    expect(speech).not.toContain("규칙을 다시 확인해 보세요");
+  });
+
+  it("AI가 준 피드백 문장도 쓰지 않는다", () => {
+    // tts는 AI가 자체 채점한 점 수준 서술이라 백엔드 채점과 갈릴 수 있고,
+    // detail은 대개 "모음 유는 1, 4, 6점입니다" 같은 점 나열이다
     const cells = [cell(1, 0b000101, 0b000001, [3], [])];
     const result = selectGradeFeedback(
       analysis({
         correct: false,
         cells,
         feedback: { tts: "AI의 점 수준 서술", detail: "모음 유는 1, 4, 6점입니다." },
-        violatedSkills: [
-          {
-            id: "23",
-            name: "된소리",
-            description: "첫소리 ㄲ은 ㄱ 점자 앞에 된소리표를 붙여 나타낸다.",
-          },
-        ],
       }),
       null,
     );
 
-    expect(result?.steps[0].speech).toContain("된소리");
-    expect(result?.steps[0].speech).toContain("첫소리 ㄲ은 ㄱ 점자 앞에 된소리표를 붙여 나타낸다.");
     expect(result?.steps[0].speech).not.toContain("AI의 점 수준 서술");
     expect(result?.steps[0].speech).not.toContain("모음 유는 1, 4, 6점입니다.");
   });
 
-  it("규칙 설명이 없는 학습요소면 이름만으로 문장을 만든다", () => {
-    // learning_skills.description은 TEXT NULL이고, 150개 중 48개는 이름표에 가깝다.
-    // 비어 있어도 어떤 규칙인지 이름은 말해 준다
-    const cells = [cell(1, 0b000101, 0b000001, [3], [])];
-    const result = selectGradeFeedback(
-      analysis({
-        correct: false,
-        cells,
-        violatedSkills: [{ id: "23", name: "받침 기본 자음", description: null }],
-      }),
-      null,
-    );
-
-    expect(result?.steps[0].speech).toContain("받침 기본 자음");
-    expect(result?.steps[0].speech).not.toMatch(/\s{2,}/);
-  });
-
-  it("어긴 학습요소가 여러 개여도 첫 번째 것만 말한다", () => {
-    // AI가 준 순서대로 앞의 것이 이번 오답에 가장 가깝다. 셋을 다 읽으면 첫 단계
-    // 낭독이 지나치게 길어져 학습자가 끝까지 듣지 못한다
-    const cells = [cell(1, 0b000101, 0b000001, [3], [])];
-    const result = selectGradeFeedback(
-      analysis({
-        correct: false,
-        cells,
-        violatedSkills: [
-          { id: "1", name: "된소리", description: "첫소리 ㄲ은 된소리표를 붙인다." },
-          { id: "2", name: "받침 기본 자음", description: "받침 ㄹ은 이렇게 쓴다." },
-        ],
-      }),
-      null,
-    );
-
-    expect(result?.steps[0].speech).toContain("첫소리 ㄲ은 된소리표를 붙인다.");
-    expect(result?.steps[0].speech).not.toContain("받침 ㄹ은 이렇게 쓴다.");
-  });
-
-  it("어긴 학습요소가 없으면 규칙 없이 점 수준 설명만 말한다", () => {
+  it("어긴 학습요소가 없어도 점 수준 설명을 말한다", () => {
     // 백엔드는 오답이라는데 AI는 어긴 요소를 못 찾은 경우. 여기서 AI의 detail로
     // 물러서면 "오답이에요" 밑에 "정답이에요. 다음 문제로 넘어갈게요."가 붙는다
     // (`apps/ai` 의 `_detail`이 그 문장을 돌려준다)

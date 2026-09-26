@@ -23,16 +23,15 @@ function ranked(count: number): SkillMastery[] {
 }
 
 describe("요소 이름 표시", () => {
-  it("분류 이름에 대상 글자를 붙인다", () => {
-    // learning_skills 의 name 은 분류다 — "첫소리 기본 자음"만 14행이라, 이름만 쓰면
-    // 화면에 같은 줄이 여러 번 반복돼 학습자가 구별할 수 없다
-    expect(skillDisplayName(skill(1, "첫소리 기본 자음", "ㄱ", 0.1))).toBe("첫소리 기본 자음 ㄱ");
+  it("대상 글자를 붙이지 않고 이름만 쓴다", () => {
+    // 규칙 이름 뒤의 메타데이터(대상 글자)는 학습자에게 뜻 없는 기호로 보여 뺀다
+    expect(skillDisplayName(skill(1, "첫소리 기본 자음", "ㄱ", 0.1))).toBe("첫소리 기본 자음");
   });
 
-  it("대상 글자가 없으면 이름만 쓴다", () => {
-    expect(skillDisplayName(skill(1, "약자를 쓰지 않는 경우", "", 0.1))).toBe(
-      "약자를 쓰지 않는 경우",
-    );
+  it("이름이 이미 글자를 담고 있어도 겹쳐 나오지 않는다", () => {
+    // QA: 이름이 "초성 ㅈ"인 행에 대상 글자를 또 붙여 "초성 ㅈ ㅈ"으로 나왔다
+    expect(skillDisplayName(skill(1, "초성 ㅈ", "ㅈ", 0.1))).toBe("초성 ㅈ");
+    expect(skillDisplayName(skill(2, " 받침 ㄱ ", "ㄱ", 0.1))).toBe("받침 ㄱ");
   });
 });
 
@@ -77,7 +76,7 @@ describe("약한 것과 잘하는 것만 보여준다", () => {
 
     expect(view.weakest[0]).toEqual({
       learningSkillId: 7,
-      label: "된소리 ㄲ",
+      label: "된소리",
       percent: 42,
       level: "더 연습해요",
     });

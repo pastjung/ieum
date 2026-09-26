@@ -10,18 +10,21 @@ const get = api.get as jest.Mock;
 describe("진행 중인 세션 조회", () => {
   beforeEach(() => get.mockReset());
 
-  it("GET /learning-sessions/in-progress 를 부른다", async () => {
-    get.mockResolvedValue({
-      sessionId: 7,
-      stageName: "단어",
-      review: false,
-      totalCount: 12,
-      completedCount: 5,
-    });
+  it("단계 학습은 review=false 로 고른다", async () => {
+    // 종류를 고르지 않으면 서버가 두 종류 중 최근 것 하나만 줘, 복습이 학습을 가린다
+    get.mockResolvedValue(undefined);
 
-    await learningService.getInProgressSession();
+    await learningService.getInProgressSession("learning");
 
-    expect(get).toHaveBeenCalledWith("/learning-sessions/in-progress");
+    expect(get).toHaveBeenCalledWith("/learning-sessions/in-progress?review=false");
+  });
+
+  it("복습은 review=true 로 고른다", async () => {
+    get.mockResolvedValue(undefined);
+
+    await learningService.getInProgressSession("review");
+
+    expect(get).toHaveBeenCalledWith("/learning-sessions/in-progress?review=true");
   });
 
   it("진행 중인 세션을 그대로 돌려준다", async () => {
@@ -33,7 +36,7 @@ describe("진행 중인 세션 조회", () => {
       completedCount: 5,
     });
 
-    const result = await learningService.getInProgressSession();
+    const result = await learningService.getInProgressSession("learning");
 
     expect(result).toEqual({
       sessionId: 7,
@@ -48,13 +51,13 @@ describe("진행 중인 세션 조회", () => {
     // 진행 중인 것이 없다는 뜻이다. 빈 객체로 다루면 "0문항짜리 세션"과 구별되지 않는다
     get.mockResolvedValue(undefined);
 
-    expect(await learningService.getInProgressSession()).toBeNull();
+    expect(await learningService.getInProgressSession("learning")).toBeNull();
   });
 
   it("응답이 계약과 다르면 던진다", async () => {
     get.mockResolvedValue({ sessionId: 7 });
 
-    await expect(learningService.getInProgressSession()).rejects.toThrow();
+    await expect(learningService.getInProgressSession("learning")).rejects.toThrow();
   });
 });
 

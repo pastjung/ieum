@@ -11,6 +11,7 @@ import com.itda.problem.domain.ProblemSession;
 import com.itda.problem.repository.ProblemSessionRepository;
 import com.itda.user.domain.User;
 import com.itda.user.repository.UserJpaRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,7 +84,8 @@ class InProgressSessionQueryServiceTest {
                 assigned(learningSession, 2L, true),
                 assigned(learningSession, 3L, false)));
 
-    InProgressSessionQueryService.InProgressSession result = service.find(USER_ID).orElseThrow();
+    InProgressSessionQueryService.InProgressSession result =
+        service.find(USER_ID, null).orElseThrow();
 
     assertThat(result.sessionId()).isEqualTo(7L);
     assertThat(result.stageName()).isEqualTo("단어");
@@ -108,7 +110,8 @@ class InProgressSessionQueryServiceTest {
     given(problemSessionRepository.findAllBySession_IdOrderBySequence(9L))
         .willReturn(List.of(assigned(learningSession, 1L, false)));
 
-    InProgressSessionQueryService.InProgressSession result = service.find(USER_ID).orElseThrow();
+    InProgressSessionQueryService.InProgressSession result =
+        service.find(USER_ID, null).orElseThrow();
 
     assertThat(result.sessionId()).isEqualTo(9L);
     assertThat(result.stageName()).isEqualTo("복습");
@@ -124,7 +127,7 @@ class InProgressSessionQueryServiceTest {
     given(learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user))
         .willReturn(List.of());
 
-    assertThat(service.find(USER_ID)).isEmpty();
+    assertThat(service.find(USER_ID, null)).isEmpty();
   }
 
   @Test
@@ -141,7 +144,7 @@ class InProgressSessionQueryServiceTest {
         .willReturn(List.of());
     given(problemSessionRepository.findAllBySession_IdOrderBySequence(11L)).willReturn(List.of());
 
-    assertThat(service.find(USER_ID)).isEmpty();
+    assertThat(service.find(USER_ID, null)).isEmpty();
   }
 
   @Test
@@ -159,9 +162,79 @@ class InProgressSessionQueryServiceTest {
     given(problemSessionRepository.findAllBySession_IdOrderBySequence(13L))
         .willReturn(List.of(assigned(learningSession, 1L, true)));
 
-    InProgressSessionQueryService.InProgressSession result = service.find(USER_ID).orElseThrow();
+    InProgressSessionQueryService.InProgressSession result =
+        service.find(USER_ID, null).orElseThrow();
 
     assertThat(result.totalCount()).isEqualTo(1);
     assertThat(result.completedCount()).isEqualTo(1);
+  }
+
+  /** 단계 학습 7번(먼저 만듦)과 복습 9번(나중에 만듦)이 함께 진행 중이다. */
+  private void givenStageAndNewerReview() {
+    CurriculumStage stage = org.mockito.Mockito.mock(CurriculumStage.class);
+    given(stage.getName()).willReturn("자음");
+    LearningSession stageSession = session(7L, stage);
+    ReflectionTestUtils.setField(stageSession, "createdAt", LocalDateTime.of(2026, 9, 26, 1, 0));
+    LearningSession reviewSession = session(9L, null);
+    ReflectionTestUtils.setField(reviewSession, "createdAt", LocalDateTime.of(2026, 9, 26, 2, 0));
+    given(
+            learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
+                user))
+        .willReturn(List.of(stageSession));
+    given(learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user))
+        .willReturn(List.of(reviewSession));
+    given(problemSessionRepository.findAllBySession_IdOrderBySequence(7L))
+        .willReturn(List.of(assigned(stageSession, 1L, true), assigned(stageSession, 2L, false)));
+    given(problemSessionRepository.findAllBySession_IdOrderBySequence(9L))
+        .willReturn(List.of(assigned(reviewSession, 1L, false)));
+  }
+
+  @Test
+  void 단계_학습만_고르면_더_최근의_복습에_가려지지_않는다() {
+    // 종류를 가리지 않으면 최근 복습만 보여, 먼저 만든 단계 학습을 이어받을 수도 없고 새 단계
+    // 학습을 만들기 전에 "진행 중인 것이 닫힌다"를 물을 수도 없었다
+    givenStageAndNewerReview();
+
+    InProgressSessionQueryService.InProgressSession result =
+        service.find(USER_ID, false).orElseThrow();
+
+    assertThat(result.sessionId()).isEqualTo(7L);
+    assertThat(result.review()).isFalse();
+    assertThat(result.stageName()).isEqualTo("자음");
+  }
+
+  @Test
+  void 복습만_고르면_복습_세션을_돌려준다() {
+    givenStageAndNewerReview();
+
+    InProgressSessionQueryService.InProgressSession result =
+        service.find(USER_ID, true).orElseThrow();
+
+    assertThat(result.sessionId()).isEqualTo(9L);
+    assertThat(result.review()).isTrue();
+  }
+
+  @Test
+  void 종류를_고르지_않으면_두_종류_중_최신_것이다() {
+    // 파라미터를 생략한 기존 호출은 동작이 바뀌지 않는다
+    givenStageAndNewerReview();
+
+    assertThat(service.find(USER_ID, null).orElseThrow().sessionId()).isEqualTo(9L);
+  }
+
+  @Test
+  void 고른_종류에_진행_중인_세션이_없으면_다른_종류가_있어도_비어_있다() {
+    CurriculumStage stage = org.mockito.Mockito.mock(CurriculumStage.class);
+    LearningSession stageSession = session(7L, stage);
+    given(
+            learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
+                user))
+        .willReturn(List.of(stageSession));
+    given(learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user))
+        .willReturn(List.of());
+    given(problemSessionRepository.findAllBySession_IdOrderBySequence(7L))
+        .willReturn(List.of(assigned(stageSession, 1L, false)));
+
+    assertThat(service.find(USER_ID, true)).isEmpty();
   }
 }

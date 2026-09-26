@@ -26,35 +26,34 @@ function allSpeech(steps: { speech: string }[]): string {
 }
 
 describe("셀 진단을 칸별 단계로", () => {
-  it("정답이면 규칙 설명을 붙이지 않는다", () => {
+  it("정답이면 설명을 붙이지 않는다", () => {
     // `correct`(백엔드가 DB 시드 셀로 채점)와 `feedback.tts`(AI가 target_text를 규칙
     // 변환해 다시 채점)는 서로 다른 채점에서 온다. 갈리면 "정답이에요! 3번 점이
     // 빠졌어요"가 나온다 — 정답에 오답 설명이 붙는 것보다 설명이 없는 편이 낫다
-    const r = describeCells([cell(1, 5, 5, [], [])], true, "3번 점이 빠졌어요.");
+    const r = describeCells([cell(1, 5, 5, [], [])], true);
 
     expect(r.headline).toBe("정답이에요!");
     expect(r.steps).toHaveLength(1);
     expect(r.steps[0].detail).toBe("");
     expect(r.steps[0].speech).toBe("정답이에요!");
     expect(r.steps[0].cellIndex).toBeNull();
-    expect(allSpeech(r.steps)).not.toContain("3번 점이 빠졌어요.");
   });
 
   it("정답이어도 단계가 하나는 있다 — 화면이 언제나 steps[0]을 읽는다", () => {
-    const r = describeCells([cell(1, 5, 5, [], [])], true, "제13항");
+    const r = describeCells([cell(1, 5, 5, [], [])], true);
     expect(r.steps.length).toBeGreaterThanOrEqual(1);
   });
 
   it("틀린 칸의 정답 점과 틀린 점을 모두 말한다", () => {
     // 1번 칸: 정답은 1,3번인데 1번만 눌러 3번이 빠졌다
-    const r = describeCells([cell(1, 0b000101, 0b000001, [3], [])], false, "제13항");
+    const r = describeCells([cell(1, 0b000101, 0b000001, [3], [])], false);
 
     expect(r.steps[0].speech).toContain("첫 번째 칸의 정답은 1번, 3번이에요");
     expect(r.steps[0].speech).toContain("3번 점이 빠졌어요");
   });
 
   it("더 눌린 점도 말한다", () => {
-    const r = describeCells([cell(1, 0b000001, 0b000101, [], [3])], false, "제13항");
+    const r = describeCells([cell(1, 0b000001, 0b000101, [], [3])], false);
     expect(r.steps[0].speech).toContain("3번 점이 더 눌렸어요");
   });
 
@@ -62,7 +61,6 @@ describe("셀 진단을 칸별 단계로", () => {
     const r = describeCells(
       [cell(1, 0b000101, 0b000001, [3], []), cell(2, 0b000010, 0b000110, [], [3])],
       false,
-      "제13항",
     );
 
     expect(r.steps).toHaveLength(2);
@@ -76,7 +74,6 @@ describe("셀 진단을 칸별 단계로", () => {
     const r = describeCells(
       [cell(1, 0b000101, 0b000001, [3], []), cell(2, 0b000010, 0b000110, [], [3])],
       false,
-      "제13항",
     );
 
     expect(r.steps[0].speech).toContain("첫 번째 칸");
@@ -89,7 +86,6 @@ describe("셀 진단을 칸별 단계로", () => {
     const r = describeCells(
       [cell(1, 5, 5, [], []), cell(2, 0b000010, 0b000110, [], [3])],
       false,
-      "제13항",
     );
 
     expect(r.steps).toHaveLength(1);
@@ -102,7 +98,7 @@ describe("셀 진단을 칸별 단계로", () => {
     // 시절의 타협이었고, 이제는 칸마다 화면과 낭독이 따로 있으므로 줄일 이유가 없다 —
     // 줄이면 넷째 칸부터는 무엇이 틀렸는지 영영 알 수 없다
     const cells = [1, 2, 3, 4, 5].map((i) => cell(i, 0b000101, 0b000001, [3], []));
-    const r = describeCells(cells, false, "제13항");
+    const r = describeCells(cells, false);
 
     expect(r.steps).toHaveLength(5);
     expect(r.steps[3].speech).toContain("네 번째 칸");
@@ -112,7 +108,7 @@ describe("셀 진단을 칸별 단계로", () => {
 
   it("몇 칸이 틀렸는지는 첫 단계에서 한 번만 말한다", () => {
     const cells = [1, 2, 3].map((i) => cell(i, 0b000101, 0b000001, [3], []));
-    const r = describeCells(cells, false, "제13항");
+    const r = describeCells(cells, false);
 
     expect(r.steps[0].speech).toContain("모두 3칸이 틀렸어요");
     expect(r.steps[1].speech).not.toContain("틀렸어요");
@@ -123,51 +119,25 @@ describe("셀 진단을 칸별 단계로", () => {
     // 화면 헤더("오답이에요.")는 계속 떠 있다. 칸을 넘길 때마다 다시 읽으면 귀로는
     // 매번 새로 틀린 것처럼 들린다
     const cells = [1, 2].map((i) => cell(i, 0b000101, 0b000001, [3], []));
-    const r = describeCells(cells, false, "제13항");
+    const r = describeCells(cells, false);
 
     expect(r.steps[0].speech.startsWith("오답이에요.")).toBe(true);
     expect(r.steps[1].speech).not.toContain("오답이에요");
   });
 
-  it("규칙 설명은 첫 단계에서 한 번만 붙인다", () => {
-    // 규칙은 칸이 아니라 문항 전체에 대한 설명이다. 마지막 칸에 두면 여러 칸을 틀렸을 때
-    // 끝까지 넘겨야 들을 수 있어 사실상 안 들린다 — 학습자가 먼저 알아야 할 것이다
-    const cells = [1, 2].map((i) => cell(i, 0b000101, 0b000001, [3], []));
-    const r = describeCells(cells, false, "제13항 첫소리 이응은 적지 않아요.");
-
-    expect(r.steps[0].speech).toContain("제13항 첫소리 이응은 적지 않아요.");
-    expect(r.steps[1].speech).not.toContain("제13항");
-  });
-
-  it("규칙은 점 수준 설명 뒤에 온다 — 무엇을 고칠지 먼저, 왜인지는 그 뒤", () => {
-    const r = describeCells([cell(1, 0b000101, 0b000001, [3], [])], false, "제13항");
-    const speech = r.steps[0].speech;
-
-    expect(speech.indexOf("3번 점이 빠졌어요")).toBeLessThan(speech.indexOf("제13항"));
-  });
-
-  it("틀린 칸이 하나면 그 한 단계에 개요와 규칙이 함께 붙는다", () => {
-    const r = describeCells([cell(1, 0b000101, 0b000001, [3], [])], false, "제13항");
+  it("틀린 칸이 하나면 그 한 단계에 개요가 붙는다", () => {
+    const r = describeCells([cell(1, 0b000101, 0b000001, [3], [])], false);
 
     expect(r.steps).toHaveLength(1);
     expect(r.steps[0].speech).toContain("1칸이 틀렸어요");
     expect(r.steps[0].speech).not.toContain("모두 1칸");
-    expect(r.steps[0].speech).toContain("제13항");
-  });
-
-  it("규칙 설명이 비어 있어도 문장이 만들어진다", () => {
-    // 서버가 규칙을 못 찾는 경우가 있다. 그때도 점 수준 안내는 나와야 한다
-    const r = describeCells([cell(1, 0b000101, 0b000001, [3], [])], false, "");
-
-    expect(r.steps[0].speech).toContain("첫 번째 칸");
-    expect(r.steps[0].speech.trim()).not.toBe("");
     expect(r.steps[0].speech).not.toMatch(/\s{2,}/);
   });
 
   it("단계마다 화면 문구와 낭독 문구가 같은 내용이다", () => {
     // 첫 단계만 헤드라인을 앞에 붙이고, 그 뒤는 detail 그대로다
     const cells = [1, 2].map((i) => cell(i, 0b000101, 0b000001, [3], []));
-    const r = describeCells(cells, false, "제13항");
+    const r = describeCells(cells, false);
 
     expect(r.steps[0].speech).toBe(`${r.headline} ${r.steps[0].detail}`.trim());
     expect(r.steps[1].speech).toBe(r.steps[1].detail);
@@ -175,14 +145,14 @@ describe("셀 진단을 칸별 단계로", () => {
 
   it("빠진 점과 더 눌린 점이 동시에 있으면 둘 다 말한다", () => {
     // 정답은 1·3번인데 1·2번을 눌렀다 — 가장 흔한 오답 형태. missing=[3], extra=[2]
-    const r = describeCells([cell(1, 0b000101, 0b000011, [3], [2])], false, "제13항");
+    const r = describeCells([cell(1, 0b000101, 0b000011, [3], [2])], false);
 
     expect(r.steps[0].speech).toContain("3번 점이 빠지고 2번 점이 더 눌렸어요");
   });
 
   it("정답 칸이 빈 칸이면 '비어 있어야 한다'는 것을 말한다", () => {
     // 문장 단계 시드는 빈 칸(expectedPattern === 0)이 섞일 수 있다
-    const r = describeCells([cell(1, 0, 0b000010, [], [2])], false, "제13항");
+    const r = describeCells([cell(1, 0, 0b000010, [], [2])], false);
 
     expect(r.steps[0].speech).toContain("정답은 빈 칸이에요");
     expect(r.steps[0].speech).toContain("2번 점이 더 눌렸어요");
@@ -190,7 +160,7 @@ describe("셀 진단을 칸별 단계로", () => {
 
   it("오답인데 틀린 칸을 찾지 못해도 자기모순 문장을 만들지 않는다", () => {
     // 정상 서버 응답에서는 없는 상태지만 방어적으로 처리한다
-    const r = describeCells([cell(1, 5, 5, [], [])], false, "제13항");
+    const r = describeCells([cell(1, 5, 5, [], [])], false);
 
     expect(r.steps).toHaveLength(1);
     expect(r.steps[0].cellIndex).toBeNull();

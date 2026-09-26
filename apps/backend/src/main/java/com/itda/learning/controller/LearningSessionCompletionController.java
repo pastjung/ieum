@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Validated
@@ -59,12 +60,16 @@ public class LearningSessionCompletionController {
    * 진행 중인 학습 세션. 없으면 {@code 204}다.
    *
    * <p>대상은 인증 필터가 확인한 principal뿐이다 — path·query의 사용자 식별자를 받지 않는다.
+   *
+   * @param review {@code true}면 복습, {@code false}면 단계 학습 세션만 본다. 생략하면 두 종류 중 최신 것이다. 홈이 두 종류를 따로 보여
+   *     주고, 새 세션을 만들기 전 충돌 확인이 같은 종류만 보려면 종류별로 읽어야 한다
    */
   @GetMapping("/in-progress")
   public ResponseEntity<InProgressSessionResponse> inProgress(
-      @AuthenticationPrincipal AuthenticatedUser user) {
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @RequestParam(required = false) Boolean review) {
     return inProgressSessionQueryService
-        .find(user.userId())
+        .find(user.userId(), review)
         .map(InProgressSessionResponse::from)
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.noContent().build());

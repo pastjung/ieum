@@ -7,7 +7,9 @@ import { ListRow } from "@/components/ListRow";
 import { AppButton } from "@/components/AppButton";
 import { IeumFace } from "@/components/IeumFace";
 import { authService } from "@/services/authService";
-import { learningService } from "@/services/learningService";
+import { learningService, type InProgressKind } from "@/services/learningService";
+import { inProgressSessionQueryKey } from "@/services/learningSessionCache";
+import { describeResumable, homeArrivalSpeech } from "@/services/homeSessions";
 import { LEVEL_LABEL, LEVEL_UNSET_LABEL } from "@/services/levelLabels";
 import { LevelBadge } from "@/components/LevelBadge";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -61,15 +63,41 @@ function useMeQuery() {
   return { data, isError, retry };
 }
 
+/** 종류별 진행 중 세션 조회 하나 */
+function useInProgress(kind: InProgressKind) {
+  return useQuery({
+    queryKey: inProgressSessionQueryKey(kind),
+    queryFn: () => learningService.getInProgressSession(kind),
+  });
+}
+
+/**
+ * 두 홈 변형이 공유하는 진행 중 세션 조회. 학습과 복습을 따로 읽는다 — 한 번에 읽으면 서버가
+ * 최근 것 하나만 주어, 학습 자리에 복습이 들어가거나 오래된 쪽이 사라졌다.
+ *
+ * 둘 다 끝나기 전에는 `pending`이다. 한쪽만 먼저 그리면 버튼이 뒤늦게 바뀌어 누르려던 자리가 움직인다.
+ */
+function useInProgressSessions() {
+  const learning = useInProgress("learning");
+  const review = useInProgress("review");
+  return {
+    learning: learning.data ?? null,
+    review: review.data ?? null,
+    pending: learning.isPending || review.isPending,
+  };
+}
+
+/** 진행 중 세션을 이어받는 세션 안내 화면 경로 */
+function resumeRoute(sessionId: number) {
+  return { pathname: "/session/intro" as const, params: { mode: "resume", sessionId: String(sessionId) } };
+}
+
 /** V10·V11 홈 (음성 중심) — 큰 버튼 중심 */
 function VoiceHome() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  const { data: inProgress, isPending: inProgressPending } = useQuery({
-    queryKey: ["inProgressSession"],
-    queryFn: learningService.getInProgressSession,
-  });
+  const { learning, review, pending: inProgressPending } = useInProgressSessions();
   const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
   const stepLabel = data?.level ? LEVEL_LABEL[data.level] : LEVEL_UNSET_LABEL;
@@ -81,28 +109,16 @@ function VoiceHome() {
     // 이름·단계가 들어간 문장을 만들지 않는다 — 빈 이름이나 "단계 미선택"을 사실처럼
     // 낭독하면 안 되고, 나중에 두 번째 낭독이 겹쳐도 안 된다.
     //
-    // `inProgress`는 "진행 중 없음"이 null이라 로딩과 구별되지 않는다. `isPending`으로
-    // 조회가 끝났는지를 따로 본다
+    // 진행 중 세션은 "없음"이 null이라 로딩과 구별되지 않는다. `pending`으로 두 조회가
+    // 끝났는지를 따로 본다
     if (inProgressPending || !data) return;
-    announce(
-      inProgress
-        ? `홈이에요. ${userName}님, ${stepLabel}를 배우는 중이에요. 이어서 학습을 누르면 ${inProgress.stageName}을 계속해요.`
-        : `홈이에요. 진행 중인 학습이 없어요. 복습을 시작하거나 새 단계를 배울 수 있어요.`,
-    );
-  }, [inProgress, inProgressPending, data, userName, stepLabel]);
+    announce(homeArrivalSpeech({ userName, stepLabel, learning, review }));
+  }, [learning, review, inProgressPending, data, userName, stepLabel]);
 
-  const goSession = () => {
+  /** 진행 중인 세션이 있으면 이어받는다. 예전에는 언제나 새 자음 세션을 만들어 "이어서 학습"이라는 이름이 거짓이었다 */
+  const goResume = (sessionId: number) => {
     void hapticTap();
-    // 진행 중인 세션이 있으면 이어받는다. 예전에는 언제나 새 자음 세션을 만들어
-    // "이어서 학습"이라는 이름이 거짓이었다
-    router.push(
-      inProgress
-        ? {
-            pathname: "/session/intro",
-            params: { mode: "resume", sessionId: String(inProgress.sessionId) },
-          }
-        : "/session/intro",
-    );
+    router.push(resumeRoute(sessionId));
   };
 
   /** 복습은 단계를 고르지 않는다 — 서버가 내 기록에서 약한 요소를 골라 출제한다 */
@@ -151,7 +167,7 @@ function VoiceHome() {
           {isError
             ? LOAD_FAILED_TEXT
             : !inProgressPending && data
-              ? inProgress
+              ? learning || review
                 ? `${userName}님, ${stepLabel}를 배우는 중이에요.`
                 : "진행 중인 학습이 없어요."
               : "불러오는 중이에요…"}
@@ -166,21 +182,30 @@ function VoiceHome() {
             onPress={retry}
           />
         )}
-        {inProgress ? (
+        {/*
+          첫 버튼은 단계 학습, 둘째는 복습만 다룬다. 예전에는 진행 중 세션 하나를 "이어서 학습"
+          자리에 넣어, 복습이 더 최근이면 학습 자리에 복습이 들어가고 학습 세션은 보이지 않았다.
+          진행 중 세션을 읽는 동안에는 버튼을 그리지 않는다 — 뒤늦게 바뀌면 누르려던 자리가 움직인다
+        */}
+        {!inProgressPending && (
           <>
-            {bigButton(
-              inProgress.completedCount >= inProgress.totalCount ? "결과 받기" : "이어서 학습",
-              `${inProgress.stageName} · ${inProgress.totalCount}문항 중 ${inProgress.completedCount}문항 완료`,
-              true,
-              goSession,
-              1.4,
-            )}
-            {/*
-              진행 중 세션이 있어도 복습은 닿을 수 있어야 한다. 예전에는 이 가지에 복습이
-              없어서 — 그리고 목 데이터의 inProgress가 늘 값이 있어서 — 시각장애인용 홈에는
-              복습 진입점이 아예 없었다. 화면 모드에 따라 쓸 수 있는 기능이 달라지면 안 된다
-            */}
-            {bigButton("복습 시작", null, false, goReview)}
+            {learning
+              ? bigButton(
+                  describeResumable(learning).label,
+                  `${learning.stageName} · ${describeResumable(learning).progress}`,
+                  true,
+                  () => goResume(learning.sessionId),
+                  1.4,
+                )
+              : bigButton("새 단계 학습", null, true, () => router.push("/(tabs)/learn"), 1.4)}
+            {review
+              ? bigButton(
+                  describeResumable(review).label,
+                  describeResumable(review).progress,
+                  false,
+                  () => goResume(review.sessionId),
+                )
+              : bigButton("복습 시작", null, false, goReview)}
             {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
             <ListRow
               label="점자 장치"
@@ -188,12 +213,6 @@ function VoiceHome() {
               accessibilityHint="장치 연결 상태를 확인해요"
               onPress={() => router.push("/device-error")}
             />
-          </>
-        ) : (
-          <>
-            {bigButton("복습 시작", null, true, goReview, 1.4)}
-            {bigButton("새 단계 학습", null, false, () => router.push("/(tabs)/learn"))}
-            {bigButton("수업 참여", null, false, () => router.push("/(tabs)/class"))}
           </>
         )}
       </View>
@@ -206,15 +225,14 @@ function ScreenHome() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  const { data: inProgress } = useQuery({
-    queryKey: ["inProgressSession"],
-    queryFn: learningService.getInProgressSession,
-  });
+  const { learning, review, pending: inProgressPending } = useInProgressSessions();
   const { data, isError, retry } = useMeQuery();
   const userName = data?.username ?? "";
   const stepLabel = data?.level ? LEVEL_LABEL[data.level] : LEVEL_UNSET_LABEL;
   // 장치 연결은 서버 요약이 아니라 실제 블루투스 상태에서 읽는다.
   const deviceConnected = useTactileStore((s) => s.connected);
+  const learningCard = learning ? describeResumable(learning) : null;
+  const reviewCard = review ? describeResumable(review) : null;
 
   return (
     <ScreenShell noBottomPadding>
@@ -243,28 +261,45 @@ function ScreenHome() {
           />
         )}
 
-        {inProgress && (
+        {/*
+          진행 중 세션 조회가 끝나기 전에는 어느 카드도 그리지 않는다. "새 학습" 카드를 먼저
+          그렸다가 "이어서 학습"으로 바꾸면 학습자가 누르려던 자리가 바뀐다.
+          진행 중 세션이 없으면 카드를 없애지 않고 새 학습 진입점으로 바꾼다 — 홈의 가장 큰
+          자리가 비면 무엇부터 해야 할지 알 수 없다. 음성 중심 홈의 "새 단계 학습"과 같은 역할이다.
+          이 카드는 단계 학습만 다룬다. 진행 중인 복습은 아래 "오늘의 복습" 카드가 맡는다.
+        */}
+        {inProgressPending ? null : learning && learningCard ? (
           <View
             style={[
               styles.card,
               { backgroundColor: theme.color.primary, borderRadius: radius.card },
               theme.shadow != null && { boxShadow: `0 6px 0 ${theme.shadow.primary}` },
             ]}
-            accessibilityLabel={`이어서 학습. ${inProgress.stageName}, ${inProgress.totalCount}문항 중 ${inProgress.completedCount}문항 완료`}
+            accessibilityLabel={`이어서 학습. ${learning.stageName}, ${learningCard.progress}`}
           >
             <Text style={{ fontSize: 15 * fontScale, fontWeight: "800", color: theme.color.onPrimary, opacity: 0.85 }}>이어서 학습</Text>
-            <Text style={{ fontSize: 24 * fontScale, fontWeight: "900", color: theme.color.onPrimary }}>{inProgress.stageName}</Text>
-            <Text style={{ fontSize: 15 * fontScale, fontWeight: "600", color: theme.color.onPrimary }}>{`${inProgress.completedCount} / ${inProgress.totalCount}문항`}</Text>
+            <Text style={{ fontSize: 24 * fontScale, fontWeight: "900", color: theme.color.onPrimary }}>{learning.stageName}</Text>
+            <Text style={{ fontSize: 15 * fontScale, fontWeight: "600", color: theme.color.onPrimary }}>{`${learning.completedCount} / ${learning.totalCount}문항`}</Text>
             <AppButton
-              label="이어서 풀기"
+              // 다 푼 세션은 풀 것이 없어 결과 화면으로 간다 — "이어서 풀기"라고 부르지 않는다
+              label={learning.completedCount >= learning.totalCount ? learningCard.label : "이어서 풀기"}
               variant="compact"
-              onPress={() =>
-                router.push({
-                  pathname: "/session/intro",
-                  params: { mode: "resume", sessionId: String(inProgress.sessionId) },
-                })
-              }
+              onPress={() => router.push(resumeRoute(learning.sessionId))}
             />
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: theme.color.primary, borderRadius: radius.card },
+              theme.shadow != null && { boxShadow: `0 6px 0 ${theme.shadow.primary}` },
+            ]}
+            accessibilityLabel="새 학습. 자유 학습 시작. 테마를 골라 새로 시작해요"
+          >
+            <Text style={{ fontSize: 15 * fontScale, fontWeight: "800", color: theme.color.onPrimary, opacity: 0.85 }}>새 학습</Text>
+            <Text style={{ fontSize: 24 * fontScale, fontWeight: "900", color: theme.color.onPrimary }}>자유 학습 시작</Text>
+            <Text style={{ fontSize: 15 * fontScale, fontWeight: "600", color: theme.color.onPrimary }}>테마를 골라 새로 시작해요</Text>
+            <AppButton label="테마 고르기" variant="compact" onPress={() => router.push("/learn-themes")} />
           </View>
         )}
 
@@ -291,14 +326,31 @@ function ScreenHome() {
             내 약한 요소를 세션 밖에서 알려주는 API가 아직 없어(weakSkills는 완료 응답에만
             실린다) 지금은 지운다. 고정값을 내 실력처럼 보여주느니 말하지 않는 편이 낫다
           */}
-          <Text style={{ fontSize: 15 * fontScale, color: theme.color.textMuted, lineHeight: 24 }}>
-            약했던 것부터 다시 풀어요.
-          </Text>
-          <AppButton
-            label="복습 시작"
-            variant="compact"
-            onPress={() => router.push({ pathname: "/session/intro", params: { mode: "review" } })}
-          />
+          {/* 진행 중인 복습이 있으면 새로 시작하지 않고 이어받는다. 조회 중에는 버튼을 그리지 않는다 */}
+          {inProgressPending ? null : review && reviewCard ? (
+            <>
+              <Text style={{ fontSize: 15 * fontScale, color: theme.color.textMuted, lineHeight: 24 }}>
+                {`진행 중인 복습이 있어요 · ${review.completedCount} / ${review.totalCount}문항`}
+              </Text>
+              <AppButton
+                label={reviewCard.label}
+                variant="compact"
+                accessibilityHint={reviewCard.progress}
+                onPress={() => router.push(resumeRoute(review.sessionId))}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={{ fontSize: 15 * fontScale, color: theme.color.textMuted, lineHeight: 24 }}>
+                약했던 것부터 다시 풀어요.
+              </Text>
+              <AppButton
+                label="복습 시작"
+                variant="compact"
+                onPress={() => router.push({ pathname: "/session/intro", params: { mode: "review" } })}
+              />
+            </>
+          )}
         </View>
 
         <ListRow

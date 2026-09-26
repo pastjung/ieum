@@ -140,7 +140,9 @@ export const DESTINATIONS: readonly Destination[] = [
   },
   {
     id: "review",
-    route: "/session/intro",
+    // 안내 화면은 파라미터가 없으면 단계 학습으로 읽고 curriculumId가 없어 세션 생성이
+    // 실패한다. 단계를 고르지 않아도 되는 복습으로 보낸다
+    route: "/session/intro?mode=review",
     title: "문제 풀기",
     keywords: ["문제", "문제 풀기", "문제 풀래", "연습", "복습", "오늘의 복습"],
   },

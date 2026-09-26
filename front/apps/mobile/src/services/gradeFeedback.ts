@@ -61,49 +61,23 @@ function toDots(values: readonly number[]): Dot[] {
 }
 
 /**
- * 이번 풀이에서 어긴 점자 규칙을 한 문장으로 옮긴다.
- *
- * **AI가 주는 `feedback.tts`·`feedback.detail`은 쓰지 않는다.** 둘 다 규칙이 아니다:
- * `tts`는 AI가 자체 채점한 점 수준 서술이라 우리 XOR 설명과 겹치고 백엔드 채점과 갈릴 수
- * 있고, `detail`은 대개 "모음 유는 1, 4, 6점입니다" 같은 점 나열이라 바로 앞 문장의
- * 되풀이다. 게다가 AI가 보기에 다 맞았을 때 `detail`은 "정답이에요. 다음 문제로
- * 넘어갈게요."를 돌려준다 (`apps/ai` 의 `_detail`) — 백엔드가 오답이라고 한 화면에서
- * 그 문장이 붙으면 두 채점이 한 화면에서 싸운다. 그래서 물러설 곳으로도 쓰지 않는다.
- *
- * 진짜 규칙 문장은 `learning_skills.description`에 있고, 백엔드가 AI가 고른 요소와 이어
- * `violatedSkills`로 실어 준다.
- *
- * 어긴 요소가 여럿이면 **첫 번째만** 말한다. AI가 준 순서에서 앞의 것이 이번 오답에 가장
- * 가깝고, 셋을 다 읽으면 첫 단계 낭독이 길어져 학습자가 끝까지 듣지 못한다.
- *
- * `description`은 TEXT NULL이라 비어 있을 수 있다(150개 중 48개는 이름표에 가깝다).
- * 그때도 어떤 규칙인지 이름은 말해 준다.
- */
-function ruleTextOf(violatedSkills: AttemptAnalysisResponse["violatedSkills"]): string {
-  const first = violatedSkills[0];
-  if (!first) return "";
-  const description = first.description?.trim();
-  return description ? `${first.name}. ${description}` : `${first.name} 규칙을 다시 확인해 보세요.`;
-}
-
-/**
  * 서버 분석(`analysis`)이 있으면 그것을, 없으면 로컬 채점(`local`)을 쓴다.
  *
  * 실시간 수업(`class/play.tsx`)은 서버 세션이 없어 `analysis`가 항상 null이다 — 그 경로는
  * 이 함수가 그대로 로컬 분기로 떨어져 기존 `describeDiff` 동작을 그대로 재현한다.
  *
  * `local`도 없으면(아직 아무것도 채점되지 않았으면) null을 돌려준다 — 호출부가 진입 가드로 쓴다.
+ *
+ * 서버 응답의 `feedback`(AI 문장)과 `violatedSkills`(어긴 학습요소)는 화면에 쓰지 않는다.
+ * AI 문장은 AI가 따로 채점한 것이라 백엔드 판정과 갈릴 수 있고, 학습요소 설명은 이름과
+ * 같은 값이 많아 되풀이로 들린다 (`describeCells` 주석).
  */
 export function selectGradeFeedback(
   analysis: AttemptAnalysisResponse | null,
   local: GradeResult | null,
 ): GradeFeedback | null {
   if (analysis) {
-    const { headline, steps } = describeCells(
-      analysis.cells,
-      analysis.correct,
-      ruleTextOf(analysis.violatedSkills),
-    );
+    const { headline, steps } = describeCells(analysis.cells, analysis.correct);
     // `describeCells`가 틀린 칸마다 단계를 만들고 그 칸 번호(`cellIndex`)를 달아 준다.
     // 그릴 칸은 그 번호로 되찾는다 — 두 곳에서 따로 "틀린 칸"을 고르면 어긋날 수 있다
     const byIndex = new Map(analysis.cells.map((c) => [c.cellIndex, c]));
