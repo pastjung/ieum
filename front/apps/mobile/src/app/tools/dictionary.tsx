@@ -6,6 +6,7 @@ import { BigInput } from "@/components/BigInput";
 import { AppButton } from "@/components/AppButton";
 import { BrailleCellView } from "@/components/BrailleCellView";
 import { lookupWord, sampleWords, type DictEntry } from "@/services/dictionary";
+import { describeCell, playCells, stopPlayback } from "@/services/tactilePlayer";
 import { announce, speak } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
 
@@ -15,6 +16,20 @@ export default function Dictionary() {
   const fontScale = useFontScale();
   const [query, setQuery] = useState("");
   const [entry, setEntry] = useState<DictEntry | null>(null);
+
+  // 화면을 떠나면 진행 중인 촉지를 멈추고 점을 내린다.
+  useEffect(() => stopPlayback, []);
+
+  /** 단어의 셀을 모듈에 한 칸씩 보여 준다. 연결이 없으면 모듈이 주는 안내를 그대로 읽는다. */
+  const feel = async () => {
+    if (!entry) return;
+    try {
+      announce(`${entry.word}, 장치로 보여 드릴게요. 셀 ${entry.cells.length}개예요.`);
+      await playCells(entry.cells, { onCell: (index, cell) => announce(describeCell(index, cell)) });
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "장치에 보내지 못했어요.");
+    }
+  };
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
@@ -67,7 +82,12 @@ export default function Dictionary() {
             <AppButton label="소리로 듣기" variant="secondary" onPress={() => speak(`${entry.word}. ${entry.breakdown}`, { force: true })} />
           </View>
           <View style={{ flex: 1 }}>
-            <AppButton label="장치로 촉지" variant="secondary" onPress={() => announce("점자 장치 연결 후에 쓸 수 있어요.")} />
+            <AppButton
+              label="장치로 촉지"
+              variant="secondary"
+              accessibilityHint="점자 장치에 한 칸씩 올려 손끝으로 읽어요"
+              onPress={() => void feel()}
+            />
           </View>
         </View>
       )}
