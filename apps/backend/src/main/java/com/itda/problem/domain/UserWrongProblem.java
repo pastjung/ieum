@@ -42,7 +42,13 @@ public class UserWrongProblem {
     this.level = level;
   }
 
+  /** 다시 맞혔다 — 학습하기의 오답 재출제 후보에서 빠진다 */
   public void complete() {
     this.isCompleted = true;
+  }
+
+  /** 해소됐던 문제를 다시 틀렸다 — 오답 재출제 후보로 되돌린다 */
+  public void reopen() {
+    this.isCompleted = false;
   }
 }

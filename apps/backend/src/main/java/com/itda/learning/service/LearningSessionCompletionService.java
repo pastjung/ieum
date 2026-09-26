@@ -160,7 +160,10 @@ public class LearningSessionCompletionService {
         if (existingWrongProblem != null) {
           existingWrongProblem.complete();
         }
-      } else if (existingWrongProblem == null) {
+      } else if (existingWrongProblem != null) {
+        // 한 번 해소했던 문제를 다시 틀렸으면 재출제 후보로 되돌린다 (행은 (user, problem) 당 하나라 새로 만들 수 없다)
+        existingWrongProblem.reopen();
+      } else {
         if (userReference == null) {
           userReference = userJpaRepository.getReferenceById(userId);
         }
