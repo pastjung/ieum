@@ -7,6 +7,7 @@ import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { BrailleCellView } from "@/components/BrailleCellView";
 import { useSessionStore } from "@/stores/sessionStore";
+import { describeCell, playCells, stopPlayback } from "@/services/tactilePlayer";
 import { selectGradeFeedback, compareCaption } from "@/services/gradeFeedback";
 import { announce, hapticError, hapticSuccess, hapticTap } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
@@ -97,6 +98,11 @@ export default function Grade() {
     announce(current.speech);
   }, [current, feedback, notice, step]);
 
+  // 화면을 떠나면(다음 문제·나가기) 진행 중인 촉지를 멈추고 점을 내린다.
+  // 훅이므로 아래 조기 반환보다 앞에 있어야 한다 — 뒤에 두면 "다음 문제"에서 current가 비는 순간
+  // 훅 수가 줄어 React가 던지고, 릴리스 빌드는 그대로 죽는다.
+  useEffect(() => stopPlayback, []);
+
   if (leaving) {
     return <ScreenShell />;
   }
@@ -110,6 +116,24 @@ export default function Grade() {
   }
 
   const progress = `${index + 1} / ${session.problems.length}`;
+
+  /**
+   * 정답을 모듈에 올려 손끝으로 읽게 한다.
+   * 틀린 칸을 보고 있으면 그 칸의 정답만, 아니면 정답 전체를 한 칸씩.
+   */
+  const feelAnswer = async () => {
+    const compare = current.compare;
+    const cells = compare ? [compare.expected] : (problem?.expectedCells ?? []);
+    if (cells.length === 0) return;
+    try {
+      announce(compare ? `정답 ${ordinalKo(compare.index)} 칸을 장치로 보여 드릴게요.` : "정답을 장치로 보여 드릴게요.");
+      await playCells(cells, {
+        onCell: (index, cell) => announce(describeCell(compare ? compare.index : index, cell)),
+      });
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "장치에 보내지 못했어요.");
+    }
+  };
 
   const goNext = whenReady(() => {
     leavingRef.current = true;
@@ -218,7 +242,12 @@ export default function Grade() {
           )}
           <View style={{ flexDirection: "row", gap: 10 }}>
             <View style={{ flex: 1 }}>
-              <AppButton label="촉각으로 확인" variant="secondary" onPress={() => announce("점자 장치 연결 후에 쓸 수 있어요.")} />
+              <AppButton
+                label="촉각으로 확인"
+                variant="secondary"
+                accessibilityHint="정답 점자를 장치에 올려 손끝으로 읽어요"
+                onPress={() => void feelAnswer()}
+              />
             </View>
             <View style={{ flex: 1 }}>
               <AppButton label="따라 하기" variant="secondary" onPress={() => announce("따라 하기는 준비 중이에요.")} />
