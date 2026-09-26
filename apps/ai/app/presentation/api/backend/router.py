@@ -5,7 +5,7 @@ RestClient.baseUrl = AI_BASE_URL(기본 http://localhost:8000), uri("/analyze") 
 필드명은 Java record 컴포넌트명과 동일(camelCase, errorCounts 키만 snake_case).
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -100,6 +100,9 @@ class SkillStateSchema(CamelModel):
     last_practiced_at: datetime | None = None  # LocalDateTime(타임존 없음) → UTC 로 해석
     mastery_prob: float | None = None
     error_counts: ErrorCountSchema | None = None
+    recent_results: str | None = Field(
+        default=None, max_length=5, pattern=r"^[01]*$"
+    )  # 선택. 없으면 빈 문자열
 
 
 class ReviewAnalyzeRequest(CamelModel):
@@ -148,6 +151,7 @@ class SkillStateOutSchema(CamelModel):
     last_practiced_at: str  # LocalDateTime 형식(Z 없음), UTC
     mastery_prob: float
     error_counts: dict[str, int]
+    recent_results: str  # 최근 5회 정오 ('01101'), 오래된 것부터. Spring 은 저장·전달만
 
 
 class AttemptAnalyzeResponse(CamelModel):
@@ -183,6 +187,16 @@ class SessionSummaryResponse(CamelModel):
     weak_skills: list[WeakSkillSchema]
 
 
+def _utc_naive(dt: datetime | None) -> datetime | None:
+    """시각을 'UTC 기준, 타임존 없는' 값으로. Z·+09:00 같은 오프셋이 붙어 오면 UTC 로 환산한 뒤 떼고,
+    오프셋이 없으면(LocalDateTime) 이미 UTC 라고 보고 그대로 쓴다."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(UTC)
+    return dt.replace(tzinfo=None)
+
+
 def _to_error_counts(schema: ErrorCountSchema | None) -> dict[str, int]:
     """빠진 키는 0으로 채워져 오므로 0을 걷어낸다 (_to_states 와 같은 규칙)."""
     if schema is None:
@@ -199,11 +213,10 @@ def _to_states(items: list[SkillStateSchema]) -> list[SkillState]:
                 learning_skill_id=s.learning_skill_id,
                 n_attempts=s.n_attempts,
                 n_correct=s.n_correct,
-                last_practiced_at=s.last_practiced_at.replace(tzinfo=None)
-                if s.last_practiced_at
-                else None,
+                last_practiced_at=_utc_naive(s.last_practiced_at),
                 mastery_prob=s.mastery_prob,
                 error_counts={k: v for k, v in errs.items() if v},
+                recent_results=s.recent_results or "",
             )
         )
     return out
@@ -219,6 +232,7 @@ def _state_out(s: SkillState) -> SkillStateOutSchema:
         ),
         mastery_prob=s.mastery_prob if s.mastery_prob is not None else 0.0,
         error_counts=dict(s.error_counts),
+        recent_results=s.recent_results,
     )
 
 
@@ -267,9 +281,9 @@ def analyze_review(
                 "learning_skill_id": s.learning_skill_id,
                 "n_attempts": s.n_attempts,
                 "n_correct": s.n_correct,
-                "last_practice": s.last_practiced_at.replace(tzinfo=None).isoformat()
-                if s.last_practiced_at
-                else None,
+                "last_practice": (
+                    lp.isoformat() if (lp := _utc_naive(s.last_practiced_at)) else None
+                ),
                 "mastery_prob": s.mastery_prob,
                 "n_errors_by_type": {k: v for k, v in errs.items() if v},
             }
@@ -328,9 +342,7 @@ class SkillSummaryResponse(CamelModel):
     skills: list[SkillMasterySchema]
 
 
-@router.post(
-    "/skill-summary", response_model=SkillSummaryResponse, response_model_by_alias=True
-)
+@router.post("/skill-summary", response_model=SkillSummaryResponse, response_model_by_alias=True)
 def summarize_skills(
     request: SkillSummaryRequest,
     service: SessionService = Depends(get_session_service),
@@ -369,9 +381,7 @@ class SkillStatesResponse(CamelModel):
     updated_skill_states: list[SkillStateOutSchema]
 
 
-@router.post(
-    "/skill-states", response_model=SkillStatesResponse, response_model_by_alias=True
-)
+@router.post("/skill-states", response_model=SkillStatesResponse, response_model_by_alias=True)
 def update_skill_states(
     request: SkillStatesRequest,
     service: SessionService = Depends(get_session_service),

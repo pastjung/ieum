@@ -2,7 +2,7 @@
 
 ## 자동화 도구
 
-- eslint + prettier (CI 강제 도입 예정), TypeScript strict — `npm run build`(tsc)가 타입 검증을 겸한다.
+- eslint + prettier (CI 강제 도입 예정), TypeScript strict — `cd front && pnpm --filter @ieum/web build`(tsc)가 타입 검증을 겸한다.
 
 ## 네이밍
 

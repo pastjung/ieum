@@ -469,8 +469,8 @@ public class ProblemService {
   /**
    * 후보를 섞어 앞에서 최대 {@code count}개를 가져간다.
    *
-   * <p>예전에는 {@code HashSet} 크기가 목표치가 될 때까지 무작위 추출을 반복했다. 후보가 모자라거나 이미 고른 것과 겹치면 그 반복은 끝나지 않는다 —
-   * 예외도 나지 않고 요청 스레드가 CPU를 태우며 영구히 붙잡힌다. 뽑는 결과는 같은 균등 무작위 부분집합이면서 시도 횟수에 상한이 생긴다.
+   * <p>예전에는 {@code HashSet} 크기가 목표치가 될 때까지 무작위 추출을 반복했다. 후보가 모자라거나 이미 고른 것과 겹치면 그 반복은 끝나지 않는다 — 예외도
+   * 나지 않고 요청 스레드가 CPU를 태우며 영구히 붙잡힌다. 뽑는 결과는 같은 균등 무작위 부분집합이면서 시도 횟수에 상한이 생긴다.
    */
   private static List<Long> pick(List<Long> candidateIds, int count) {
     Collections.shuffle(candidateIds);

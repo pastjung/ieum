@@ -43,8 +43,7 @@ public class SkillSummaryQueryService {
   public SkillSummary find(long userId) {
     long total = problemAttemptRepository.countByUserId(userId);
     long correct = problemAttemptRepository.countByUserIdAndCorrectTrue(userId);
-    return new SkillSummary(
-        Math.toIntExact(total), Math.toIntExact(correct), masteryViews(userId));
+    return new SkillSummary(Math.toIntExact(total), Math.toIntExact(correct), masteryViews(userId));
   }
 
   /**
@@ -106,7 +105,8 @@ public class SkillSummaryQueryService {
         memory.getTotalCorrect(),
         memory.getLastPracticedAt(),
         memory.getMasteryProbability(),
-        Map.of());
+        Map.of(),
+        memory.getRecentResults());
   }
 
   public record SkillSummary(

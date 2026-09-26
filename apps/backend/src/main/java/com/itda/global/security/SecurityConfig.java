@@ -89,9 +89,8 @@ public class SecurityConfig {
   /**
    * 복습 세션. 학습 세션과 같은 이유로 보호 대상이다 — 둘 다 "이 사용자의" 기록으로 문항을 고른다.
    *
-   * <p>이 두 경로도 바로 위 문항 분석과 똑같이 목록에서 빠져 있었다. 그래서 {@code POST}는 500,
-   * {@code GET}은 404로 답했다. 학습 세션 경로를 추가할 때 같은 컨트롤러의 복습 경로가 함께 딸려오지
-   * 않았기 때문이다 — 경로를 늘릴 때는 그 컨트롤러의 다른 method도 함께 본다.
+   * <p>이 두 경로도 바로 위 문항 분석과 똑같이 목록에서 빠져 있었다. 그래서 {@code POST}는 500, {@code GET}은 404로 답했다. 학습 세션 경로를
+   * 추가할 때 같은 컨트롤러의 복습 경로가 함께 딸려오지 않았기 때문이다 — 경로를 늘릴 때는 그 컨트롤러의 다른 method도 함께 본다.
    */
   /** 진행 중인 세션 조회. 내 학습 이력이므로 보호 대상이다 */
   private static final String IN_PROGRESS_SESSION_PATH = "/learning-sessions/in-progress";
@@ -105,6 +104,17 @@ public class SecurityConfig {
   private static final String REVIEW_SESSIONS_PATH = "/review-sessions";
 
   private static final String REVIEW_SESSION_PATH = "/review-sessions/{sessionId}";
+
+  /** 수업 (API 명세 8.2·8.5절). 모두 principal의 역할·소유·참여 관계로 판정하므로 인증이 필요하다. */
+  private static final String LECTURES_PATH = "/lectures";
+
+  private static final String LECTURE_PATH = "/lectures/{lectureId}";
+
+  private static final String LECTURE_STATUS_PATH = "/lectures/{lectureId}/status";
+
+  private static final String LECTURE_MEDIA_TOKENS_PATH = "/lectures/{lectureId}/media-tokens";
+
+  private static final String LECTURE_PARTICIPATIONS_PATH = "/lecture-participations";
 
   /**
    * CORS 설정 원본인 MVC 설정을 읽는 bean. Spring Security의 {@code http.cors()}도 MVC가 있으면 이 이름의 bean을 {@link
@@ -145,12 +155,18 @@ public class SecurityConfig {
                     HttpMethod.POST, LEARNING_SESSION_COMPLETION_PATH),
                 PathPatternRequestMatcher.pathPattern(
                     HttpMethod.POST, LEARNING_SESSION_ATTEMPT_ANALYSIS_PATH),
-                PathPatternRequestMatcher.pathPattern(
-                    HttpMethod.GET, IN_PROGRESS_SESSION_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, IN_PROGRESS_SESSION_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, SKILL_SUMMARY_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, STAGE_STATS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, REVIEW_SESSIONS_PATH),
-                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, REVIEW_SESSION_PATH)))
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, REVIEW_SESSION_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LECTURES_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LECTURES_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LECTURE_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, LECTURE_STATUS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LECTURE_MEDIA_TOKENS_PATH),
+                PathPatternRequestMatcher.pathPattern(
+                    HttpMethod.POST, LECTURE_PARTICIPATIONS_PATH)))
         .addFilterBefore(
             new AccessTokenAuthenticationFilter(accessAuthenticationService),
             AuthorizationFilter.class)
