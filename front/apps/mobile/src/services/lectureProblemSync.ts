@@ -6,7 +6,6 @@ import { useLectureProblemStore } from "@/stores/lectureProblemStore";
 import { classService } from "./classService";
 import { newIdempotencyKey } from "./idempotencyKey";
 import {
-  acceptResult,
   acknowledgeGrade,
   applySnapshot,
   PROBLEM_CHANGED_MESSAGE,
@@ -14,6 +13,8 @@ import {
   SUBMIT_FAILED_MESSAGE,
   WAITING_MESSAGE,
   type FlowDeps,
+  type LectureProblem,
+  type ProblemPhase,
   type Transition,
 } from "./lectureProblemFlow";
 
@@ -28,6 +29,9 @@ const deps: FlowDeps = { newKey: () => newIdempotencyKey(), now: () => Date.now(
 // 그 전에 떠난 조회 응답(제출 전 상태)이 결과를 덮거나 퇴장 뒤에 화면을 바꾸지 않게 한다
 let requestSeq = 0;
 let submitting = false;
+// 제출 세대 번호. begin/stop/reset이 올려서, 끊긴 뒤 뒤늦게 끝나는 제출의 finally가
+// 그사이 시작된 다음 제출의 submitting 플래그를 잘못 풀지 못하게 막는다 (I1)
+let submitGen = 0;
 
 export type SubmitOutcome = "graded" | "changed" | "closed" | "failed" | "ignored";
 
@@ -49,10 +53,19 @@ function record(result: LiveAnswer): void {
   store().set({ results: { ...store().results, [result.problemId]: result.isCorrect } });
 }
 
+/** phase가 가리키는 문제 id. 채점 결과가 그 문제에 여전히 해당하는지 비교하는 데 쓴다 */
+function phaseProblemId(p: ProblemPhase | null): string | null {
+  if (p?.kind === "solving" || p?.kind === "graded") return p.problem.problemId;
+  if (p?.kind === "submitted") return p.problemId;
+  return null;
+}
+
 export const lectureProblemSync = {
   /** 대기 화면이 입장을 시도할 때. 같은 수업의 재접속이면 집계는 두고 상태만 조회 전으로 되돌린다 */
   begin(lectureId: string): void {
     requestSeq++;
+    submitGen++;
+    submitting = false; // 끊긴 연결이 복구된 것일 수 있다 — 제출이 다시 막히지 않게 한다 (I1)
     if (store().lectureId !== lectureId) store().reset();
     store().set({ lectureId, active: true, phase: null });
   },
@@ -60,12 +73,16 @@ export const lectureProblemSync = {
   /** 방을 나왔다(종료·끊김·퇴장). 집계는 종료 화면이 쓰므로 남긴다 */
   stop(): void {
     requestSeq++;
+    submitGen++;
+    submitting = false;
     store().set({ active: false });
   },
 
   /** 수업을 완전히 떠날 때(홈으로·수업 나가기) */
   reset(): void {
     requestSeq++;
+    submitGen++;
+    submitting = false;
     store().reset();
   },
 
@@ -94,20 +111,24 @@ export const lectureProblemSync = {
     const { lectureId, active, phase } = store();
     if (!active || lectureId === null || phase?.kind !== "solving" || submitting) return "ignored";
     submitting = true;
+    const gen = ++submitGen;
     requestSeq++;
+    const submittedProblem: LectureProblem = phase.problem;
     const durationMs = Math.max(0, Math.round(deps.now() - phase.startedAt));
     try {
       const result = await classService.submitLiveAnswer(
         lectureId,
-        phase.problem.problemId,
+        submittedProblem.problemId,
         { cells: [...cells], durationMs },
         phase.idempotencyKey,
       );
       if (!isActiveFor(lectureId)) return "ignored";
       record(result);
-      const transition = acceptResult(store().phase, result);
-      if (transition === null) return "ignored"; // 그 사이 다음 문제로 넘어갔다 — 결과는 집계만 한다
-      commit(transition);
+      // 그 사이 다른 문제로 넘어갔으면(화면이 이미 새 문제를 보여준다) 결과는 집계만 하고 화면은 그대로 둔다.
+      // 제출 중 재접속으로 phase가 null·submitted(같은 문제)로 바뀐 것은 다른 문제로 넘어간 게 아니므로 반영한다 (M1)
+      const curId = phaseProblemId(store().phase);
+      if (curId !== null && curId !== result.problemId) return "ignored";
+      commit({ phase: { kind: "graded", problem: submittedProblem, result }, announcement: null });
       return "graded";
     } catch (error) {
       if (!isActiveFor(lectureId)) return "ignored";
@@ -129,7 +150,8 @@ export const lectureProblemSync = {
       announce(SUBMIT_FAILED_MESSAGE);
       return "failed";
     } finally {
-      submitting = false;
+      // begin/stop/reset이 그사이 새 세대를 열었으면(끊김·재접속) 이 finally는 그 세대의 플래그를 건드리지 않는다 (I1)
+      if (gen === submitGen) submitting = false;
     }
   },
 

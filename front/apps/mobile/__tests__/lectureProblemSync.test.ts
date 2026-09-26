@@ -319,4 +319,40 @@ describe("lectureProblemSync 제출", () => {
     expect(phase()).toEqual({ kind: "submitted", problemId: "7" });
     expect(mockedAnnounce).toHaveBeenCalledWith(SUBMITTED_WAITING_MESSAGE);
   });
+
+  it("응답 없이 끊긴 제출 뒤 stop→begin을 하면 다시 제출할 수 있다 (I1 회귀)", async () => {
+    await startSolving("7");
+    const hung = deferred<LiveAnswer>();
+    mockedClass.submitLiveAnswer.mockImplementationOnce(() => hung.promise);
+
+    void lectureProblemSync.submit([8]); // 응답이 영영 오지 않는 제출 — 연결이 끊겼다고 가정한다
+
+    lectureProblemSync.stop();
+    lectureProblemSync.begin("42");
+    await startSolving("7");
+
+    mockedClass.submitLiveAnswer.mockResolvedValueOnce(answer("7"));
+    await expect(lectureProblemSync.submit([8])).resolves.toBe("graded");
+
+    expect(mockedClass.submitLiveAnswer).toHaveBeenCalledTimes(2);
+  });
+
+  it("제출 중 재접속해 제출 대기로 바뀌어도 같은 문제의 채점 결과가 오면 반영한다 (M1 회귀)", async () => {
+    await startSolving("7");
+    const gate = deferred<LiveAnswer>();
+    mockedClass.submitLiveAnswer.mockImplementationOnce(() => gate.promise);
+
+    const submitting = lectureProblemSync.submit([8]);
+
+    lectureProblemSync.begin("42"); // 재접속 — 같은 수업이라 결과는 두고 phase만 조회 전(null)으로 돌아간다
+    mockedClass.getLectureProblem.mockResolvedValueOnce(snapshot(current("7", true)));
+    await lectureProblemSync.refresh(); // 이미 낸 문제라서 제출 대기가 된다
+    expect(phase()).toEqual({ kind: "submitted", problemId: "7" });
+    mockedAnnounce.mockClear();
+
+    gate.resolve(answer("7", true));
+    await expect(submitting).resolves.toBe("graded");
+
+    expect(phase()).toMatchObject({ kind: "graded", problem: { problemId: "7" }, result: { isCorrect: true } });
+  });
 });
