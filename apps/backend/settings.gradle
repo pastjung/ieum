@@ -1,6 +1,0 @@
-plugins {
-    // ./gradlew 실행 시 JDK 25가 없으면 자동으로 내려받는다 (toolchain auto-provisioning)
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
-}
-
-rootProject.name = 'itda-backend'

@@ -1,9 +1,0 @@
-{
-  "name": "@ieum/itda",
-  "version": "0.0.0",
-  "private": true,
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc --noEmit" },
-  "dependencies": { "@ieum/domain": "workspace:*" },
-  "devDependencies": { "typescript": "~5.9.2" }
-}

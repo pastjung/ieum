@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.presentation.api.v1 import convert_router, nl_router
+from app.presentation.api.v1 import convert_router
 
 
 def create_app() -> FastAPI:
@@ -23,7 +23,6 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(convert_router.router, prefix=settings.api_prefix)
-    app.include_router(nl_router.router, prefix=settings.api_prefix)
 
     @app.get(f"{settings.api_prefix}/health", tags=["health"])
     def health() -> dict:
