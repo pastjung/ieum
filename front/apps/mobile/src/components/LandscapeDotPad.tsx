@@ -17,17 +17,19 @@ interface Props {
 
 const SIZE = 96;
 
-// 양손 파지 — 왼손 위→아래 1·2·3, 오른손 위→아래 4·5·6 (ERD 「6점 번호」 절).
-// 세로 패드(`DotPad`)와 같은 이유로 번호만 제자리에 돌렸다. 사선 들여쓰기는 그대로 둔다.
+// 양손 파지 — 왼쪽부터 3·2·1 | 4·5·6. 퍼킨스 점자타자기 자판과 같은 순서라, 두 손의 검지가
+// 가운데(1·4번)에 온다. 위→아래로는 왼손 3·2·1, 오른손 6·5·4다.
+// 버튼이 놓이는 사선 모양은 그대로 두고 번호만 정한다. 번호는 버튼이 들고 있고, 터치는 버튼의
+// 실제 위치로 번호를 찾으므로(`useMultiTouchDots`) 6비트 값은 배치와 상관없다.
 const leftPos: Partial<Record<Dot, object>> = {
-  1: { left: "6%", top: "8%" },
+  3: { left: "6%", top: "8%" },
   2: { left: "30%", top: "34%" },
-  3: { left: "54%", bottom: "10%" },
+  1: { left: "54%", bottom: "10%" },
 };
 const rightPos: Partial<Record<Dot, object>> = {
-  4: { right: "6%", top: "8%" },
+  6: { right: "6%", top: "8%" },
   5: { right: "30%", top: "34%" },
-  6: { right: "54%", bottom: "10%" },
+  4: { right: "54%", bottom: "10%" },
 };
 
 /**
@@ -56,15 +58,15 @@ export function LandscapeDotPad({ onCommitCell, center, disabled, onBlockedTouch
   return (
     <View {...padHandlers} style={styles.row}>
       {zone(
-        [1, 2, 3],
+        [3, 2, 1],
         leftPos,
-        disabled ? "왼손 입력 영역. 지금은 입력할 수 없어요." : "왼손 입력 영역. 위에서부터 1번, 2번, 3번 점이에요.",
+        disabled ? "왼손 입력 영역. 지금은 입력할 수 없어요." : "왼손 입력 영역. 위에서부터 3번, 2번, 1번 점이에요.",
       )}
       <View style={styles.center}>{center}</View>
       {zone(
-        [4, 5, 6],
+        [6, 5, 4],
         rightPos,
-        disabled ? "오른손 입력 영역. 지금은 입력할 수 없어요." : "오른손 입력 영역. 위에서부터 4번, 5번, 6번 점이에요.",
+        disabled ? "오른손 입력 영역. 지금은 입력할 수 없어요." : "오른손 입력 영역. 위에서부터 6번, 5번, 4번 점이에요.",
       )}
     </View>
   );
