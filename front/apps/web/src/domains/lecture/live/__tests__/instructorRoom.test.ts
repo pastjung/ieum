@@ -286,7 +286,9 @@ describe('instructorRoom', () => {
 
   it('소리 재생 상태 변화를 알린다', async () => {
     const playback: boolean[] = []
-    await connectInstructorRoom(token, () => {}, { onAudioPlayback: (playing) => playback.push(playing) })
+    await connectInstructorRoom(token, () => {}, {
+      onAudioPlayback: (playing) => playback.push(playing),
+    })
 
     rooms[0].emit('audioPlaybackChanged', false)
     rooms[0].emit('audioPlaybackChanged', true)
@@ -300,8 +302,20 @@ describe('instructorRoom', () => {
     const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
 
     // 서버가 보낸 메시지는 participant가 undefined다
-    rooms[0].emit('dataReceived', encode({ type: 'ANSWER_SUBMITTED', problemId: '26578' }), undefined, 0, 'lecture')
-    rooms[0].emit('dataReceived', encode({ type: 'ANSWER_SUBMITTED', problemId: '1' }), undefined, 0, 'chat')
+    rooms[0].emit(
+      'dataReceived',
+      encode({ type: 'ANSWER_SUBMITTED', problemId: '26578' }),
+      undefined,
+      0,
+      'lecture',
+    )
+    rooms[0].emit(
+      'dataReceived',
+      encode({ type: 'ANSWER_SUBMITTED', problemId: '1' }),
+      undefined,
+      0,
+      'chat',
+    )
     rooms[0].emit('dataReceived', new TextEncoder().encode('{broken'), undefined, 0, 'lecture')
 
     expect(submitted).toEqual(['26578'])
@@ -310,7 +324,10 @@ describe('instructorRoom', () => {
   it('밀려난 접속은 답안 신호를 알리지 않는다', async () => {
     let stale = false
     const submitted: string[] = []
-    await connectInstructorRoom(token, () => {}, { onAnswerSubmitted: (id) => submitted.push(id), isStale: () => stale })
+    await connectInstructorRoom(token, () => {}, {
+      onAnswerSubmitted: (id) => submitted.push(id),
+      isStale: () => stale,
+    })
 
     stale = true
     rooms[0].emit(

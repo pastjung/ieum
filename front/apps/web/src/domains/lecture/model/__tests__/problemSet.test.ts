@@ -3,14 +3,26 @@ import { mergeLinkedProblem, problemSetItems } from '../problemSet'
 import type { LinkedProblem } from '../types'
 
 function problem(problemId: string, displayText: string): LinkedProblem {
-  return { problemId, targetText: displayText, displayText, problemType: 'WORD', cellCount: 1, expectedPattern: [8] }
+  return {
+    problemId,
+    targetText: displayText,
+    displayText,
+    problemType: 'WORD',
+    cellCount: 1,
+    expectedPattern: [8],
+  }
 }
 
 describe('problemSetItems', () => {
   const problems = [problem('1', '그래서'), problem('2', '그리고'), problem('3', '초성 ㄱ')]
 
   it('지금 문제·출제됨·대기를 연결 순서대로 표시한다', () => {
-    expect(problemSetItems(problems, '2', new Set(['1', '2'])).map((i) => [i.problem.problemId, i.state])).toEqual([
+    expect(
+      problemSetItems(problems, '2', new Set(['1', '2'])).map((i) => [
+        i.problem.problemId,
+        i.state,
+      ]),
+    ).toEqual([
       ['1', 'delivered'],
       ['2', 'current'],
       ['3', 'waiting'],
@@ -18,11 +30,19 @@ describe('problemSetItems', () => {
   })
 
   it('현재 문제가 없으면 출제 기록만 본다', () => {
-    expect(problemSetItems(problems, null, new Set(['3'])).map((i) => i.state)).toEqual(['waiting', 'waiting', 'delivered'])
+    expect(problemSetItems(problems, null, new Set(['3'])).map((i) => i.state)).toEqual([
+      'waiting',
+      'waiting',
+      'delivered',
+    ])
   })
 
   it('출제 기록에 없어도 지금 문제는 current다 (새로고침 직후)', () => {
-    expect(problemSetItems(problems, '3', new Set()).map((i) => i.state)).toEqual(['waiting', 'waiting', 'current'])
+    expect(problemSetItems(problems, '3', new Set()).map((i) => i.state)).toEqual([
+      'waiting',
+      'waiting',
+      'current',
+    ])
   })
 
   it('연결된 문제가 없으면 빈 목록을 돌려준다', () => {

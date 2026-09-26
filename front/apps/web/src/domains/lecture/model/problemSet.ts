@@ -23,6 +23,9 @@ export function problemSetItems(
 }
 
 /** 등록 응답을 연결 목록에 합친다. 이미 연결된 문제(200)면 같은 배열을 그대로 돌려준다 */
-export function mergeLinkedProblem(problems: LinkedProblem[], problem: LinkedProblem): LinkedProblem[] {
+export function mergeLinkedProblem(
+  problems: LinkedProblem[],
+  problem: LinkedProblem,
+): LinkedProblem[] {
   return problems.some((p) => p.problemId === problem.problemId) ? problems : [...problems, problem]
 }

@@ -9,7 +9,8 @@ import type { LectureStatus, LinkedProblem, ProblemCandidate } from '../model/ty
 
 const c = theme.color
 
-const INPUT_GUIDE = "초성 ㄱ은 '초성'을 입력하고 한 칸 띄운 뒤 ㄱ을 입력하세요. 받침 ㄱ, 모음 ㅏ, 음절 가도 같은 방식이에요."
+const INPUT_GUIDE =
+  "초성 ㄱ은 '초성'을 입력하고 한 칸 띄운 뒤 ㄱ을 입력하세요. 받침 ㄱ, 모음 ㅏ, 음절 가도 같은 방식이에요."
 const DELIVER_LOCKED = '수업을 시작하면 출제할 수 있어요'
 const DELIVER_CLOSED = '종료된 수업이에요'
 
@@ -71,17 +72,33 @@ function SetRow({ item, status, canDeliver, delivering, disabled, onDeliver }: S
       <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>
         {brailleGlyph(problem.expectedPattern)}
       </span>
-      {state === 'current' && <span style={{ fontSize: 12, fontWeight: 800, color: c.primaryDark, flexShrink: 0 }}>지금 문제</span>}
-      {state === 'delivered' && <span style={{ fontSize: 12, fontWeight: 700, flexShrink: 0 }}>출제됨</span>}
+      {state === 'current' && (
+        <span style={{ fontSize: 12, fontWeight: 800, color: c.primaryDark, flexShrink: 0 }}>
+          지금 문제
+        </span>
+      )}
+      {state === 'delivered' && (
+        <span style={{ fontSize: 12, fontWeight: 700, flexShrink: 0 }}>출제됨</span>
+      )}
       {state === 'waiting' && (
         <>
-          <span style={{ fontSize: 12, fontWeight: 700, color: c.textSub, flexShrink: 0 }}>대기</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: c.textSub, flexShrink: 0 }}>
+            대기
+          </span>
           <button
             type="button"
             disabled={locked}
             onClick={() => onDeliver(problem.problemId)}
-            title={status === 'SCHEDULED' ? DELIVER_LOCKED : status === 'CLOSED' ? DELIVER_CLOSED : undefined}
-            aria-label={delivering ? `${problem.displayText} 출제 중` : `${problem.displayText} 출제`}
+            title={
+              status === 'SCHEDULED'
+                ? DELIVER_LOCKED
+                : status === 'CLOSED'
+                  ? DELIVER_CLOSED
+                  : undefined
+            }
+            aria-label={
+              delivering ? `${problem.displayText} 출제 중` : `${problem.displayText} 출제`
+            }
             aria-busy={delivering}
             style={{
               ...buttonStyle('outline', 'sm'),
@@ -151,7 +168,10 @@ export function ProblemSetPanel({
   const addLocked = !canRegister || registering || text.trim() === ''
 
   return (
-    <section aria-labelledby={titleId} style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minHeight: 0 }}>
+    <section
+      aria-labelledby={titleId}
+      style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minHeight: 0 }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h2 id={titleId} style={{ margin: 0, fontSize: 14, fontWeight: 800 }}>
           문제 세트 · {problems.length}
@@ -182,13 +202,21 @@ export function ProblemSetPanel({
           <button
             type="submit"
             disabled={addLocked}
-            style={{ ...buttonStyle('primary', 'sm'), boxShadow: `0 2px 0 ${c.primaryStrong}`, ...(addLocked ? dimmed : {}) }}
+            style={{
+              ...buttonStyle('primary', 'sm'),
+              boxShadow: `0 2px 0 ${c.primaryStrong}`,
+              ...(addLocked ? dimmed : {}),
+            }}
           >
             {registering ? '추가 중…' : '추가'}
           </button>
         </div>
         {candidates && (
-          <div role="group" aria-label="어떤 문제인지 고르기" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+          <div
+            role="group"
+            aria-label="어떤 문제인지 고르기"
+            style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}
+          >
             <span style={{ fontSize: 12, color: c.textSub }}>어떤 문제인가요?</span>
             {candidates.map((candidate) => (
               <button
@@ -215,7 +243,9 @@ export function ProblemSetPanel({
         )}
       </form>
 
-      {status === 'SCHEDULED' && <p style={{ margin: 0, fontSize: 12, color: c.textSub }}>{DELIVER_LOCKED}</p>}
+      {status === 'SCHEDULED' && (
+        <p style={{ margin: 0, fontSize: 12, color: c.textSub }}>{DELIVER_LOCKED}</p>
+      )}
 
       {items.length === 0 ? (
         <p style={{ margin: 0, fontSize: 13, color: c.textSub }}>아직 추가한 문제가 없어요</p>

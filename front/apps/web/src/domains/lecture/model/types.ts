@@ -44,7 +44,8 @@ export interface SpeakingResult {
 }
 
 /** problems.level */
-export type ProblemType = 'CONSONANT' | 'VOWEL' | 'CONTRACTION' | 'CONTRACTION_WORD' | 'WORD' | 'SENTENCE'
+export type ProblemType =
+  'CONSONANT' | 'VOWEL' | 'CONTRACTION' | 'CONTRACTION_WORD' | 'WORD' | 'SENTENCE'
 
 /** 수업에 연결된 문제. 문제 등록 응답·강사 Snapshot에 쓴다 */
 export interface LinkedProblem {

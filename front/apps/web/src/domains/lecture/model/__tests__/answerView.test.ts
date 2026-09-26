@@ -31,7 +31,9 @@ describe('wrongReason', () => {
   })
 
   it('틀린 칸이 여럿이면 첫 번째 칸만 말한다', () => {
-    expect(wrongReason([cell(1, 8, 8), cell(2, 8, 8), cell(3, 0 + 2, 3), cell(4, 1, 2)])).toBe('셋째 칸 1점 누락')
+    expect(wrongReason([cell(1, 8, 8), cell(2, 8, 8), cell(3, 0 + 2, 3), cell(4, 1, 2)])).toBe(
+      '셋째 칸 1점 누락',
+    )
   })
 
   it('cellIndex 순서로 본다', () => {
@@ -62,7 +64,11 @@ describe('studentAnswerView', () => {
   })
 
   it('정답은 제출 점자와 "정답"', () => {
-    expect(studentAnswerView(answer('1', true, [cell(1, 8, 8)]))).toEqual({ state: 'correct', glyph: '⠈', detail: '정답' })
+    expect(studentAnswerView(answer('1', true, [cell(1, 8, 8)]))).toEqual({
+      state: 'correct',
+      glyph: '⠈',
+      detail: '정답',
+    })
   })
 
   it('오답은 제출 점자와 틀린 이유', () => {
@@ -74,21 +80,47 @@ describe('studentAnswerView', () => {
   })
 
   it('입력 칸이 하나도 없으면 점자 없이 이유만', () => {
-    expect(studentAnswerView(answer('1', false, [cell(1, 0, 8)]))).toEqual({ state: 'wrong', glyph: null, detail: '칸 수 다름' })
+    expect(studentAnswerView(answer('1', false, [cell(1, 0, 8)]))).toEqual({
+      state: 'wrong',
+      glyph: null,
+      detail: '칸 수 다름',
+    })
   })
 })
 
 describe('progressCounts', () => {
   it('접속 학생 기준으로 제출·정답·오답·미착수를 센다', () => {
-    const answers = [answer('1', true, [cell(1, 8, 8)]), answer('2', false, [cell(1, 1, 8)]), answer('9', true, [cell(1, 8, 8)])]
-    expect(progressCounts(['1', '2', '3'], answers)).toEqual({ connected: 3, submitted: 2, correct: 1, wrong: 1, notStarted: 1 })
+    const answers = [
+      answer('1', true, [cell(1, 8, 8)]),
+      answer('2', false, [cell(1, 1, 8)]),
+      answer('9', true, [cell(1, 8, 8)]),
+    ]
+    expect(progressCounts(['1', '2', '3'], answers)).toEqual({
+      connected: 3,
+      submitted: 2,
+      correct: 1,
+      wrong: 1,
+      notStarted: 1,
+    })
   })
 
   it('접속 학생이 없으면 모두 0', () => {
-    expect(progressCounts([], [answer('1', true, [])])).toEqual({ connected: 0, submitted: 0, correct: 0, wrong: 0, notStarted: 0 })
+    expect(progressCounts([], [answer('1', true, [])])).toEqual({
+      connected: 0,
+      submitted: 0,
+      correct: 0,
+      wrong: 0,
+      notStarted: 0,
+    })
   })
 
   it('같은 userId가 두 번 와도 한 명으로 센다', () => {
-    expect(progressCounts(['1', '1'], [])).toEqual({ connected: 1, submitted: 0, correct: 0, wrong: 0, notStarted: 1 })
+    expect(progressCounts(['1', '1'], [])).toEqual({
+      connected: 1,
+      submitted: 0,
+      correct: 0,
+      wrong: 0,
+      notStarted: 1,
+    })
   })
 })
