@@ -384,3 +384,33 @@ export const completionResponseSchema = z.object({
   weakSkills: z.array(weakSkillSchema).catch([]),
 });
 export type CompletionResponse = z.infer<typeof completionResponseSchema>;
+
+/* ─── 실시간 수업 (API 명세 8.2·8.5절) ─── */
+
+export const lectureStatusSchema = z.enum(["SCHEDULED", "OPEN", "CLOSED"]);
+export type LectureStatus = z.infer<typeof lectureStatusSchema>;
+
+/** 참여 학습자용 수업 Snapshot. 참여 코드·다른 참여자 정보는 오지 않는다 */
+export const learnerLectureSchema = z.object({
+  /** BIGINT의 10진수 문자열. number로 바꾸지 않는다 */
+  lectureId: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  status: lectureStatusSchema,
+  scheduledAt: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  endedAt: z.string().nullable(),
+  currentProblem: z.unknown().nullable(),
+  createdAt: z.string(),
+  myParticipation: z.object({ joinedAt: z.string(), leftAt: z.string().nullable() }),
+  reviewableCurriculumStages: z.array(z.unknown()),
+});
+export type LearnerLecture = z.infer<typeof learnerLectureSchema>;
+
+/** OpenVidu 음성 접속 토큰. 서버에 저장되지 않으며 10분 유효 */
+export const mediaTokenSchema = z.object({
+  serverUrl: z.string().regex(/^wss?:\/\//),
+  token: z.string().min(1),
+  expiresAt: z.string(),
+});
+export type MediaToken = z.infer<typeof mediaTokenSchema>;

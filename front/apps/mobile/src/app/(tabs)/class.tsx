@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
 import { AppButton } from "@/components/AppButton";
 import { ListRow } from "@/components/ListRow";
-import { classService } from "@/services/classService";
+import { classService, joinErrorMessage } from "@/services/classService";
 import { announce, hapticError } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
@@ -17,6 +17,7 @@ export default function ClassJoin() {
   const fontScale = useFontScale();
   const [code, setCode] = useState("");
   const [joining, setJoining] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -30,9 +31,15 @@ export default function ClassJoin() {
       return;
     }
     setJoining(true);
+    setError(null);
     try {
       const info = await classService.joinByCode(code);
-      router.push({ pathname: "/class/waiting", params: { title: info.title } });
+      router.push({ pathname: "/class/waiting", params: { lectureId: info.lectureId, title: info.title } });
+    } catch (err) {
+      void hapticError();
+      const message = joinErrorMessage(err);
+      setError(message);
+      announce(message);
     } finally {
       setJoining(false);
     }
@@ -77,6 +84,11 @@ export default function ClassJoin() {
         accessibilityLabel="참여 코드"
       />
       <ListRow label="최근 참여" value={`${classService.recentClass.title} · ${classService.recentClass.when}`} />
+      {error && (
+        <Text accessibilityLiveRegion="polite" style={{ fontSize: 15 * fontScale, fontWeight: "700", color: theme.color.primary, lineHeight: 24 }}>
+          {error}
+        </Text>
+      )}
       <View style={{ marginTop: "auto", paddingBottom: 14 }}>
         <AppButton label={joining ? "입장 중…" : "입장하기"} disabled={joining} onPress={() => void join()} />
       </View>

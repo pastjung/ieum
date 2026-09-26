@@ -20,7 +20,8 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.BLUETOOTH_SCAN"
-      ]
+      ],
+      "blockedPermissions": ["android.permission.CAMERA"]
     },
     "plugins": [
       "expo-router",
@@ -41,7 +42,9 @@
             "com.google.android.googlequicksearchbox"
           ]
         }
-      ]
+      ],
+      "@livekit/react-native-expo-plugin",
+      "@config-plugins/react-native-webrtc"
     ],
     "experiments": {
       "typedRoutes": true
