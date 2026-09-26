@@ -236,6 +236,16 @@ def _info_when_correct(kcs: list[str], kc_rules: list[dict[str, Any]]) -> str:
 
 
 # ── 채점 ──────────────────────────────────────────────────────────────────
+def _cell_syllables(n_cells: int, syllables: list[dict[str, Any]]) -> list[int | None]:
+    """칸마다 몇 번째 음절에 속하는지. 드릴(음절 정보 없음)은 전부 None."""
+    out: list[int | None] = [None] * n_cells
+    for syl in syllables:
+        for c in syl.get("cells", []):
+            if 0 <= c < n_cells:
+                out[c] = syl["idx"]
+    return out
+
+
 def _to_dots(x: int | list[int]) -> list[int]:
     return int_to_dots(x) if isinstance(x, int) else list(x)
 
@@ -322,6 +332,7 @@ def grade(
         "actual": cells_to_unicode(actual_dots),
         "cell_results": cell_ok,
         "kc": kcs,
+        "cell_syllables": _cell_syllables(len(cells), syllables),
         "kc_rules": [r["kc"] for r in kc_rules],
         "errors": errors,
         "kc_outcomes": kc_outcomes,

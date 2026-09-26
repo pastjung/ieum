@@ -115,7 +115,12 @@ def test_attempt_analyze_emits_shadow_log_without_changing_response(caplog):
     ]
     with caplog.at_level(logging.INFO, logger="itda.shadow"):
         body = _attempt("가방", [43, 24, 54], [43, 24, 32], st)
-    assert set(body) == {"feedback", "skillResults", "updatedSkillStates"}  # 응답 형태 그대로
+    assert set(body) == {
+        "feedback",
+        "skillResults",
+        "updatedSkillStates",
+        "cellSkills",
+    }  # 응답 형태 그대로
     lines = [r.getMessage() for r in caplog.records if "shadow_prediction" in r.getMessage()]
     assert len(lines) == 1
     rec = json.loads(lines[0])

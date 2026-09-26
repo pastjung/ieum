@@ -127,3 +127,27 @@ def test_every_seeded_drill_in_db_is_graded_with_matching_skills():
             "text"
         ]
         assert all(s["correct"] for s in body["skillResults"]), d["text"]
+
+
+def test_cell_skills_label_each_expected_cell_by_element():
+    """오답 화면 캡션: '정답 · 첫 번째 칸' 대신 칸이 나타내는 요소. 두 칸 요소는 (1/2)(2/2)."""
+
+    def labels(text, expected):
+        body = _attempt(text, expected, expected).json()
+        return [(c["cellIndex"], c["label"]) for c in body["cellSkills"]]
+
+    # 바보 = 약자 바(4·5) + 첫소리 ㅂ(4·5) + 모음 ㅗ — 같은 점형이 요소 이름으로 구분된다
+    assert labels("바보", [24, 24, 37]) == [(1, "약자 바"), (2, "첫소리 ㅂ"), (3, "모음 ㅗ")]
+    assert labels("ㅙ", [39, 23]) == [(1, "모음 ㅙ (1/2)"), (2, "모음 ㅙ (2/2)")]
+    assert labels("그래서", [1, 14]) == [(1, "약어 그래서 (1/2)"), (2, "약어 그래서 (2/2)")]
+    assert labels("가가", [43, 43]) == [(1, "약자 가"), (2, "약자 가")]  # 다른 음절이면 따로
+    assert labels("ㄲ", [32, 8]) == [(1, "된소리표"), (2, "첫소리 ㄱ")]
+    assert labels("받침 ㅆ", [12]) == [(1, "받침 ㅆ")]
+
+
+def test_cell_skills_ids_match_skill_results():
+    body = _attempt("가방", [43, 24, 54], [43, 24, 32]).json()
+    assert [c["learningSkillId"] for c in body["cellSkills"]] == [66, 70, 23]
+    assert {c["learningSkillId"] for c in body["cellSkills"]} <= {
+        r["learningSkillId"] for r in body["skillResults"]
+    }

@@ -47,7 +47,7 @@ def test_attempt_wrong_cell_gives_feedback_skill_results_and_changed_states_only
     res = _attempt("가방", [43, 24, 54], [43, 24, 32])
     assert res.status_code == 200
     body = res.json()
-    assert set(body) == {"feedback", "skillResults", "updatedSkillStates"}
+    assert set(body) == {"feedback", "skillResults", "updatedSkillStates", "cellSkills"}
     assert "세 번째 칸" in body["feedback"]["tts"] and "받침 이응" in body["feedback"]["tts"]
     assert body["feedback"]["detail"]
     results = {r["learningSkillId"]: r for r in body["skillResults"]}

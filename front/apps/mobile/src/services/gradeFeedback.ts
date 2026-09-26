@@ -10,6 +10,13 @@ export interface GradeCompareCell {
   extraDots: Dot[];
   /** 0부터 시작하는 칸 위치. `ordinalKo`에 그대로 넣는다 */
   index: number;
+  /** 이 정답 칸의 학습 요소 이름("약자 바", "첫소리 ㅂ"). 없으면 캡션이 "N번째 칸"으로 되돌아간다 */
+  label?: string | null;
+}
+
+/** 정답 칸 캡션: 요소 이름이 있으면 그것, 없으면 "첫 번째 칸" */
+export function compareCaption(compare: GradeCompareCell, ordinal: (index: number) => string): string {
+  return compare.label ? compare.label : `${ordinal(compare.index)} 칸`;
 }
 
 /**
@@ -89,6 +96,7 @@ export function selectGradeFeedback(
                 missingDots: toDots(wrong.missingDots),
                 extraDots: toDots(wrong.extraDots),
                 index: wrong.cellIndex - 1,
+                label: wrong.label ?? null,
               }
             : null,
         };

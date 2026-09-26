@@ -46,7 +46,11 @@ public record LearningAttemptAnalysisResponse(
       int missingMask,
       int extraMask,
       List<Integer> missingDots,
-      List<Integer> extraDots) {
+      List<Integer> extraDots,
+      /** 이 정답 칸의 학습 요소 id. 없으면 null */
+      Long learningSkillId,
+      /** 화면 캡션용 요소 이름("약자 바", "모음 ㅙ (1/2)"). 없으면 null */
+      String label) {
 
     static CellAnalysisResponse from(CellResult result) {
       return new CellAnalysisResponse(
@@ -57,7 +61,9 @@ public record LearningAttemptAnalysisResponse(
           result.missingMask(),
           result.extraMask(),
           result.missingDots(),
-          result.extraDots());
+          result.extraDots(),
+          result.learningSkillId(),
+          result.label());
     }
   }
 }
