@@ -10,6 +10,7 @@ import { liveGradeFeedback } from "@/services/liveGradeFeedback";
 import { liveLecture } from "@/services/liveLecture";
 import { lectureProblemSync } from "@/services/lectureProblemSync";
 import { isUserBackAction } from "@/services/lectureSignals";
+import { MIC_FAILED_MESSAGE } from "@/services/lectureVoiceControls";
 import { useLectureProblemStore } from "@/stores/lectureProblemStore";
 import { useLectureVoiceStore } from "@/stores/lectureVoiceStore";
 import { announce, hapticError, hapticSuccess } from "@/a11y";
@@ -26,8 +27,20 @@ export default function ClassGrade() {
   // 그 경로를 놓친 경우의 방어선이다. 마이크가 켜진 채로는 결과 낭독이 반 전체에 전해지므로
   // 꺼질 때까지 낭독을 미룬다 (I1)
   const micOn = useLectureVoiceStore((s) => s.micOn);
+  // 끄기 자체가 실패하면(끊김·micBusy 등) micOn이 영영 true로 남아 결과를 못 듣는다 —
+  // 실패를 한 번 알리고, 그다음부터는 켜진 채로라도 결과를 읽어 준다 (재리뷰 반영)
+  const [micOffFailed, setMicOffFailed] = useState(false);
   useEffect(() => {
-    if (micOn) void liveLecture.setMicrophone(false);
+    if (!micOn) return;
+    let cancelled = false;
+    void liveLecture.setMicrophone(false).then((ok) => {
+      if (cancelled || ok) return;
+      announce(MIC_FAILED_MESSAGE);
+      setMicOffFailed(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [micOn]);
   const feedback = useMemo(() => (graded ? liveGradeFeedback(graded.result) : null), [graded]);
   /** 지금 보고 있는 틀린 칸의 순서 — 칸이 여럿이면 한 칸씩 넘겨 본다 */
@@ -59,11 +72,12 @@ export default function ClassGrade() {
   const isLastStep = step + 1 >= steps.length;
 
   useEffect(() => {
-    if (!feedback || !current || micOn) return;
+    // 마이크가 켜져 있어도 끄기를 이미 실패한 뒤라면 더 미루지 않는다 — 계속 기다리면 결과를 영영 못 듣는다
+    if (!feedback || !current || (micOn && !micOffFailed)) return;
     // 정오 진동은 문항당 한 번이다. 칸을 넘길 때마다 울리면 칸마다 새로 채점된 것처럼 느껴진다
     if (step === 0) void (feedback.correct ? hapticSuccess() : hapticError());
     announce(current.speech);
-  }, [current, feedback, step, micOn]);
+  }, [current, feedback, step, micOn, micOffFailed]);
 
   if (!graded || !feedback || !current) {
     return <ScreenShell style={styles.center} />;
