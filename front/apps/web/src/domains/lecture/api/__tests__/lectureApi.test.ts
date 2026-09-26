@@ -3,11 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ambiguousCandidates, createLectureApi, toScheduledAtUtc } from '../lectureApi'
 
 function fakeClient() {
-  return {
-    get: vi.fn(async () => ({})),
-    post: vi.fn(async () => ({})),
-    put: vi.fn(async () => ({})),
-  }
+  return { get: vi.fn(async () => ({})), post: vi.fn(async () => ({})), put: vi.fn(async () => ({})) }
 }
 
 describe('lectureApi', () => {
@@ -19,10 +15,7 @@ describe('lectureApi', () => {
 
   it('빈 설명과 시작 시각은 보내지 않는다', async () => {
     const client = fakeClient()
-    await createLectureApi(client as unknown as ApiClient).create({
-      title: '약자 4회차',
-      description: '  ',
-    })
+    await createLectureApi(client as unknown as ApiClient).create({ title: '약자 4회차', description: '  ' })
     expect(client.post).toHaveBeenCalledWith('/lectures', { title: '약자 4회차' })
   })
 
@@ -58,12 +51,8 @@ describe('lectureApi', () => {
     await lectures.setSpeaking('42', '7', true)
     await lectures.setSpeaking('42', '7', false)
 
-    expect(client.put).toHaveBeenNthCalledWith(1, '/lectures/42/participants/7/speaking', {
-      allowed: true,
-    })
-    expect(client.put).toHaveBeenNthCalledWith(2, '/lectures/42/participants/7/speaking', {
-      allowed: false,
-    })
+    expect(client.put).toHaveBeenNthCalledWith(1, '/lectures/42/participants/7/speaking', { allowed: true })
+    expect(client.put).toHaveBeenNthCalledWith(2, '/lectures/42/participants/7/speaking', { allowed: false })
   })
 
   it('lectureId와 userId를 경로에 넣을 때 인코딩한다', async () => {
@@ -80,12 +69,9 @@ describe('lectureApi', () => {
     expect(client.get).toHaveBeenCalledWith(`/lectures/${encoded}`)
     expect(client.put).toHaveBeenCalledWith(`/lectures/${encoded}/status`, { status: 'OPEN' })
     expect(client.post).toHaveBeenCalledWith(`/lectures/${encoded}/media-tokens`)
-    expect(client.put).toHaveBeenCalledWith(
-      `/lectures/${encoded}/participants/${encodeURIComponent(userId)}/speaking`,
-      {
-        allowed: true,
-      },
-    )
+    expect(client.put).toHaveBeenCalledWith(`/lectures/${encoded}/participants/${encodeURIComponent(userId)}/speaking`, {
+      allowed: true,
+    })
   })
 
   it('문제 등록은 앞뒤 공백을 지운 targetText를 보낸다', async () => {
@@ -116,9 +102,7 @@ describe('lectureApi', () => {
     const encoded = encodeURIComponent(id)
     expect(client.post).toHaveBeenCalledWith(`/lectures/${encoded}/problems`, { targetText: 'ㄱ' })
     expect(client.put).toHaveBeenCalledWith(`/lectures/${encoded}/current-problem`, { problemId })
-    expect(client.get).toHaveBeenCalledWith(
-      `/lectures/${encoded}/problems/${encodeURIComponent(problemId)}/answers`,
-    )
+    expect(client.get).toHaveBeenCalledWith(`/lectures/${encoded}/problems/${encodeURIComponent(problemId)}/answers`)
   })
 
   it('datetime-local 값을 UTC ISO로 바꾼다', () => {
@@ -135,15 +119,11 @@ describe('ambiguousCandidates', () => {
   const ambiguous = (body: unknown) => new ApiError(409, 'PROBLEM_TEXT_AMBIGUOUS', 'm', body)
 
   it('409 PROBLEM_TEXT_AMBIGUOUS 본문의 후보를 돌려준다', () => {
-    expect(
-      ambiguousCandidates(ambiguous({ code: 'PROBLEM_TEXT_AMBIGUOUS', message: 'm', candidates })),
-    ).toEqual(candidates)
+    expect(ambiguousCandidates(ambiguous({ code: 'PROBLEM_TEXT_AMBIGUOUS', message: 'm', candidates }))).toEqual(candidates)
   })
 
   it('다른 오류·ApiError가 아닌 값이면 null', () => {
-    expect(
-      ambiguousCandidates(new ApiError(404, 'PROBLEM_NOT_FOUND', 'm', { candidates })),
-    ).toBeNull()
+    expect(ambiguousCandidates(new ApiError(404, 'PROBLEM_NOT_FOUND', 'm', { candidates }))).toBeNull()
     expect(ambiguousCandidates(new Error('boom'))).toBeNull()
     expect(ambiguousCandidates(undefined)).toBeNull()
   })
@@ -156,16 +136,7 @@ describe('ambiguousCandidates', () => {
 
   it('형식이 어긋난 후보는 빼고, 남는 것이 없으면 null', () => {
     expect(
-      ambiguousCandidates(
-        ambiguous({
-          candidates: [
-            null,
-            { input: 3, displayText: 'x' },
-            { input: ' ', displayText: 'x' },
-            candidates[1],
-          ],
-        }),
-      ),
+      ambiguousCandidates(ambiguous({ candidates: [null, { input: 3, displayText: 'x' }, { input: ' ', displayText: 'x' }, candidates[1]] })),
     ).toEqual([candidates[1]])
     expect(ambiguousCandidates(ambiguous({ candidates: [{ input: '초성 ㄱ' }] }))).toBeNull()
   })

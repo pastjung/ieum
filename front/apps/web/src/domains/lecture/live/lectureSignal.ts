@@ -12,10 +12,7 @@ export interface AnswerSubmittedSignal {
 const decoder = new TextDecoder('utf-8', { fatal: true })
 
 /** 형식이 어긋나면 null. throw하지 않는다 */
-export function parseLectureSignal(
-  payload: Uint8Array,
-  topic: string | undefined,
-): AnswerSubmittedSignal | null {
+export function parseLectureSignal(payload: Uint8Array, topic: string | undefined): AnswerSubmittedSignal | null {
   if (topic !== LECTURE_TOPIC) return null
   let data: unknown
   try {
@@ -25,7 +22,6 @@ export function parseLectureSignal(
   }
   if (typeof data !== 'object' || data === null) return null
   const { type, problemId } = data as Record<string, unknown>
-  if (type !== 'ANSWER_SUBMITTED' || typeof problemId !== 'string' || !/^\d+$/.test(problemId))
-    return null
+  if (type !== 'ANSWER_SUBMITTED' || typeof problemId !== 'string' || !/^\d+$/.test(problemId)) return null
   return { type: 'ANSWER_SUBMITTED', problemId }
 }

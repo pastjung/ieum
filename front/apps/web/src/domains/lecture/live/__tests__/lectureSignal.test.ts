@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { parseLectureSignal } from '../lectureSignal'
 
-const bytes = (value: unknown) =>
-  new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value))
+const bytes = (value: unknown) => new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value))
 
 describe('parseLectureSignal', () => {
   it('lecture 토픽의 답안 제출 신호를 읽는다', () => {
-    expect(
-      parseLectureSignal(bytes({ type: 'ANSWER_SUBMITTED', problemId: '26578' }), 'lecture'),
-    ).toEqual({
+    expect(parseLectureSignal(bytes({ type: 'ANSWER_SUBMITTED', problemId: '26578' }), 'lecture')).toEqual({
       type: 'ANSWER_SUBMITTED',
       problemId: '26578',
     })
@@ -29,12 +26,8 @@ describe('parseLectureSignal', () => {
 
   it('type이 다르거나 problemId가 10진수 문자열이 아니면 null', () => {
     expect(parseLectureSignal(bytes({ type: 'OTHER', problemId: '1' }), 'lecture')).toBeNull()
-    expect(
-      parseLectureSignal(bytes({ type: 'ANSWER_SUBMITTED', problemId: 26578 }), 'lecture'),
-    ).toBeNull()
-    expect(
-      parseLectureSignal(bytes({ type: 'ANSWER_SUBMITTED', problemId: '1a' }), 'lecture'),
-    ).toBeNull()
+    expect(parseLectureSignal(bytes({ type: 'ANSWER_SUBMITTED', problemId: 26578 }), 'lecture')).toBeNull()
+    expect(parseLectureSignal(bytes({ type: 'ANSWER_SUBMITTED', problemId: '1a' }), 'lecture')).toBeNull()
     expect(parseLectureSignal(bytes({ type: 'ANSWER_SUBMITTED' }), 'lecture')).toBeNull()
   })
 })

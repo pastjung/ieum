@@ -15,7 +15,7 @@ import {
   type StudentAnswerView,
 } from '../domains/lecture/model/answerView'
 import { dotLabel, dotsOf } from '../domains/lecture/model/braille'
-import { mergeLinkedProblem } from '../domains/lecture/model/problemSet'
+import { mergeLinkedProblem, reconcileLinkedProblems } from '../domains/lecture/model/problemSet'
 import type {
   InstructorLecture,
   LectureStatus,
@@ -63,6 +63,18 @@ function formatElapsed(ms: number): string {
   const seconds = totalSeconds % 60
   const mmss = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
   return hours > 0 ? `${hours}:${mmss}` : mmss
+}
+
+const PROBLEM_UNLINKED_MESSAGE = '수업에 연결되지 않은 문제예요. 새로고침해 주세요.'
+
+/**
+ * 출제·답안 조회의 404는 문제 등록(구분어·글자 확인) 문구가 아니라 화면이 낡았다는 뜻이다 —
+ * 이 화면과 무관하게 문제 연결이 끊겼을 때만 일어난다
+ */
+function problemErrorMessage(e: unknown): string {
+  return e instanceof ApiError && e.code === 'PROBLEM_NOT_FOUND'
+    ? PROBLEM_UNLINKED_MESSAGE
+    : errorMessage(e)
 }
 
 /** 목: 장식용 음량 막대 높이(%) */
@@ -303,9 +315,13 @@ export function LiveLecturePage() {
       }
       try {
         const loaded = await lectureApi.listAnswers(lectureId, problemId)
-        if (seq === answersSeqRef.current) setAnswerSet(loaded)
+        if (seq === answersSeqRef.current) {
+          setAnswerSet(loaded)
+          // 답안 조회가 이번에 성공했으니, 이전에 남아 있던 조회 실패 안내는 걷어낸다
+          setError(null)
+        }
       } catch (e) {
-        if (seq === answersSeqRef.current) setError(errorMessage(e))
+        if (seq === answersSeqRef.current) setError(problemErrorMessage(e))
       }
     },
     [lectureId],
@@ -314,6 +330,8 @@ export function LiveLecturePage() {
   const joinVoice = useCallback(async () => {
     const seq = ++joinSeqRef.current
     setJoining(true)
+    // 재연결 전환(reconnecting → connected)을 알아채려고 이 접속 안에서만 마지막 상태를 기억한다
+    let lastRoomState: RoomState | undefined
     try {
       await releaseRoom()
       if (seq !== joinSeqRef.current) return // 더 나중 호출이나 언마운트에 밀려났다
@@ -326,7 +344,12 @@ export function LiveLecturePage() {
       const room = await connectInstructorRoom(
         token,
         (state) => {
-          if (seq === joinSeqRef.current) setRoomState(state)
+          if (seq !== joinSeqRef.current) return
+          setRoomState(state)
+          // 방이 끊겨 있던 동안 놓쳤을 ANSWER_SUBMITTED 신호를 HTTP 재조회로 되찾는다
+          if (state === 'connected' && lastRoomState === 'reconnecting')
+            void loadAnswers(currentProblemIdRef.current)
+          lastRoomState = state
         },
         {
           onRoster: (next) => {
@@ -355,6 +378,8 @@ export function LiveLecturePage() {
       setMic(true)
       setStudents(room.roster())
       setAudioBlocked(!room.canPlaybackAudio())
+      // 방이 끊겨 있던 동안(예: "음성 다시 연결") 놓쳤을 신호도 접속 직후 한 번 다시 불러온다
+      void loadAnswers(currentProblemIdRef.current)
     } finally {
       if (seq === joinSeqRef.current) setJoining(false)
     }
@@ -403,21 +428,32 @@ export function LiveLecturePage() {
     currentProblemIdRef.current = currentProblemId
   }, [currentProblemId])
 
-  async function run(action: () => Promise<void>) {
+  async function run(action: () => Promise<void>, mapError: (e: unknown) => string = errorMessage) {
     setBusy(true)
     setError(null)
     try {
       await action()
     } catch (e) {
-      setError(errorMessage(e))
+      setError(mapError(e))
     } finally {
       setBusy(false)
     }
   }
 
+  // 응답 그대로 덮지 않고, 요청이 진행되는 동안 로컬에서 새로 등록된 문제가 있으면 되살린다
+  const applyLecture = (updated: InstructorLecture) =>
+    setLecture((prev) =>
+      prev
+        ? {
+            ...updated,
+            linkedProblems: reconcileLinkedProblems(updated.linkedProblems, prev.linkedProblems),
+          }
+        : updated,
+    )
+
   const start = () =>
     run(async () => {
-      setLecture(await lectureApi.changeStatus(lectureId, 'OPEN'))
+      applyLecture(await lectureApi.changeStatus(lectureId, 'OPEN'))
       await joinVoice()
     })
 
@@ -449,7 +485,7 @@ export function LiveLecturePage() {
       setDeliveringId(problemId)
       try {
         const updated = await lectureApi.deliverProblem(lectureId, problemId)
-        setLecture(updated)
+        applyLecture(updated)
         const current = updated.currentProblem?.problemId ?? problemId
         // 다음 렌더 전에 도착하는 답안 신호도 새 문제로 비교되게 바로 바꾼다
         currentProblemIdRef.current = current
@@ -458,7 +494,7 @@ export function LiveLecturePage() {
       } finally {
         setDeliveringId(null)
       }
-    })
+    }, problemErrorMessage)
 
   // 등록 응답(201 새 연결·200 이미 연결)을 목록에 합친다. 이미 있으면 목록이 늘지 않는다
   const addLinkedProblem = (problem: LinkedProblem) =>
@@ -744,7 +780,7 @@ export function LiveLecturePage() {
                       {dotLabel(currentProblem.expectedPattern)}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxWidth: 420 }}>
                     {currentProblem.expectedPattern.map((pattern, i) => (
                       <BrailleCell key={i} dots={dotsOf(pattern)} />
                     ))}

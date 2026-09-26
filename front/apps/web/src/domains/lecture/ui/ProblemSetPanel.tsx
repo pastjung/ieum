@@ -1,4 +1,5 @@
 import { useId, useState, type CSSProperties, type FormEvent } from 'react'
+import { ApiError } from '@ieum/api-client'
 import { errorMessage } from '../../../shared/ui/errorMessage'
 import { buttonStyle, dimmed, fieldStyle } from '../../../shared/ui/styles'
 import { theme } from '../../../shared/ui/theme'
@@ -13,6 +14,8 @@ const INPUT_GUIDE =
   "초성 ㄱ은 '초성'을 입력하고 한 칸 띄운 뒤 ㄱ을 입력하세요. 받침 ㄱ, 모음 ㅏ, 음절 가도 같은 방식이에요."
 const DELIVER_LOCKED = '수업을 시작하면 출제할 수 있어요'
 const DELIVER_CLOSED = '종료된 수업이에요'
+/** 409 PROBLEM_TEXT_AMBIGUOUS인데 candidates를 못 읽었을 때. "골라 주세요" 문구는 후보가 없으면 맞지 않는다 */
+const AMBIGUOUS_UNPARSED = '후보를 불러오지 못했어요. 구분어를 붙여 입력해 주세요.'
 
 export interface ProblemSetPanelProps {
   lectureId: string
@@ -69,7 +72,17 @@ function SetRow({ item, status, canDeliver, delivering, disabled, onDeliver }: S
       >
         {problem.displayText}
       </span>
-      <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>
+      <span
+        aria-hidden="true"
+        style={{
+          fontSize: 16,
+          lineHeight: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
         {brailleGlyph(problem.expectedPattern)}
       </span>
       {state === 'current' && (
@@ -154,7 +167,14 @@ export function ProblemSetPanel({
       // 구분어 없는 낱자가 여러 문제에 해당하면 후보를 보여 주고, 누르면 그 input으로 다시 등록한다
       const found = ambiguousCandidates(e)
       setCandidates(found)
-      if (!found) setRegisterError(errorMessage(e))
+      if (found) {
+        // 후보를 보여 주는 중이니 별도 오류 문구는 필요 없다
+      } else if (e instanceof ApiError && e.code === 'PROBLEM_TEXT_AMBIGUOUS') {
+        // 후보인 건 맞지만 candidates 본문을 못 읽었다 — "아래에서 골라 주세요"는 보여줄 게 없어 맞지 않는다
+        setRegisterError(AMBIGUOUS_UNPARSED)
+      } else {
+        setRegisterError(errorMessage(e))
+      }
     } finally {
       setRegistering(false)
     }
@@ -191,7 +211,9 @@ export function ProblemSetPanel({
             id={inputId}
             aria-describedby={guideId}
             value={text}
-            disabled={!canRegister || registering}
+            disabled={!canRegister}
+            readOnly={registering}
+            aria-busy={registering}
             placeholder="예: 초성 ㄱ, 그리고"
             onChange={(event) => {
               setText(event.target.value)

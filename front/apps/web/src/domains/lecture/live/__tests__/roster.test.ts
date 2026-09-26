@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildRoster, userIdOf, type RosterParticipant } from '../roster'
 
-function p(
-  identity: string,
-  name: string,
-  patch: Partial<RosterParticipant> = {},
-): RosterParticipant {
+function p(identity: string, name: string, patch: Partial<RosterParticipant> = {}): RosterParticipant {
   return {
     identity,
     name,
@@ -27,22 +23,9 @@ describe('roster', () => {
 
   it('참가자를 학생 카드 모델로 바꾼다', () => {
     const roster = buildRoster([
-      p('user-7', '이서준', {
-        attributes: { hand: 'up', speaking: 'none' },
-        isMicrophoneEnabled: true,
-        isSpeaking: true,
-      }),
+      p('user-7', '이서준', { attributes: { hand: 'up', speaking: 'none' }, isMicrophoneEnabled: true, isSpeaking: true }),
     ])
-    expect(roster).toEqual([
-      {
-        userId: '7',
-        name: '이서준',
-        handUp: true,
-        speakingAllowed: false,
-        micOn: true,
-        isSpeaking: true,
-      },
-    ])
+    expect(roster).toEqual([{ userId: '7', name: '이서준', handUp: true, speakingAllowed: false, micOn: true, isSpeaking: true }])
   })
 
   it('발언 허용은 speaking 속성이 아니라 LiveKit 권한 canPublish로 판단한다', () => {
@@ -63,11 +46,7 @@ describe('roster', () => {
   })
 
   it('user-{숫자} 형식이 아닌 참가자는 뺀다', () => {
-    expect(
-      buildRoster([p('agent-1', '녹음봇'), p('user-x', '?'), p('user-9', '정예준')]).map(
-        (s) => s.userId,
-      ),
-    ).toEqual(['9'])
+    expect(buildRoster([p('agent-1', '녹음봇'), p('user-x', '?'), p('user-9', '정예준')]).map((s) => s.userId)).toEqual(['9'])
   })
 
   it('손든 학생 → 발언 허용 학생 → 나머지 순서, 같은 묶음은 이름순', () => {

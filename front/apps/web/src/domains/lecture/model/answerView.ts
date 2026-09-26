@@ -2,20 +2,7 @@ import { brailleGlyph, dotsOf } from './braille'
 import type { AnswerCell, StudentAnswer } from './types'
 
 /** 서버는 한 문제에 최대 12칸까지 받는다 */
-const ORDINALS = [
-  '첫',
-  '둘째',
-  '셋째',
-  '넷째',
-  '다섯째',
-  '여섯째',
-  '일곱째',
-  '여덟째',
-  '아홉째',
-  '열째',
-  '열한째',
-  '열두째',
-]
+const ORDINALS = ['첫', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째', '열한째', '열두째']
 
 function ordinal(cellIndex: number): string {
   return ORDINALS[cellIndex - 1] ?? `${cellIndex}번째`
@@ -86,10 +73,7 @@ export interface ProgressCounts {
 }
 
 /** 제출 현황. 학생 카드와 같은 명단(지금 접속한 학생)으로 센다 */
-export function progressCounts(
-  connectedUserIds: readonly string[],
-  answers: readonly StudentAnswer[],
-): ProgressCounts {
+export function progressCounts(connectedUserIds: readonly string[], answers: readonly StudentAnswer[]): ProgressCounts {
   const byUser = new Map(answers.map((a) => [a.userId, a]))
   const connected = new Set(connectedUserIds)
   let correct = 0
@@ -100,11 +84,5 @@ export function progressCounts(
     if (found.isCorrect) correct += 1
     else wrong += 1
   }
-  return {
-    connected: connected.size,
-    submitted: correct + wrong,
-    correct,
-    wrong,
-    notStarted: connected.size - correct - wrong,
-  }
+  return { connected: connected.size, submitted: correct + wrong, correct, wrong, notStarted: connected.size - correct - wrong }
 }

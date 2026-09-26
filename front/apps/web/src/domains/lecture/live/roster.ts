@@ -58,7 +58,6 @@ export function buildRoster(participants: Iterable<RosterParticipant>): RosterSt
     if (student) students.push(student)
   }
   return students.sort(
-    (a, b) =>
-      group(a) - group(b) || a.name.localeCompare(b.name, 'ko') || a.userId.localeCompare(b.userId),
+    (a, b) => group(a) - group(b) || a.name.localeCompare(b.name, 'ko') || a.userId.localeCompare(b.userId),
   )
 }

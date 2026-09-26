@@ -23,18 +23,14 @@ export function createLectureApi(client: ApiClient) {
       return client.post<InstructorLecture>('/lectures', body)
     },
 
-    get: (lectureId: string) =>
-      client.get<InstructorLecture>(`/lectures/${encodeURIComponent(lectureId)}`),
+    get: (lectureId: string) => client.get<InstructorLecture>(`/lectures/${encodeURIComponent(lectureId)}`),
 
     /** 같은 상태를 다시 보내면 서버가 방 작업만 재시도한다 — 503 복구 경로 (API 명세 8.5절) */
     changeStatus: (lectureId: string, status: 'OPEN' | 'CLOSED') =>
-      client.put<InstructorLecture>(`/lectures/${encodeURIComponent(lectureId)}/status`, {
-        status,
-      }),
+      client.put<InstructorLecture>(`/lectures/${encodeURIComponent(lectureId)}/status`, { status }),
 
     /** 강사 토큰은 OPEN일 때만 발급된다. 발급할 때 서버가 방을 다시 열어 metadata를 복구한다 */
-    issueMediaToken: (lectureId: string) =>
-      client.post<MediaToken>(`/lectures/${encodeURIComponent(lectureId)}/media-tokens`),
+    issueMediaToken: (lectureId: string) => client.post<MediaToken>(`/lectures/${encodeURIComponent(lectureId)}/media-tokens`),
 
     /**
      * 학생 발언 허용(true)·회수(false). 멱등이며 서버는 저장하지 않는다 — LiveKit 참가자 권한이 유일한 상태다.
@@ -51,15 +47,11 @@ export function createLectureApi(client: ApiClient) {
      * 구분어 없는 낱자가 여러 문제에 해당하면 409 PROBLEM_TEXT_AMBIGUOUS — ambiguousCandidates로 후보를 꺼낸다
      */
     registerProblem: (lectureId: string, targetText: string) =>
-      client.post<LinkedProblem>(`/lectures/${encodeURIComponent(lectureId)}/problems`, {
-        targetText: targetText.trim(),
-      }),
+      client.post<LinkedProblem>(`/lectures/${encodeURIComponent(lectureId)}/problems`, { targetText: targetText.trim() }),
 
     /** 출제(OPEN 전용). 503이면 DB는 저장됐고 같은 요청으로 방 metadata만 다시 쓴다 */
     deliverProblem: (lectureId: string, problemId: string) =>
-      client.put<InstructorLecture>(`/lectures/${encodeURIComponent(lectureId)}/current-problem`, {
-        problemId,
-      }),
+      client.put<InstructorLecture>(`/lectures/${encodeURIComponent(lectureId)}/current-problem`, { problemId }),
 
     /** 문제별 제출 답안. 제출한 학습자만 온다 — 미착수는 접속자 목록과 맞춰 화면이 판단한다 */
     listAnswers: (lectureId: string, problemId: string) =>

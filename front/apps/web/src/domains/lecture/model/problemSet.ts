@@ -29,3 +29,14 @@ export function mergeLinkedProblem(
 ): LinkedProblem[] {
   return problems.some((p) => p.problemId === problem.problemId) ? problems : [...problems, problem]
 }
+
+/**
+ * 출제·수업 시작 응답의 연결 목록은 요청 시점 서버 상태다 — 요청이 진행되는 동안
+ * 로컬에서 새로 등록한 문제가 있으면 응답에 없을 수 있으므로, 서버 목록에 되살려 합친다
+ */
+export function reconcileLinkedProblems(
+  serverProblems: LinkedProblem[],
+  localProblems: readonly LinkedProblem[],
+): LinkedProblem[] {
+  return localProblems.reduce(mergeLinkedProblem, serverProblems)
+}
