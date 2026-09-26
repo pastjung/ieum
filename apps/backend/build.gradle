@@ -53,6 +53,10 @@ dependencies {
         exclude group: 'com.google.crypto.tink', module: 'tink'
     }
 
+    // OpenVidu 3.x(LiveKit) 음성 토큰 서명·방 관리 (docs/product/api-spec.md 8.5절).
+    // Boot BOM이 관리하지 않아 버전을 명시 고정한다. Kotlin 표준 라이브러리·OkHttp·Retrofit이 함께 들어온다.
+    implementation 'io.livekit:livekit-server:0.16.0'
+
     // 계정 메일 SMTP 발송 (docs/product/erd.md 3.5, api-spec.md 3.8). Jakarta Mail API와 그 참조 구현 Angus Mail을
     // 직접 쓴다. starter-mail(JavaMailSender)을 쓰지 않는 이유: 발송 결과를 다섯 값으로 분류하려면 SMTP 단계별 응답 코드를
     // 드러내는 SMTPTransport·SMTPSendFailedException 경계가 필요한데 JavaMailSender는 그것을 MailException으로 감싼다.
@@ -103,6 +107,10 @@ def applyTestSecrets = { Test task ->
         task.systemProperty 'AUTH_ACTION_ACTIVE_KEY', randomKey()
         // 인증 상태 Redis 키 prefix. 테스트가 다른 환경의 키를 건드리지 못하게 test로 고정한다.
         task.systemProperty 'AUTH_REDIS_KEY_PREFIX', 'test'
+        // OpenVidu 설정. 테스트는 실제 서버를 부르지 않는다 — 게이트웨이 단위 테스트는 토큰 서명만 검증한다.
+        task.systemProperty 'LIVEKIT_URL', 'https://openvidu.test.invalid'
+        task.systemProperty 'LIVEKIT_API_KEY', 'test-livekit-key'
+        task.systemProperty 'LIVEKIT_API_SECRET', randomKey()
     }
 }
 
