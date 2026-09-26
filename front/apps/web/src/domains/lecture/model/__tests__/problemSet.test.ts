@@ -24,6 +24,10 @@ describe('problemSetItems', () => {
   it('출제 기록에 없어도 지금 문제는 current다 (새로고침 직후)', () => {
     expect(problemSetItems(problems, '3', new Set()).map((i) => i.state)).toEqual(['waiting', 'waiting', 'current'])
   })
+
+  it('연결된 문제가 없으면 빈 목록을 돌려준다', () => {
+    expect(problemSetItems([], null, new Set())).toEqual([])
+  })
 })
 
 describe('mergeLinkedProblem', () => {

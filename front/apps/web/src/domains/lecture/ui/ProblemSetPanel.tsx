@@ -11,6 +11,7 @@ const c = theme.color
 
 const INPUT_GUIDE = "초성 ㄱ은 '초성'을 입력하고 한 칸 띄운 뒤 ㄱ을 입력하세요. 받침 ㄱ, 모음 ㅏ, 음절 가도 같은 방식이에요."
 const DELIVER_LOCKED = '수업을 시작하면 출제할 수 있어요'
+const DELIVER_CLOSED = '종료된 수업이에요'
 
 export interface ProblemSetPanelProps {
   lectureId: string
@@ -29,13 +30,14 @@ export interface ProblemSetPanelProps {
 
 interface SetRowProps {
   item: SetItem
+  status: LectureStatus
   canDeliver: boolean
   delivering: boolean
   disabled: boolean
   onDeliver: (problemId: string) => void
 }
 
-function SetRow({ item, canDeliver, delivering, disabled, onDeliver }: SetRowProps) {
+function SetRow({ item, status, canDeliver, delivering, disabled, onDeliver }: SetRowProps) {
   const { problem, state } = item
   const row: CSSProperties = {
     padding: '10px 13px',
@@ -78,7 +80,7 @@ function SetRow({ item, canDeliver, delivering, disabled, onDeliver }: SetRowPro
             type="button"
             disabled={locked}
             onClick={() => onDeliver(problem.problemId)}
-            title={canDeliver ? undefined : DELIVER_LOCKED}
+            title={status === 'SCHEDULED' ? DELIVER_LOCKED : status === 'CLOSED' ? DELIVER_CLOSED : undefined}
             aria-label={delivering ? `${problem.displayText} 출제 중` : `${problem.displayText} 출제`}
             aria-busy={delivering}
             style={{
@@ -192,9 +194,14 @@ export function ProblemSetPanel({
               <button
                 key={candidate.input}
                 type="button"
-                disabled={registering}
+                disabled={registering || !canRegister}
                 onClick={() => void register(candidate.input)}
-                style={{ ...buttonStyle('mintOutline', 'sm'), padding: '4px 12px', fontSize: 12, ...(registering ? dimmed : {}) }}
+                style={{
+                  ...buttonStyle('mintOutline', 'sm'),
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  ...(registering || !canRegister ? dimmed : {}),
+                }}
               >
                 {candidate.displayText}
               </button>
@@ -230,6 +237,7 @@ export function ProblemSetPanel({
             <SetRow
               key={item.problem.problemId}
               item={item}
+              status={status}
               canDeliver={canDeliver}
               delivering={deliveringId === item.problem.problemId}
               disabled={disabled || deliveringId !== null}
