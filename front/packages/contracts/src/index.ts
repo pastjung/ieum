@@ -356,6 +356,26 @@ export type StageStat = z.infer<typeof stageStatSchema>;
 export const stageStatsSchema = z.object({ stages: z.array(stageStatSchema) });
 export type StageStats = z.infer<typeof stageStatsSchema>;
 
+/** 문제 단계(Level) 하나의 풀이 통계 */
+export const levelStatSchema = z.object({
+  level: levelSchema,
+  solvedCount: z.number().int().nonnegative(),
+  correctCount: z.number().int().nonnegative(),
+});
+export type LevelStat = z.infer<typeof levelStatSchema>;
+
+/**
+ * "내 실력" 화면이 읽는다. 풀이 기록(`problem_attempts`)을 문제 자신의 단계(`problems.level`)로
+ * 묶은 것이라 복습 세션 풀이까지 담는다 — 세션의 커리큘럼 단계로 묶는 `stageStats`는 복습
+ * 세션의 단계가 NULL이라 그 풀이를 통째로 뺀다.
+ *
+ * **기록이 있는 단계만 온다.** 여섯 단계 전부와 그 표시 순서·이름은 앱이 들고 있다
+ * (`levelLabels.ts`의 `LEVEL_ORDER`·`LEVEL_LABEL`). 서버가 빈 줄을 채워 보내도 앱이 다시
+ * 채우는 일이 겹칠 뿐이라 채우지 않는다. 같은 이유로 **순서를 약속하지 않는다.**
+ */
+export const levelStatsSchema = z.object({ levels: z.array(levelStatSchema) });
+export type LevelStats = z.infer<typeof levelStatsSchema>;
+
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),

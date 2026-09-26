@@ -1,8 +1,8 @@
 import {
   inProgressSessionSchema,
   problemsResponseSchema,
-  skillSummarySchema,
   stageStatsSchema,
+  levelStatsSchema,
   completionResponseSchema,
   attemptAnalysisRequestSchema,
   attemptAnalysisResponseSchema,
@@ -12,8 +12,8 @@ import {
   type CompletionResponse,
   type LearningSession,
   type ProblemsResponse,
-  type SkillSummary,
   type StageStats,
+  type LevelStats,
 } from "@ieum/contracts";
 import { api } from "./apiClient";
 import type { ServerSessionMeta } from "@/stores/sessionStore";
@@ -144,22 +144,25 @@ export const learningService = {
   },
 
   /**
-   * 내 요소별 숙련 상태와 풀이 통계.
-   *
-   * 지금까지 숙련 라벨은 세션 완료 응답에만 실려서, "내 실력" 화면과 홈 복습 카드는
-   * 세션 밖에서 알 방법이 없어 고정값을 내 실력처럼 보여주고 있었다.
-   */
-  async getSkillSummary(): Promise<SkillSummary> {
-    return skillSummarySchema.parse(await api.get("/learning-sessions/skill-summary"));
-  },
-
-  /**
    * 테마(커리큘럼 단계)별 풀이 통계.
    *
    * 테마 선택 화면이 고정 숫자를 진도로 보여주고 있었다.
    */
   async getStageStats(): Promise<StageStats> {
     return stageStatsSchema.parse(await api.get("/learning-sessions/stage-stats"));
+  },
+
+  /**
+   * 문제 단계(Level)별 풀이 통계. "내 실력" 화면이 단계마다 정답률을 보여준다.
+   *
+   * `getStageStats`와 묶는 축이 다르다 — 저쪽은 세션의 커리큘럼 단계로 묶어 복습 세션 풀이가
+   * 빠지고(복습 세션은 그 값이 없다), 이쪽은 문제 자신의 단계로 묶어 복습 풀이까지 담는다.
+   *
+   * 기록이 있는 단계만 온다. 여섯 단계 전부와 그 순서·이름은 앱이 채운다
+   * (`levelStats.ts`의 `selectLevelDashboard`).
+   */
+  async getLevelStats(): Promise<LevelStats> {
+    return levelStatsSchema.parse(await api.get("/learning-sessions/level-stats"));
   },
 
   /** 세션의 모든 답안을 한 번에 제출한다. 이 응답이 최종 채점 결과다 */
