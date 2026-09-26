@@ -1117,7 +1117,7 @@ WebSocket은 서버→클라이언트 알림 전용이다. 클라이언트는 �
 | 409 | LECTURE_PROBLEM_ALREADY_ANSWERED | 다른 멱등 키로 같은 수업·학습자·문제 재제출 |
 | 409 | IDEMPOTENCY_KEY_REUSED | 같은 키에 다른 정규화 답안 내용 |
 | 422 | INVALID_ANSWER_CELLS | Cell 수·순번·범위 검증 실패 |
-| 503 | MEDIA_SERVER_UNAVAILABLE | OpenVidu 토큰 서명 설정 누락 또는 방 생성·삭제 호출 실패 |
+| 503 | MEDIA_SERVER_UNAVAILABLE | OpenVidu 방 생성·metadata 설정·삭제 호출 실패 (상태 변경, 강사 음성 토큰 요청의 방 다시 열기) |
 
 오류 body는 `{"code":"...","message":"..."}`다. 수업 목록의 page는 0 이상, size는 1~100으로 검증한다. HTTP 5xx·시간 제한·재시도 수치는 기준선 측정 뒤 정하며, 오류가 발생한 신규 LIVE 풀이를 일부 저장하지 않는다.
 
@@ -1139,10 +1139,23 @@ OpenVidu 3.x(LiveKit 기반)를 사용한다. 음성 토큰은 participants 행�
 | 활성 참여 LEARNER (left_at NULL) | SCHEDULED, OPEN | 입장, subscribe만. publish·데이터 전송 불가 |
 
 - 방 이름은 `lecture-{lectureId}`, 참가자 identity는 `user-{userId}`, 표시 이름은 username이다.
-- 토큰 유효기간은 10분이다. 접속 중 갱신은 OpenVidu가 처리하며, 클라이언트는 재접속할 때만 새 토큰을 받는다.
+- 학습자는 숨은 참가자(hidden)로 입장한다. 다른 참가자 목록에 나타나지 않아 학습자끼리 서로를 볼 수 없고, 강사는 모두에게 보인다.
+- 토큰 유효기간은 10분이다. 접속 중 갱신은 OpenVidu가 처리하며, 클라이언트는 재접속할 때만 새 토큰을 받는다. JWT `exp` 와 응답 `expiresAt` 은 같은 시각이다.
 - 강사가 OPEN으로 바꾸면 서버가 방을 만들고 방 metadata를 `{"status":"OPEN"}` 으로 설정한다. 학습자는 SCHEDULED에서 미리 접속해 대기할 수 있으므로 클라이언트는 접속 시 metadata와 metadata 변경 이벤트로 시작을 안다.
 - 강사가 CLOSED로 바꾸면 서버가 방을 삭제한다. 클라이언트는 연결 해제 사유 `ROOM_DELETED` 를 수업 종료로, 그 밖의 해제를 음성 장애로 구분한다. 음성 장애가 곧 수업 종료는 아니며 `GET /api/v1/lectures/{lectureId}` 로 상태를 확인한다.
 - 상태 저장이 끝난 뒤 방 생성·삭제가 실패하면 상태는 유지하고 `503 MEDIA_SERVER_UNAVAILABLE` 로 응답한다. 강사는 같은 상태로 다시 요청해 방 작업만 재시도한다(동일 상태 재요청은 현재 자원 — 8.2절).
+- 방 metadata는 접속해 있는 동안 시작을 알리는 신호일 뿐 수업 상태의 권위가 아니다. 마지막 참가자가 나가면 OpenVidu가 방을 닫아 metadata도 사라진다. 클라이언트는 (재)접속할 때 `GET /api/v1/lectures/{lectureId}` 의 status를 권위로 삼는다. OPEN 수업의 담당 강사가 음성 토큰을 요청하면 서버가 방을 다시 열어(이미 있으면 그대로) metadata를 복구한 뒤 토큰을 발급한다.
+
+음성 토큰 요청의 오류는 다음과 같다.
+
+| HTTP | code | 조건 |
+| --- | --- | --- |
+| 404 | LECTURE_NOT_FOUND | 수업이 없거나, 담당 강사도 participants 행이 있는 학습자도 아님(다른 강사·참여한 적 없는 학습자) |
+| 409 | INVALID_LECTURE_STATE | 강사: 수업이 OPEN이 아님. 학습자: 수업이 CLOSED — 참여 여부보다 먼저 판정한다 |
+| 403 | LECTURE_PARTICIPATION_REQUIRED | 학습자가 퇴장한 상태(left_at 있음). 코드로 다시 입장해야 한다 |
+| 503 | MEDIA_SERVER_UNAVAILABLE | 강사 요청의 방 다시 열기(생성·metadata 설정) 실패. 토큰은 발급하지 않는다 |
+
+토큰 서명은 네트워크 호출 없이 서버 안에서 끝나며, OpenVidu 접속 설정이 없으면 서버가 기동하지 않는다.
 
 ## 9. 장치·실시간 전송 경계
 
