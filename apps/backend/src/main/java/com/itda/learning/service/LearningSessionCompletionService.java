@@ -69,23 +69,8 @@ public class LearningSessionCompletionService {
 
     List<AnalysisAttempt> analysisAttempts =
         prepareAnalysisAttempts(assignedProblems, storedAttempts, storedAttemptCells);
-    // 요약도 같은 벽에 막힌다 — 낱자 문항이 섞이면 FastAPI가 세션 전체를 422로 거절해
-    // 완료 제출이 503이 된다. 하나라도 AI가 못 받는 문항이 있으면 직접 집계한다
-    // (부분 요약은 만들 수 없다 — AI는 어절 전체를 함께 보고 규칙을 고른다)
-    boolean aiGradable =
-        analysisAttempts.stream()
-            .allMatch(attempt -> LearningSessionAnalysisService.isAiGradable(attempt.targetText()));
-    SessionSummaryResult summary =
-        aiGradable
-            ? analysisService.summarizeSession(userId, analysisAttempts)
-            : SessionSummaryResult.errorCountsOnly(
-                AttemptErrorClassifier.merge(
-                    analysisAttempts.stream()
-                        .map(
-                            attempt ->
-                                AttemptErrorClassifier.classify(
-                                    attempt.expectedPatterns(), attempt.inputPatterns()))
-                        .toList()));
+    // 낱자 문항이 섞여 있어도 AI 가 세션 전체를 받는다 (apps/ai drill_items)
+    SessionSummaryResult summary = analysisService.summarizeSession(userId, analysisAttempts);
 
     updateWrongProblems(userId, assignedProblems, storedAttempts);
     LocalDateTime completedAt = LocalDateTime.now(ZoneOffset.UTC);
@@ -109,8 +94,8 @@ public class LearningSessionCompletionService {
   /**
    * 세션 요약에 넣을 풀이. <b>요청 본문이 아니라 저장된 풀이에서 만든다.</b>
    *
-   * <p>입력 셀은 문항을 제출할 때 이미 {@code attempt_cells}에 저장됐다({@code LearningAttemptService}). 클라이언트가 그 값을 다시
-   * 보낼 이유가 없고, 두 곳에서 관리하면 갈린다 — 실제로 앱이 셀을 자르고 채워 보내는 바람에 화면 점수와 요약이 서로 다른 답을 근거로 계산될 뻔했다.
+   * <p>입력 셀은 문항을 제출할 때 이미 {@code attempt_cells}에 저장됐다({@code LearningAttemptService}). 클라이언트가 그 값을
+   * 다시 보낼 이유가 없고, 두 곳에서 관리하면 갈린다 — 실제로 앱이 셀을 자르고 채워 보내는 바람에 화면 점수와 요약이 서로 다른 답을 근거로 계산될 뻔했다.
    *
    * <p>이어하기가 막혀 있던 원인이기도 하다. 3문항을 풀고 이어받으면 앱은 나머지 9개만 보내는데, 이전 3개의 입력을 갖고 있지 않아 12개를 채울 수 없었다.
    */
@@ -245,8 +230,8 @@ public class LearningSessionCompletionService {
    * 배정이 모두 끝났는지, 요청이 이 세션의 배정만 가리키는지 검사한다.
    *
    * <p><b>요청의 {@code attempts}가 배정 전부를 덮을 것을 요구하지 않는다.</b> 그 값은 이제 요약을 만드는 데 쓰이지 않는다 — 입력 셀은 문항을
-   * 제출할 때 이미 저장됐고 {@link #prepareAnalysisAttempts}가 그것을 읽는다. 실제 보증은 {@link #validateStoredAttempts}(저장된
-   * 풀이가 배정 전부를 덮는가)가 하며, 그쪽이 더 정확하다.
+   * 제출할 때 이미 저장됐고 {@link #prepareAnalysisAttempts}가 그것을 읽는다. 실제 보증은 {@link
+   * #validateStoredAttempts}(저장된 풀이가 배정 전부를 덮는가)가 하며, 그쪽이 더 정확하다.
    *
    * <p>덮을 것을 요구하면 이어하기가 막힌다. 3문항을 풀고 이어받으면 앱은 나머지 9개만 보내는데, 이전 3개의 입력을 갖고 있지 않아 12개를 채울 수 없다.
    */
