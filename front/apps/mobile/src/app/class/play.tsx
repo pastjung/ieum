@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import type { Cell } from "@ieum/domain";
 import { cellToDots, cellsToUnicode } from "@ieum/domain";
 import { ScreenShell } from "@/components/ScreenShell";
 import { DotPad } from "@/components/DotPad";
 import { AppButton } from "@/components/AppButton";
 import { liveLecture } from "@/services/liveLecture";
+import { isUserBackAction } from "@/services/lectureSignals";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, speak } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
@@ -21,6 +22,18 @@ export default function ClassPlay() {
   const submit = useSessionStore((s) => s.submit);
   const problem = useSessionStore((s) => s.current)();
   const [cells, setCells] = useState<Cell[]>([]);
+
+  // 하드웨어 뒤로 가기·제스처로 떠나면 음성 방을 먼저 정리한다. 뒤로 가면 대기 화면을 열었던
+  // 수업 탭이 나온다(대기 화면은 이 화면으로 replace됐다). 채점 화면으로의 이동은
+  // router.replace(REPLACE)라 방을 그대로 둔다
+  const navigation = useNavigation();
+  useEffect(
+    () =>
+      navigation.addListener("beforeRemove", (event) => {
+        if (isUserBackAction(event.data.action)) void liveLecture.leave();
+      }),
+    [navigation],
+  );
 
   useEffect(() => {
     setCells([]);

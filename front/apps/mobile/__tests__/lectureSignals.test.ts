@@ -1,4 +1,4 @@
-import { classifyDisconnect, isLectureOpen, ROOM_DELETED_REASON } from "@/services/lectureSignals";
+import { classifyDisconnect, isLectureOpen, isUserBackAction, ROOM_DELETED_REASON } from "@/services/lectureSignals";
 
 describe("isLectureOpen", () => {
   it("OPEN 메타데이터를 인식한다", () => {
@@ -32,5 +32,19 @@ describe("classifyDisconnect", () => {
 
   it("방 삭제가 사용자 퇴장보다 우선한다", () => {
     expect(classifyDisconnect(ROOM_DELETED_REASON, true)).toBe("ended");
+  });
+});
+
+describe("isUserBackAction", () => {
+  it("하드웨어 뒤로 가기와 제스처 닫기는 사용자의 뒤로 가기다", () => {
+    expect(isUserBackAction({ type: "GO_BACK" })).toBe(true);
+    expect(isUserBackAction({ type: "POP" })).toBe(true);
+    expect(isUserBackAction({ type: "POP_TO_TOP" })).toBe(true);
+  });
+
+  it("앱이 하는 화면 교체·이동은 뒤로 가기가 아니다", () => {
+    expect(isUserBackAction({ type: "REPLACE" })).toBe(false);
+    expect(isUserBackAction({ type: "NAVIGATE" })).toBe(false);
+    expect(isUserBackAction({ type: "RESET" })).toBe(false);
   });
 });

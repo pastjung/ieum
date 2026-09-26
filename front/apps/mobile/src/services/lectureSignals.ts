@@ -26,3 +26,13 @@ export function classifyDisconnect(reason: number | undefined, leftByUser: boole
   if (leftByUser) return "left";
   return "lost";
 }
+
+// 사용자가 뒤로 가서 화면이 빠질 때 내비게이터가 보내는 액션. 하드웨어 뒤로 가기는 GO_BACK,
+// 네이티브 스택의 제스처·닫기는 POP(여러 칸이면 dismissCount)으로 온다. 앱이 router.replace로
+// 화면을 바꿀 때는 REPLACE라 여기에 들지 않는다.
+const USER_BACK_ACTIONS = new Set(["GO_BACK", "POP", "POP_TO_TOP"]);
+
+/** beforeRemove의 액션이 사용자의 뒤로 가기인지 — 이때만 수업 방을 정리한다 */
+export function isUserBackAction(action: { type: string }): boolean {
+  return USER_BACK_ACTIONS.has(action.type);
+}

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { classService } from "@/services/classService";
 import { liveLecture } from "@/services/liveLecture";
+import { isUserBackAction } from "@/services/lectureSignals";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticSuccess, speakAsync } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
@@ -31,6 +32,17 @@ export default function ClassWaiting() {
       mountedRef.current = false;
     };
   }, []);
+
+  // 하드웨어 뒤로 가기·제스처로 떠나도 "수업 나가기"처럼 음성 방을 정리한다. 풀이·종료·끊김
+  // 화면으로의 이동은 앱이 router.replace(REPLACE)로 하므로 방을 그대로 둔다
+  const navigation = useNavigation();
+  useEffect(
+    () =>
+      navigation.addListener("beforeRemove", (event) => {
+        if (isUserBackAction(event.data.action)) void liveLecture.leave();
+      }),
+    [navigation],
+  );
 
   const attempt = useCallback(() => {
     if (validLectureId === null) {
