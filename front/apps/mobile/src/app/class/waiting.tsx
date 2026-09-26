@@ -38,6 +38,11 @@ export default function ClassWaiting() {
         onOpen: () => {
           // 문제 출제는 아직 목이다 — 수업이 시작되면 목 문제로 풀이를 시작한다
           void classService.getClassSession().then((session) => {
+            // getClassSession은 300ms 뒤에 응답한다 — 그 사이 방이 끊겨 onExit이 이미
+            // /class/end나 /class/disconnected로 옮겼을 수 있다. 이 화면이 언마운트됐거나
+            // liveLecture가 더 이상 이 lectureId를 살아 있는 세션으로 보지 않으면(onExit이
+            // 나가면서 지운다) 늦게 온 시작 알림을 버린다 — 아니면 끝난 수업으로 되돌아간다.
+            if (!mountedRef.current || liveLecture.currentLectureId() !== lectureId) return;
             start(session, "class");
             router.replace("/class/play");
           });
