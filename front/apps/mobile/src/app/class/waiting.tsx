@@ -85,6 +85,9 @@ export default function ClassWaiting() {
           if (exit === "ended") router.replace("/class/end");
           else if (exit === "lost") router.replace({ pathname: "/class/disconnected", params: { lectureId: validLectureId, title } });
         },
+        onSpeakingChanged: () => {
+          // 허용·회수 낭독은 Task 6에서 채운다
+        },
       })
       .catch((error: unknown) => {
         if (!mountedRef.current) return;

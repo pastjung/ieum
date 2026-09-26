@@ -2,14 +2,17 @@ import { AndroidAudioTypePresets, AudioSession } from "@livekit/react-native";
 import { ApiError } from "@ieum/api-client";
 import type { MediaToken } from "@ieum/contracts";
 import { Room, RoomEvent } from "livekit-client";
+import { useLectureVoiceStore } from "@/stores/lectureVoiceStore";
 import { classService } from "./classService";
-import { classifyDisconnect, isLectureOpen, type RoomExit } from "./lectureSignals";
+import { canSpeak, classifyDisconnect, handFromAttributes, isLectureOpen, type RoomExit } from "./lectureSignals";
 
 export interface LiveLectureHandlers {
   /** 수업이 시작됐다 (접속 1회당 최대 1번) */
   onOpen: () => void;
   /** 방에서 나왔다 — ended: 강사가 종료, lost: 음성 연결 끊김, left: 사용자가 나감 (1번) */
   onExit: (exit: RoomExit) => void;
+  /** 선생님이 발언을 허용(true)하거나 거뒀다(false). 값이 바뀔 때만 부른다 — 화면을 옮겨도 불린다 */
+  onSpeakingChanged: (allowed: boolean) => void;
 }
 
 interface Session {
@@ -21,11 +24,20 @@ interface Session {
   leavingByUser: boolean;
   /** 이 세션을 만든 join() 호출의 세대 — 오디오 세션 소유권 확인에 쓴다 */
   generation: number;
+  /** 선생님이 발언을 허용했다 — LiveKit 권한의 사본 */
+  speakingAllowed: boolean;
+  /** 내 마이크가 송출 중이다 */
+  micOn: boolean;
+  /** 손을 들었다 */
+  handUp: boolean;
+  /** setMicrophone이 진행 중이다 — 겹친 켜기·끄기를 막는다 */
+  micBusy: boolean;
 }
 
 /**
  * 수업 음성 방. 화면을 넘나들며 유지되므로 컴포넌트가 아니라 이 모듈이 소유한다.
- * 학습자 토큰은 수신 전용이라 마이크를 publish하지 않는다. 원격 오디오는 자동 구독·재생된다.
+ * 학습자는 입장 때 말할 수 없다. 선생님이 발언을 허용하면(LiveKit 권한 변경) 스스로 마이크를 켠다.
+ * 원격 오디오(선생님·다른 학생)는 자동 구독·재생된다.
  */
 let session: Session | null = null;
 
@@ -45,6 +57,41 @@ function markOpen(current: Session): void {
   current.handlers.onOpen();
 }
 
+function isLive(current: Session): boolean {
+  return !current.exited && session === current;
+}
+
+/** 살아 있는 세션의 발언 상태를 화면용 스토어에 옮긴다 */
+function syncVoice(current: Session): void {
+  if (!isLive(current)) return;
+  useLectureVoiceStore.getState().set({
+    speakingAllowed: current.speakingAllowed,
+    micOn: current.micOn,
+    handUp: current.handUp,
+  });
+}
+
+/**
+ * 말할 때는 통화 프로필(에코 제거·마이크 경로), 듣기만 할 때는 미디어 프로필(스피커·미디어 음량).
+ * 이 세대가 오디오를 소유할 때만 바꾼다 — 낡은 세션이 새 세션의 오디오를 건드리지 않게.
+ */
+function applyAudioProfile(current: Session, speaking: boolean): void {
+  if (audioOwner !== current.generation) return;
+  const audioTypeOptions = speaking ? AndroidAudioTypePresets.communication : AndroidAudioTypePresets.media;
+  void AudioSession.configureAudio({ android: { audioTypeOptions } }).catch(() => undefined);
+}
+
+/** 로컬 참가자의 발언 권한이 바뀌었다 — 값이 실제로 바뀔 때만 반영하고 알린다 */
+function applySpeaking(current: Session, allowed: boolean): void {
+  if (!isLive(current) || current.speakingAllowed === allowed) return;
+  current.speakingAllowed = allowed;
+  // 허용·회수 때 백엔드가 hand를 down으로 바꾼다. 속성 이벤트가 늦게 와도 버튼이 맞게 보이게 미리 내린다
+  current.handUp = false;
+  applyAudioProfile(current, allowed);
+  syncVoice(current);
+  current.handlers.onSpeakingChanged(allowed);
+}
+
 /** 이 세대가 오디오를 소유하고 있을 때만 끈다. 더 최신 세대가 이미 소유했다면 손대지 않는다 */
 function releaseAudio(generation: number): void {
   if (audioOwner !== null && audioOwner !== generation) return;
@@ -58,6 +105,7 @@ function finish(current: Session, exit: RoomExit): void {
   current.exited = true;
   current.room.removeAllListeners();
   if (session === current) session = null;
+  if (wasLive) useLectureVoiceStore.getState().reset();
   releaseAudio(current.generation);
   if (wasLive) current.handlers.onExit(exit);
 }
@@ -66,7 +114,10 @@ async function discardSilently(previous: Session): Promise<void> {
   // 이전 핸들러가 불리지 않게 먼저 표시하고 끊는다
   previous.exited = true;
   previous.room.removeAllListeners();
-  if (session === previous) session = null;
+  if (session === previous) {
+    session = null;
+    useLectureVoiceStore.getState().reset();
+  }
   await previous.room.disconnect();
   // 새 입장이 실패해도 이전 방의 오디오가 켜진 채 남지 않게 한다 (소유 확인으로 새 세대의 오디오는 건드리지 않는다)
   releaseAudio(previous.generation);
@@ -124,13 +175,36 @@ export const liveLecture = {
     audioOwner = generation;
 
     const room = new Room();
-    const current: Session = { lectureId, room, handlers, opened: false, exited: false, leavingByUser: false, generation };
+    const current: Session = {
+      lectureId,
+      room,
+      handlers,
+      opened: false,
+      exited: false,
+      leavingByUser: false,
+      generation,
+      speakingAllowed: false,
+      micOn: false,
+      handUp: false,
+      micBusy: false,
+    };
 
     room.on(RoomEvent.RoomMetadataChanged, (metadata: string) => {
       if (isLectureOpen(metadata)) markOpen(current);
     });
     room.on(RoomEvent.Disconnected, (reason?: number) => {
       finish(current, classifyDisconnect(reason, current.leavingByUser));
+    });
+    // 선생님의 발언 허용·회수는 로컬 참가자의 권한 변경으로 온다 (speaking 속성은 표시용이라 보지 않는다)
+    room.on(RoomEvent.ParticipantPermissionsChanged, (_prev, participant) => {
+      if (participant === room.localParticipant) applySpeaking(current, canSpeak(participant.permissions));
+    });
+    room.on(RoomEvent.ParticipantAttributesChanged, (_changed, participant) => {
+      if (participant !== room.localParticipant || !isLive(current)) return;
+      const handUp = handFromAttributes(participant.attributes) === "up";
+      if (current.handUp === handUp) return;
+      current.handUp = handUp;
+      syncVoice(current);
     });
 
     if (generation !== joinGeneration) {
@@ -140,6 +214,7 @@ export const liveLecture = {
     }
 
     session = current;
+    syncVoice(current); // 새 세션은 말할 수 없는 상태로 시작한다
 
     try {
       await room.connect(token.serverUrl, token.token);
@@ -159,6 +234,9 @@ export const liveLecture = {
       abandon(room, generation);
       return;
     }
+
+    // 토큰 권한의 스냅샷 — 학습자 토큰은 canPublish=false라 보통 아무 일도 없다
+    applySpeaking(current, canSpeak(room.localParticipant.permissions));
 
     if (lecture.status === "OPEN" || isLectureOpen(room.metadata)) markOpen(current);
   },
