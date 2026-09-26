@@ -22,6 +22,10 @@ const NEEDS_PRACTICE_LABEL = "더 연습해요";
 /** 음성 중심 화면이 한 번에 보여줄 요소 수. 목록이 길수록 탐색이 어렵다 */
 const VOICE_SKILL_LIMIT = 3;
 
+const LOADING_TEXT = "불러오는 중이에요…";
+const LOAD_FAILED_TEXT = "내 실력을 불러오지 못했어요.";
+const LOAD_FAILED_SPEECH = `내 실력이에요. ${LOAD_FAILED_TEXT} 다시 시도를 눌러 주세요.`;
+
 /** 비어 있는 구역은 제목도 내지 않는다 — 제목만 있고 줄이 없으면 불러오다 만 것처럼 보인다 */
 function ruleSections(d: SkillDashboard) {
   return [
@@ -35,33 +39,43 @@ function VoiceSkills() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  const { data: summary, isPending } = useQuery({
+  const { data: summary, isPending, isError, isFetching, refetch } = useQuery({
     queryKey: ["skillSummary"],
     queryFn: learningService.getSkillSummary,
   });
+  // 실패 뒤 다시 시도하는 동안에도 isPending은 false다 — 그 사이도 불러오는 중으로 보여준다
+  const loading = isPending || (isError && isFetching);
   // 약한 것부터 정렬돼 오므로 앞에서 끊는다. 음성 중심 화면은 목록이 길수록 탐색이 어렵다
   const skills = summary?.skills.slice(0, VOICE_SKILL_LIMIT) ?? [];
 
   useEffect(() => {
-    if (isPending) return;
+    if (loading) return;
+    // 실패를 "기록 없음"으로 말하면 학습한 사람에게 기록이 사라진 것처럼 들린다
+    if (isError) {
+      announce(LOAD_FAILED_SPEECH);
+      return;
+    }
     if (skills.length === 0) {
       announce("내 실력이에요. 아직 기록이 없어요. 학습을 시작하면 요소별 실력을 알려드려요.");
       return;
     }
     const spoken = skills.map((s) => `${skillDisplayName(s)}, ${s.label}`).join(". ");
     announce(`내 실력이에요. 더 연습할 것부터 알려드려요. ${spoken}`);
-  }, [isPending, skills]);
+  }, [loading, isError, skills]);
 
   return (
     <ScreenShell>
       <BackHeader title="내 실력" />
       <Text style={{ fontSize: 17 * fontScale, color: theme.color.textMuted }}>
-        {isPending
-          ? "불러오는 중이에요…"
-          : skills.length === 0
+        {loading
+          ? LOADING_TEXT
+          : isError
+            ? LOAD_FAILED_TEXT
+            : skills.length === 0
             ? "아직 기록이 없어요. 학습을 시작하면 알려드려요."
             : "더 연습할 것부터 보여드려요."}
       </Text>
+      {isError && !loading && <AppButton label="다시 시도" variant="secondary" onPress={() => void refetch()} />}
       {skills.map((skill) => (
         <ListRow
           key={skill.learningSkillId}
@@ -83,20 +97,40 @@ function ScreenSkills() {
   const router = useRouter();
   const theme = useTheme();
   const fontScale = useFontScale();
-  const { data: summary } = useQuery({
+  const { data: summary, isPending, isError, isFetching, refetch } = useQuery({
     queryKey: ["skillSummary"],
     queryFn: learningService.getSkillSummary,
   });
+  const loading = isPending || (isError && isFetching);
   const d = selectSkillDashboard(summary);
 
   useEffect(() => {
+    // 응답 전에는 아무것도 말하지 않는다. 예전에는 빈 값으로 계산한 "아직 기록이 없어요"를
+    // 화면에 그리고 읽기까지 해서, 기록이 있는 학습자도 잠깐 기록이 없다고 들었다
+    if (loading) return;
+    if (isError) {
+      announce(LOAD_FAILED_SPEECH);
+      return;
+    }
     // 기록이 없으면 숙련도를 말하지 않는다 — 0%는 "다 틀렸다"로 들린다
     announce(
       d.overallPercent === null
         ? "내 실력이에요. 아직 기록이 없어요."
         : `내 실력이에요. 전체 ${d.overallPercent}퍼센트. ${d.overallDetail}.`,
     );
-  }, [d]);
+  }, [d, loading, isError]);
+
+  if (loading || isError) {
+    return (
+      <ScreenShell>
+        <BackHeader title="내 실력" />
+        <Text accessibilityLiveRegion="polite" style={{ fontSize: 17 * fontScale, color: theme.color.textMuted }}>
+          {loading ? LOADING_TEXT : LOAD_FAILED_TEXT}
+        </Text>
+        {!loading && <AppButton label="다시 시도" variant="secondary" onPress={() => void refetch()} />}
+      </ScreenShell>
+    );
+  }
 
   return (
     <ScreenShell>
