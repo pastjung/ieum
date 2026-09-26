@@ -100,8 +100,10 @@ backend ─ 채점·problem_attempts(LIVE)·attempt_cells 저장 → 응답으�
   `LECTURE_PROBLEM_ALREADY_ANSWERED`, `IDEMPOTENCY_KEY_REUSED`, `INVALID_ANSWER_CELLS`).
 - 채점: 서버에서 칸별로 비교한다. `diffMask = input XOR expected`, 칸 수가 다르면 오답, 모든 칸 diffMask 0이면 정답. AI 분석·BKT·user_skill_memory 갱신은 하지 않는다 (명세 8.1 LIVE 제외).
 - 저장: `ProblemAttempt.forLiveLecture(...)`(이미 있음) + `attempt_cells`. (lecture_id, user_id, problem_id) UNIQUE.
-- 멱등: 같은 학습자·문제에 이미 풀이가 있으면 — 같은 Idempotency-Key·같은 cells면 200 기존 결과, 다른 키면 409 `LECTURE_PROBLEM_ALREADY_ANSWERED`,
-  같은 키·다른 cells면 409 `IDEMPOTENCY_KEY_REUSED`. 키 저장 위치는 계획에서 정한다(problem_attempts에 컬럼 추가 또는 Redis).
+- 멱등(사용자 확정: 키를 저장하지 않는다): `Idempotency-Key`는 UUID v4 형식만 검사한다(없거나 형식 오류 400).
+  (lecture_id, user_id, problem_id) UNIQUE로 한 번만 저장하고, 이미 풀이가 있으면 같은 cells면 200 기존 결과, 다른 cells면 409 `LECTURE_PROBLEM_ALREADY_ANSWERED`.
+  `IDEMPOTENCY_KEY_REUSED` 구분은 MVP에서 쓰지 않는다 — ERD의 `problem_attempts.idempotency_key` 컬럼이 아직 없고 운영 DB가 `ddl-auto: validate`라 스키마 변경을 피한다.
+  동시 요청으로 UNIQUE 위반이 나면 다시 조회해 같은 규칙을 적용한다.
 - 종료와의 직렬화: 수업 행을 잠그고(`SELECT ... FOR UPDATE`) OPEN·현재 문제를 확인한 뒤 저장한다 (명세 8.1).
 - 응답 201: `attemptId, lectureId, problemId, isCorrect, score, attemptedAt, cells[{cellIndex, inputPattern, expectedPattern, diffMask, isCorrect}]`.
 - 커밋 후 강사 identity(`user-{instructorId}`)에게만 LiveKit 데이터 메시지 `{"type":"ANSWER_SUBMITTED","problemId":"…"}`(topic `lecture`)를 보낸다.
@@ -156,7 +158,7 @@ backend ─ 채점·problem_attempts(LIVE)·attempt_cells 저장 → 응답으�
 - `api-spec.md` §8.2: 문제 연결 요청을 `{"targetText"}`와 구분어 규칙으로, 응답 201/200 + 문제 정보(`expectedPattern`, `displayText`). 강사 답안 목록 endpoint 추가.
   "현행 계약에는 참여자 상세 목록·정답률·대시보드 응답이 없다" 문장을 "강사는 문제별 답안 목록을 조회한다"로 바꾼다.
 - §8.3: MVP는 WebSocket 대신 LiveKit 방 metadata(`currentProblemId`)와 강사 대상 데이터 메시지(`ANSWER_SUBMITTED`)로 알린다는 절을 추가하고, WebSocket 계약은 후속으로 표시.
-- §8.4 오류 표: `PROBLEM_TEXT_AMBIGUOUS`(409) 추가.
+- §8.4 오류 표: `PROBLEM_TEXT_AMBIGUOUS`(409) 추가. `IDEMPOTENCY_KEY_REUSED`는 LIVE 답안에서 MVP 미사용으로 표시.
 - §8.5: 방 metadata 규약에 `currentProblemId` 추가.
 
 ## 7. 브랜치·MR
