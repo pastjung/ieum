@@ -1038,10 +1038,11 @@ assigned_problems에는 item_no와 problem_id만 저장한다. 기본/개인화 
 | `PUT /api/v1/lectures/{lectureId}/status` | 200 | 담당 INSTRUCTOR. body `status`는 OPEN 또는 CLOSED. 동일 상태 재요청은 현재 자원, 역행·건너뛰기는 409. |
 | `POST /api/v1/lecture-participations` | 201 최초 / 200 재입장 | LEARNER. body는 `participationCode`만 받는다. 기존 joinedAt을 유지하고 leftAt을 NULL로 만든다. |
 | `DELETE /api/v1/lectures/{lectureId}/participants/me` | 204 | 해당 LEARNER. 참여한 적이 있고 이미 퇴장했어도 204, 참여 관계가 없으면 404. |
-| `POST /api/v1/lectures/{lectureId}/problems` | 201 신규 / 200 기존 연결 | 담당 INSTRUCTOR. body는 `problemId`만 받으며 검증된 저장 문제를 연결한다. |
+| `POST /api/v1/lectures/{lectureId}/problems` | 201 신규 / 200 기존 연결 | 담당 INSTRUCTOR, SCHEDULED·OPEN. body는 `targetText`만 받는다. 구분어 규칙으로 문제를 찾아(없는 낱말은 AI 분석으로 생성) 연결하고 연결된 문제 정보(LinkedProblem)를 돌려준다 (8.2.1절). |
 | `DELETE /api/v1/lectures/{lectureId}/problems/{problemId}` | 204 | 담당 INSTRUCTOR, SCHEDULED 전용. OPEN/CLOSED는 409. |
-| `PUT /api/v1/lectures/{lectureId}/current-problem` | 200 | 담당 INSTRUCTOR, OPEN 전용. body의 `problemId`를 같은 수업에 연결된 문제에서 찾아 현재 문제로 교체한다. 동일 값 재요청은 새 이벤트를 만들지 않는다. |
-| `POST /api/v1/lectures/{lectureId}/problems/{problemId}/answers` | 201 신규 / 동일 멱등 재전송 200 | 활성 LEARNER·OPEN·현재 문제 전용. `Idempotency-Key` UUID v4 필수. |
+| `PUT /api/v1/lectures/{lectureId}/current-problem` | 200 | 담당 INSTRUCTOR, OPEN 전용. body의 `problemId`를 같은 수업에 연결된 문제에서 찾아 현재 문제로 교체하고 강사 Snapshot을 돌려준다. 동일 값 재요청은 DB를 바꾸지 않고 방 metadata만 다시 쓴다 (8.5.2절). |
+| `POST /api/v1/lectures/{lectureId}/problems/{problemId}/answers` | 201 신규 / 같은 cells 재전송 200 | 활성 LEARNER·OPEN·현재 문제 전용. `Idempotency-Key` UUID v4 필수(형식만 검사하고 저장하지 않는다). 서버가 채점·저장하고 담당 강사에게 제출 알림을 보낸다 (8.2.2·8.5.2절). |
+| `GET /api/v1/lectures/{lectureId}/problems/{problemId}/answers` | 200 | 담당 INSTRUCTOR, 상태 무관. 이 수업에 연결된 문제의 제출 답안 목록 — 제출한 학습자만, 제출 시각 오름차순 (8.2.2절). |
 | `POST /api/v1/lectures/{lectureId}/realtime-tickets` | 201 | 담당 INSTRUCTOR 또는 SCHEDULED/OPEN의 활성 LEARNER. 60초 유효 일회용 WebSocket 티켓 발급. |
 | `POST /api/v1/lectures/{lectureId}/media-tokens` | 201 | 담당 INSTRUCTOR(OPEN) 또는 SCHEDULED/OPEN의 활성 LEARNER. OpenVidu 음성 접속 토큰 발급 (8.5절). |
 | `PUT /api/v1/lectures/{lectureId}/participants/{userId}/speaking` | 200 | 담당 INSTRUCTOR, OPEN 전용. body `allowed`(boolean). 활성 참여 학습자의 마이크 송출을 허용·회수한다. 멱등, DB에 저장하지 않는다 (8.5.1절). |
@@ -1056,11 +1057,11 @@ assigned_problems에는 item_no와 problem_id만 저장한다. 기본/개인화 
 }
 ```
 
-강의 상세 Snapshot의 공통 필드는 `lectureId`, `title`, `description`, `status`, `scheduledAt`, `startedAt`, `endedAt`, `currentProblem`, `createdAt`이다. 담당 강사 응답에만 `participationCode`와 `linkedProblems`를 포함한다. 학습자 응답에는 `myParticipation`, 제출했다면 현재 문제의 `myResult`, 항상 배열인 `reviewableCurriculumStages`를 포함한다. 학습자에게 제출 전 expectedPattern·diffMask·정답 여부를 제공하거나 다른 참여자·답안·결과를 노출하지 않는다. 현행 계약에는 참여자 상세 목록·정답률·대시보드 응답이 없다.
+강의 상세 Snapshot의 공통 필드는 `lectureId`, `title`, `description`, `status`, `scheduledAt`, `startedAt`, `endedAt`, `currentProblem`, `createdAt`이다. 담당 강사 응답에만 `participationCode`와 `linkedProblems`를 포함한다. 학습자 응답에는 `myParticipation`, 제출했다면 현재 문제의 `myResult`, 항상 배열인 `reviewableCurriculumStages`를 포함한다. 학습자에게 제출 전 expectedPattern·diffMask·정답 여부를 제공하거나 다른 참여자·답안·결과를 노출하지 않는다. 강사는 문제별 답안 목록(8.2.2절)만 조회하며, 참여자 상세 목록·정답률·대시보드 응답은 없다.
 
 `reviewableCurriculumStages`는 수업 상태가 CLOSED이고 요청 학습자의 participants 이력이 있을 때 본인의 서로 다른 LIVE 오답을 단계별로 집계한 파생 응답이다. 각 항목은 `{stageId, level, title, incorrectProblemCount}`이며 stageId는 10진수 문자열, incorrectProblemCount는 해당 단계에 연결된 서로 다른 본인 오답 problemId 수다. `users.level` 범위에서 열린 L1~L6만 `curriculum_stages.order_no` 오름차순으로 제공한다. 같은 문제가 여러 열린 단계에 연결되면 각 단계에서 한 번씩 집계한다. CLOSED가 아니거나 대상 단계가 없으면 빈 배열이며 INSTRUCTOR 응답에는 이 필드를 넣지 않는다. 문제 ID·정답·요소 상세는 포함하지 않는다. 하나의 항목은 프론트가 기본 선택할 수 있고, 여러 항목은 사용자가 하나를 선택하며, 빈 배열은 일반 개인 학습 흐름으로 이동해 sourceLectureId를 생략한다.
 
-학습자 HTTP 상세의 `currentProblem`은 null이거나 `problemId`, `problemType`, `targetText`, `cellCount`, `submitted`를 가진다. submitted와 myResult는 요청 학습자 본인의 제출 여부·결과다. myResult는 제출한 현재 문제에만 포함한다. 담당 강사의 문제 관리 응답은 정답 Cell을 포함할 수 있다. 공통 WebSocket 알림에는 정답과 특정 학습자의 제출 여부·결과를 넣지 않는다.
+학습자 HTTP 상세의 `currentProblem`은 null이거나 `problemId`, `problemType`(problems.level), `targetText`, `displayText`, `cellCount`, `submitted`를 가진다. submitted와 myResult는 요청 학습자 본인의 제출 여부·결과다. myResult는 제출한 현재 문제에만 포함하며 형태는 LIVE 답안 응답(8.2.2절)과 같다. 담당 강사 Snapshot의 `currentProblem`(null 가능)과 `linkedProblems`(연결 순서 = lecture_problems.id 오름차순)는 LinkedProblem(8.2.1절)이며 정답 Cell(`expectedPattern`)을 포함한다. 수업 목록(`GET /api/v1/lectures`)의 항목은 문제 정보를 채우지 않는다(`currentProblem` null, `linkedProblems` 빈 배열). 공통 알림에는 정답과 특정 학습자의 제출 여부·결과를 넣지 않는다.
 
 참여 요청과 현재 문제 변경 요청은 각각 다음과 같다.
 
@@ -1074,7 +1075,64 @@ assigned_problems에는 item_no와 problem_id만 저장한다. 기본/개인화 
 
 LIVE 답안 body는 개인 답안과 같은 `cells`, `durationMs`만 받는다. userId·lectureId·problemId·attemptMode·curriculumStageId·isCorrect·score·expectedPattern은 body에서 받지 않는다. 경로와 인증·현재 수업 상태로 서버가 문맥을 결정한다. 응답은 `attemptId`, `lectureId`, `problemId`, `isCorrect`, `score`, `attemptedAt`, Cell별 `cellIndex`·`inputPattern`·`expectedPattern`·`diffMask`·`isCorrect`를 제공한다. LIVE BKT 요약은 포함하지 않으며 이 응답·수업 CLOSED만으로 user_skill_memory를 갱신하지 않는다.
 
+#### 8.2.1 문제 연결 입력과 응답
+
+요청은 `{"targetText": "초성 ㄱ"}` 이다. 서버가 앞뒤 공백을 지운다. 구분어(`초성`·`받침`·`모음`·`음절`)와 글자 사이에는 공백이 하나 이상 있어야 한다. 입력 문자열은 저장하지 않는다.
+
+| 입력 | 고르는 문제 (조건에 맞는 문제가 여럿이면 id 오름차순 첫 번째) |
+| --- | --- |
+| `초성 {자음}` | target_text = 자음, level CONSONANT, 학습 요소 SKILL_01(첫소리 기본 자음)에 연결된 문제 |
+| `받침 {자음}` | target_text = 자음, level CONSONANT, 학습 요소 SKILL_03(받침 기본 자음)에 연결된 문제 |
+| `모음 {모음}` | target_text = 모음, level VOWEL |
+| `음절 {글자}` | target_text = 글자, level CONTRACTION(약자) |
+| 구분어 없음, 호환 자모 한 글자(U+3131~U+3163) | level CONSONANT·VOWEL 후보. 표시 문구가 하나면 연결, 둘 이상이면 409 `PROBLEM_TEXT_AMBIGUOUS`, 후보가 없으면 404 `PROBLEM_NOT_FOUND` |
+| 구분어 없음, 그 밖 | level WORD·CONTRACTION_WORD·SENTENCE를 우선, 없으면 다른 level의 같은 글자, 그것도 없으면 AI 분석으로 새 문제를 만든다 |
+
+- 구분어가 붙은 입력에 맞는 문제가 없으면 404 `PROBLEM_NOT_FOUND` 다. 자모·약자는 고정 목록이므로 AI로 만들지 않는다.
+- 이 수업에 이미 연결된 문제면 저장하지 않고 200, 새로 연결하면 201이다. 동시 요청으로 UNIQUE가 겹치면 200이다.
+- `targetText` 누락·공백은 400 `INVALID_REQUEST_PARAMETER` 다.
+
+응답(LinkedProblem):
+
+```json
+{ "problemId": "26578", "targetText": "ㄱ", "displayText": "초성 ㄱ", "problemType": "CONSONANT", "cellCount": 1, "expectedPattern": [8] }
+```
+
+- `problemType` 은 problems.level(CONSONANT·VOWEL·CONTRACTION·CONTRACTION_WORD·WORD·SENTENCE)이다.
+- `displayText`: SKILL_01에 연결된 CONSONANT는 `초성 {글자}`, SKILL_03에 연결된 CONSONANT는 `받침 {글자}`, VOWEL은 `모음 {글자}`, CONTRACTION은 `음절 {글자}`, 그 밖은 targetText 그대로. 서버가 level과 학습 요소로 정한다.
+- `expectedPattern` 은 problem_cells.expected_pattern을 cell_index 순서로 담은 6비트 정수 배열(bit0=1점 … bit5=6점)이다.
+
+구분어 없는 낱자에 후보가 둘 이상이면 공통 오류 body에 `candidates` 만 더한다. 클라이언트는 후보의 `input` 으로 다시 요청한다.
+
+```json
+{ "code": "PROBLEM_TEXT_AMBIGUOUS", "message": "어떤 문제인지 골라 주세요.", "candidates": [ { "input": "초성 ㄱ", "displayText": "초성 ㄱ" }, { "input": "받침 ㄱ", "displayText": "받침 ㄱ" } ] }
+```
+
+#### 8.2.2 LIVE 답안 응답·강사 답안 목록
+
+LIVE 답안 요청 헤더는 `Idempotency-Key: <UUID v4>`, body는 `{"cells":[8],"durationMs":1900}` 이다. 성공 응답(LiveAnswer)은 다음과 같다.
+
+```json
+{ "attemptId": "901", "lectureId": "42", "problemId": "26578", "isCorrect": true, "score": 100, "attemptedAt": "2026-09-27T10:05:00.000Z", "cells": [ { "cellIndex": 1, "inputPattern": 8, "expectedPattern": 8, "diffMask": 0, "isCorrect": true } ] }
+```
+
+- 채점은 서버가 칸별로 한다. cells는 입력·정답 중 긴 쪽 칸 수만큼 만들고 모자란 쪽 패턴은 0이다. `cellIndex` 는 1부터, `diffMask = inputPattern XOR expectedPattern`.
+- `isCorrect` 는 칸 수가 같고 모든 칸의 diffMask가 0일 때 true다. `score` 는 정답이면 100, 아니면 floor(100 × diffMask가 0인 칸 수 ÷ 긴 쪽 칸 수)다.
+- AI 분석·BKT·user_skill_memory 갱신은 하지 않는다 (8.1절 LIVE 제외).
+- 멱등: `Idempotency-Key` 는 형식만 검사하고 저장하지 않는다. (lecture_id, user_id, problem_id) UNIQUE로 한 번만 저장하며, 이미 풀이가 있으면 같은 cells(저장된 칸에 0을 채워 비교)면 200과 기존 결과, 다른 cells면 409 `LECTURE_PROBLEM_ALREADY_ANSWERED` 다.
+- `durationMs` 는 0 이상인지만 검증하고 저장하지 않는다(problem_attempts에 시간 컬럼이 없다).
+
+`GET /api/v1/lectures/{lectureId}/problems/{problemId}/answers` 응답은 다음과 같다. 제출한 학습자만 제출 시각 오름차순으로 담는다. 미제출·미입장 판정은 클라이언트가 접속자 목록과 맞춰 한다.
+
+```json
+{ "problemId": "26578", "answers": [ { "userId": "8", "username": "learner01", "isCorrect": false, "attemptedAt": "2026-09-27T10:05:00.000Z", "cells": [ { "cellIndex": 1, "inputPattern": 9, "expectedPattern": 8, "diffMask": 1, "isCorrect": false } ] } ] }
+```
+
+담당 강사가 아니면 404 `LECTURE_NOT_FOUND`, 이 수업에 연결되지 않은 문제면 404 `PROBLEM_NOT_FOUND` 다. 수업 상태와 관계없이(CLOSED 뒤에도) 조회할 수 있다.
+
 ### 8.3 WebSocket 인증·이벤트·재연결
+
+> MVP 구현 상태: 이 절의 WebSocket(티켓·이벤트)은 후속이다. MVP는 OpenVidu 방 metadata(`currentProblemId`)와 담당 강사 대상 데이터 메시지(`ANSWER_SUBMITTED`)로 변경을 알리고, 클라이언트는 신호를 받으면 HTTP로 최신 상태를 조회한다 (8.5.2절).
 
 브라우저가 장기 Access JWT를 WebSocket URL에 노출하지 않도록 먼저 Access JWT로 realtime-tickets HTTP API를 호출한다. 응답은 `{ticket, expiresAt}`이며 티켓은 해당 lectureId·userId·역할에 묶인 60초 유효 일회용 값이다. 서버는 MariaDB에 저장하지 않고 단기 메모리 캐시에 보관하며 사용 즉시 폐기한다. query의 티켓 값은 접근 로그에서 가린다. 다중 인스턴스 공유 캐시는 후속 운영 범위다.
 
@@ -1107,20 +1165,23 @@ WebSocket은 서버→클라이언트 알림 전용이다. 클라이언트는 �
 | HTTP | code | 조건 |
 | --- | --- | --- |
 | 401 | UNAUTHORIZED | 인증되지 않음·유효하지 않은 Access JWT |
-| 403 | INSTRUCTOR_ACCESS_REQUIRED | 강사 전용 collection 요청·발언 권한 변경에 INSTRUCTOR가 아님 |
+| 403 | INSTRUCTOR_ACCESS_REQUIRED | 강사 전용 collection 요청·문제 연결·발언 권한 변경에 INSTRUCTOR가 아님 |
 | 403 | LEARNER_ACCESS_REQUIRED | 참여·LIVE 답안 요청자가 LEARNER가 아님 |
 | 403 | LECTURE_PARTICIPATION_REQUIRED | 학습자에게 활성 참여 권한이 없음 |
 | 404 | LECTURE_NOT_FOUND | 수업 없음 또는 ID 기반 자원 조회/변경 권한 없음 |
 | 404 | LECTURE_NOT_JOINABLE | 참여 코드가 없거나 CLOSED라 새 참여 불가 |
 | 404 | LECTURE_PARTICIPANT_NOT_FOUND | 발언 권한 대상이 이 수업의 활성 참여자가 아님 (8.5.1절) |
 | 404 | LECTURE_PARTICIPANT_NOT_CONNECTED | 발언 권한 대상이 활성 참여자지만 지금 음성 방에 접속해 있지 않음 (8.5.1절) |
-| 404 | PROBLEM_NOT_FOUND | 연결하려는 검증 문제 없음 |
+| 404 | PROBLEM_NOT_FOUND | 문제 연결 입력(구분어가 붙은 입력·구분어 없는 낱자)에 맞는 문제가 없음, 출제·답안 목록 대상 문제가 이 수업에 연결되지 않음 |
 | 409 | INVALID_LECTURE_STATE | 허용되지 않은 상태 전이·상태별 작업 |
+| 409 | PROBLEM_TEXT_AMBIGUOUS | 구분어 없는 낱자에 문제 후보가 둘 이상. body에 `candidates`(각 `input`·`displayText`)를 더한다 (8.2.1절) |
 | 409 | LECTURE_PROBLEM_NOT_CURRENT | 제출 경로의 문제가 현재 문제가 아님 |
-| 409 | LECTURE_PROBLEM_ALREADY_ANSWERED | 다른 멱등 키로 같은 수업·학습자·문제 재제출 |
-| 409 | IDEMPOTENCY_KEY_REUSED | 같은 키에 다른 정규화 답안 내용 |
-| 422 | INVALID_ANSWER_CELLS | Cell 수·순번·범위 검증 실패 |
-| 503 | MEDIA_SERVER_UNAVAILABLE | OpenVidu 방 생성·metadata 설정·삭제·참가자 권한 변경 호출 실패 (상태 변경, 강사 음성 토큰 요청의 방 다시 열기, 발언 권한 변경) |
+| 409 | LECTURE_PROBLEM_ALREADY_ANSWERED | 같은 수업·학습자·문제에 다른 cells로 재제출 (같은 cells면 200과 기존 결과) |
+| 409 | IDEMPOTENCY_KEY_REUSED | 같은 키에 다른 정규화 답안 내용. LIVE 답안은 MVP에서 쓰지 않는다 — 키를 저장하지 않고 (lecture_id, user_id, problem_id) UNIQUE로 판정한다 |
+| 422 | INVALID_ANSWER_CELLS | cells가 없거나 비었음, 12칸 초과, 값이 0~63 밖 |
+| 503 | MEDIA_SERVER_UNAVAILABLE | OpenVidu 방 생성·metadata 설정·삭제·참가자 권한 변경 호출 실패 (상태 변경, 강사 음성 토큰 요청의 방 다시 열기, 발언 권한 변경, 문제 출제의 metadata 쓰기) |
+
+LIVE 답안의 `Idempotency-Key` 누락·UUID v4 형식 오류와 `durationMs` 누락·음수는 400 `INVALID_REQUEST_PARAMETER` 다. LIVE 답안 오류는 LEARNER_ACCESS_REQUIRED → LECTURE_NOT_FOUND(수업 없음·참여 이력 없음) → INVALID_LECTURE_STATE → LECTURE_PARTICIPATION_REQUIRED → LECTURE_PROBLEM_NOT_CURRENT → INVALID_ANSWER_CELLS → LECTURE_PROBLEM_ALREADY_ANSWERED 순서로 판정한다.
 
 오류 body는 `{"code":"...","message":"..."}`다. 수업 목록의 page는 0 이상, size는 1~100으로 검증한다. HTTP 5xx·시간 제한·재시도 수치는 기준선 측정 뒤 정하며, 오류가 발생한 신규 LIVE 풀이를 일부 저장하지 않는다.
 
@@ -1144,7 +1205,7 @@ OpenVidu 3.x(LiveKit 기반)를 사용한다. 음성 토큰은 participants 행�
 - 방 이름은 `lecture-{lectureId}`, 참가자 identity는 `user-{userId}`, 표시 이름은 username이다.
 - 학습자는 숨지 않고 입장한다. 강사가 참가자 목록에서 학습자를 보고 발언을 허용해야 하며, 서로 목소리를 듣는 수업이므로 학습자끼리도 표시 이름(username)을 본다. HTTP Snapshot에서 다른 참여자를 노출하지 않는 규칙(8.2절)은 그대로다. 트레이드오프: 학습자는 `canUpdateOwnMetadata` 로 자기 표시 이름·metadata·속성(예: `speaking`)을 스스로 바꿀 수 있어, 다른 학습자에게 잘못된 이름이나 상태가 보일 수 있다(악용 여지 포함). 실제 발언 여부는 서버 권한(아래)만이 결정하므로 발언 통제는 깨지지 않는다.
 - 토큰 유효기간은 10분이다. 접속 중 갱신은 OpenVidu가 처리하며, 클라이언트는 재접속할 때만 새 토큰을 받는다. JWT `exp` 와 응답 `expiresAt` 은 같은 시각이다.
-- 강사가 OPEN으로 바꾸면 서버가 방을 만들고 방 metadata를 `{"status":"OPEN"}` 으로 설정한다. 학습자는 SCHEDULED에서 미리 접속해 대기할 수 있으므로 클라이언트는 접속 시 metadata와 metadata 변경 이벤트로 시작을 안다.
+- 강사가 OPEN으로 바꾸면 서버가 방을 만들고 방 metadata를 `{"status":"OPEN"}` 으로 설정한다(현재 문제가 있으면 `currentProblemId` 를 더한다 — 8.5.2절). 학습자는 SCHEDULED에서 미리 접속해 대기할 수 있으므로 클라이언트는 접속 시 metadata와 metadata 변경 이벤트로 시작을 안다.
 - 강사가 CLOSED로 바꾸면 서버가 방을 삭제한다. 클라이언트는 연결 해제 사유 `ROOM_DELETED` 를 수업 종료로, 그 밖의 해제를 음성 장애로 구분한다. 음성 장애가 곧 수업 종료는 아니며 `GET /api/v1/lectures/{lectureId}` 로 상태를 확인한다.
 - 상태 저장이 끝난 뒤 방 생성·삭제가 실패하면 상태는 유지하고 `503 MEDIA_SERVER_UNAVAILABLE` 로 응답한다. 강사는 같은 상태로 다시 요청해 방 작업만 재시도한다(동일 상태 재요청은 현재 자원 — 8.2절).
 - 방 metadata는 접속해 있는 동안 시작을 알리는 신호일 뿐 수업 상태의 권위가 아니다. 마지막 참가자가 나가면 OpenVidu가 방을 닫아 metadata도 사라진다. 클라이언트는 (재)접속할 때 `GET /api/v1/lectures/{lectureId}` 의 status를 권위로 삼는다. OPEN 수업의 담당 강사가 음성 토큰을 요청하면 서버가 방을 다시 열어(이미 있으면 그대로) metadata를 복구한 뒤 토큰을 발급한다.
@@ -1208,6 +1269,14 @@ OpenVidu 3.x(LiveKit 기반)를 사용한다. 음성 토큰은 participants 행�
 | 503 | MEDIA_SERVER_UNAVAILABLE | OpenVidu 참가자 권한 변경 호출 실패 |
 
 `allowed` 누락은 400 `INVALID_REQUEST_PARAMETER` 다(경로 제약과 본문 검증을 함께 쓰는 endpoint의 기존 처리 — 8.2절 상태 변경과 같다). 그 밖의 본문·경로 형식 오류는 공통 HTTP 오류 표를 따른다.
+
+#### 8.5.2 문제 출제·제출 알림
+
+MVP는 8.3절 WebSocket 대신 OpenVidu 방 기능으로 알린다. 신호는 "다시 조회하라"는 뜻일 뿐이며 정답·답안·결과를 싣지 않는다. 신호를 놓쳐도 `GET /api/v1/lectures/{lectureId}` 와 답안 목록 조회로 전체 화면을 복원한다.
+
+- 방 metadata(JSON 문자열): `{"status":"OPEN","currentProblemId":"26578"}`. 현재 문제가 없으면 `currentProblemId` 를 넣지 않는다. 서버는 OPEN 전환, 출제(같은 값 재요청 포함), 강사 음성 토큰 발급 때의 방 다시 열기에서 이 값을 쓴다. 클라이언트는 metadata를 try/catch로 해석하며 시작 판정(`status`) 규칙은 8.5절 그대로다.
+- 출제의 DB 저장은 metadata 쓰기 전에 커밋된다. metadata 쓰기가 실패하면 503 `MEDIA_SERVER_UNAVAILABLE` 이고, 강사가 같은 문제로 다시 출제하면 metadata만 다시 쓴다. 값이 같으면 OpenVidu가 변경 이벤트를 내지 않는다.
+- 제출 알림: 새 LIVE 답안이 저장되면(201) 서버가 담당 강사 identity `user-{instructorUserId}` 에게만 OpenVidu 데이터 메시지를 보낸다. topic `lecture`, reliable, payload는 UTF-8 JSON `{"type":"ANSWER_SUBMITTED","problemId":"26578"}`. 같은 cells 재전송(200)에는 보내지 않는다. 전송 실패는 서버 로그만 남기고 제출은 성공으로 응답한다.
 
 ## 9. 장치·실시간 전송 경계
 

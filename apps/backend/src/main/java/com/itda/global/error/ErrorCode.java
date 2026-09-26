@@ -80,6 +80,12 @@ public enum ErrorCode {
   /** 활성 참여자지만 지금 음성 방에 접속해 있지 않다 — OpenVidu가 그 참가자를 모른다 (8.5.1절). */
   LECTURE_PARTICIPANT_NOT_CONNECTED(HttpStatus.NOT_FOUND, "지금 음성에 연결돼 있지 않은 학습자입니다."),
   INVALID_LECTURE_STATE(HttpStatus.CONFLICT, "현재 수업 상태에서는 요청을 처리할 수 없습니다."),
+  /** 제출 경로의 문제가 지금 현재 문제가 아니다 — 그 사이 다음 문제로 바뀌었다 (8.4절). */
+  LECTURE_PROBLEM_NOT_CURRENT(HttpStatus.CONFLICT, "지금 풀고 있는 문제가 아닙니다."),
+  /** 같은 수업·학습자·문제에 다른 답안이 이미 저장돼 있다. 같은 답안 재전송은 200이다 (8.2.2절). */
+  LECTURE_PROBLEM_ALREADY_ANSWERED(HttpStatus.CONFLICT, "이미 답안을 제출한 문제입니다."),
+  /** cells 누락·빈 목록·12칸 초과·0~63 밖 값 (8.4절). */
+  INVALID_ANSWER_CELLS(HttpStatus.UNPROCESSABLE_CONTENT, "답안 점자 칸을 확인해 주세요."),
   MEDIA_SERVER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "음성 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."),
 
   // braille
@@ -99,6 +105,10 @@ public enum ErrorCode {
   LEARNING_CONTENT_NOT_READY(HttpStatus.SERVICE_UNAVAILABLE, "학습 콘텐츠가 아직 준비되지 않았습니다."),
 
   // problem
+  /** 연결 입력에 맞는 문제가 없거나, 출제·답안 목록 대상이 이 수업에 연결된 문제가 아니다 (8.4절). */
+  PROBLEM_NOT_FOUND(HttpStatus.NOT_FOUND, "문제를 찾을 수 없습니다."),
+  /** 구분어 없는 낱자에 후보가 둘 이상이다. body에 candidates를 더한다 — CandidatesBusinessException (8.2.1절). */
+  PROBLEM_TEXT_AMBIGUOUS(HttpStatus.CONFLICT, "어떤 문제인지 골라 주세요."),
   PROBLEM_VALIDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "문제 검증 서비스를 일시적으로 사용할 수 없습니다.");
 
   private final HttpStatus status;
