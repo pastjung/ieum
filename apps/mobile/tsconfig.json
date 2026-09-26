@@ -1,9 +1,0 @@
-{
-  "extends": "@react-native/typescript-config",
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": ["src", "index.js", "__tests__"]
-}
