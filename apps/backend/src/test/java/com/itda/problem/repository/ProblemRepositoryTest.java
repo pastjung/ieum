@@ -113,6 +113,48 @@ class ProblemRepositoryTest {
     assertThat(assignable).doesNotContain(longOne.getId());
   }
 
+  @Test
+  void 같은_자음이라도_학습_요소_유형으로_가른다() {
+    // 로컬 DB에 'ㄱ' CONSONANT가 첫소리(SKILL_01)·받침(SKILL_03) 두 건 있다. '초성 ㄱ'·'받침 ㄱ'이 서로를 고르면 안 된다.
+    LearningSkill onset =
+        entityManager.persist(LearningSkill.of(SkillType.SKILL_01, "ㄱ", "첫소리 기본 자음", null));
+    LearningSkill coda =
+        entityManager.persist(LearningSkill.of(SkillType.SKILL_03, "ㄱ", "받침 기본 자음", null));
+    Problem onsetProblem = persistWithCells(Level.CONSONANT, "ㄱ", List.of(8));
+    Problem codaProblem = persistWithCells(Level.CONSONANT, "ㄱ", List.of(1));
+    entityManager.persist(new ProblemSkill(onsetProblem, onset));
+    entityManager.persist(new ProblemSkill(codaProblem, coda));
+    entityManager.flush();
+
+    assertThat(
+            problemRepository.findAllByTargetTextAndLevelAndSkillType(
+                "ㄱ", Level.CONSONANT, SkillType.SKILL_01))
+        .extracting(Problem::getId)
+        .containsExactly(onsetProblem.getId());
+    assertThat(
+            problemRepository.findAllByTargetTextAndLevelAndSkillType(
+                "ㄱ", Level.CONSONANT, SkillType.SKILL_03))
+        .extracting(Problem::getId)
+        .containsExactly(codaProblem.getId());
+  }
+
+  @Test
+  void 지정한_단계만_id_오름차순으로_고르고_단계를_빼면_전부_고른다() {
+    Problem contraction = persistWithCells(Level.CONTRACTION, "가", List.of(43));
+    Problem firstWord = persistWithCells(Level.WORD, "가", List.of(43));
+    Problem secondWord = persistWithCells(Level.WORD, "가", List.of(43));
+    persistWithCells(Level.WORD, "가방", List.of(43, 24));
+
+    assertThat(
+            problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc(
+                "가", List.of(Level.WORD, Level.CONTRACTION_WORD, Level.SENTENCE)))
+        .extracting(Problem::getId)
+        .containsExactly(firstWord.getId(), secondWord.getId());
+    assertThat(problemRepository.findAllByTargetTextOrderByIdAsc("가"))
+        .extracting(Problem::getId)
+        .containsExactly(contraction.getId(), firstWord.getId(), secondWord.getId());
+  }
+
   private Problem persistWithCells(Level level, String targetText, List<Integer> expectedPatterns) {
     Problem saved = entityManager.persistFlushFind(new Problem(level, targetText));
     for (int index = 0; index < expectedPatterns.size(); index++) {

@@ -2,6 +2,7 @@ package com.itda.problem.repository;
 
 import com.itda.problem.domain.Level;
 import com.itda.problem.domain.Problem;
+import com.itda.problem.domain.SkillType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +14,33 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ProblemRepository extends JpaRepository<Problem, Long> {
   Optional<Problem> findByTargetText(String s);
+
+  /**
+   * '초성 ㄱ'·'받침 ㄱ' 해석용. 같은 글자의 자음 문제를 연결된 학습 요소 유형으로 가른다 (API 명세 8.2.1절).
+   *
+   * <p>로컬 DB에 같은 target_text가 여럿 있으므로 목록으로 받아 id 오름차순 첫 번째를 쓴다.
+   */
+  @Query(
+      """
+      SELECT DISTINCT p
+      FROM Problem p
+      JOIN ProblemSkill ps ON ps.problem = p
+      WHERE p.targetText = :targetText
+        AND p.level = :level
+        AND ps.skill.skillType = :skillType
+      ORDER BY p.id
+      """)
+  List<Problem> findAllByTargetTextAndLevelAndSkillType(
+      @Param("targetText") String targetText,
+      @Param("level") Level level,
+      @Param("skillType") SkillType skillType);
+
+  /** 같은 글자 중 지정한 단계만, id 오름차순 (API 명세 8.2.1절). */
+  List<Problem> findAllByTargetTextAndLevelInOrderByIdAsc(
+      String targetText, Collection<Level> levels);
+
+  /** 같은 글자 전부, id 오름차순. 구분어 없는 입력의 마지막 후보다. */
+  List<Problem> findAllByTargetTextOrderByIdAsc(String targetText);
 
   List<Problem> findAllByLevelAndIdNotIn(Level level, List<Long> ids);
 
