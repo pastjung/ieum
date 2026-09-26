@@ -250,6 +250,39 @@ describe('instructorRoom', () => {
     expect(room.canPlaybackAudio()).toBe(true)
   })
 
+  it('권한 프롬프트가 열려 있는 동안 밀려나면 학생 오디오를 붙이지 않고 방을 끊는다', async () => {
+    const states: string[] = []
+    let resolveMic: () => void = () => {}
+    const micPromise = new Promise<undefined>((resolve) => {
+      resolveMic = () => resolve(undefined)
+    })
+    const { Room } = await import('livekit-client')
+    vi.mocked(Room).mockImplementationOnce(() => {
+      const room = new FakeRoom()
+      room.localParticipant.setMicrophoneEnabled.mockImplementation(() => micPromise)
+      return room as never
+    })
+
+    // 언마운트나 다음 접속으로 이미 밀려난 상태로 가정한다 — 권한 프롬프트는 아직 응답 전이다
+    const connecting = connectInstructorRoom(token, (s) => states.push(s), { isStale: () => true })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // 권한 프롬프트가 열려 있는 사이 학생 오디오가 구독됐다 — 밀려난 접속이므로 붙이지 않는다
+    const voice = fakeTrack('audio')
+    rooms[0].emit('trackSubscribed', voice, {}, participant('1', '박지호'))
+    expect(voice.attach).not.toHaveBeenCalled()
+
+    resolveMic()
+    const room = await connecting
+
+    expect(voice.attach).not.toHaveBeenCalled()
+    expect(rooms[0].startAudio).not.toHaveBeenCalled()
+    expect(rooms[0].disconnect).toHaveBeenCalledTimes(1)
+    expect(states).toEqual(['connecting', 'connected', 'disconnected'])
+    expect(room.micEnabled()).toBe(true)
+  })
+
   it('소리 재생 상태 변화를 알린다', async () => {
     const playback: boolean[] = []
     await connectInstructorRoom(token, () => {}, { onAudioPlayback: (playing) => playback.push(playing) })

@@ -190,7 +190,8 @@ function StudentCard({ student, canControl, pending, disabled, onToggleSpeaking 
           type="button"
           disabled={disabled}
           onClick={onToggleSpeaking}
-          aria-label={`${student.name} ${action}`}
+          aria-label={pending ? `${student.name} 처리 중` : `${student.name} ${action}`}
+          aria-busy={pending}
           style={{
             ...buttonStyle(student.speakingAllowed ? 'dangerOutline' : 'mintOutline', 'sm'),
             padding: '6px 10px',
@@ -303,6 +304,9 @@ export function LiveLecturePage() {
           onAudioPlayback: (playing) => {
             if (seq === joinSeqRef.current) setAudioBlocked(!playing)
           },
+          // 마이크 권한 프롬프트가 열려 있는 동안에도 확인한다 — 그 사이 언마운트되거나
+          // 다음 접속(음성 다시 연결)에 밀려나면 학생 오디오를 붙이지 않고 방을 바로 끊는다
+          isStale: () => seq !== joinSeqRef.current,
         },
       )
       if (seq !== joinSeqRef.current) {

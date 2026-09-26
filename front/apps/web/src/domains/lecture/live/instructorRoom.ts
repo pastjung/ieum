@@ -9,6 +9,12 @@ export interface RoomListeners {
   onRoster?: (students: RosterStudent[]) => void
   /** 브라우저가 학생 소리 재생을 막으면 false, 풀리면 true */
   onAudioPlayback?: (playing: boolean) => void
+  /**
+   * true면 이 접속은 더 이상 필요 없다(언마운트되었거나 다음 접속에 밀려났다).
+   * 마이크 권한 프롬프트가 열려 있는 동안에도 확인하므로, 그 사이 구독된 학생 오디오를 붙이지 않고
+   * 권한 응답 뒤에는 방을 바로 끊는다 — 호출자가 반환값을 받기 전에도 재생·연결이 남지 않는다
+   */
+  isStale?: () => boolean
 }
 
 export interface InstructorRoom {
@@ -85,6 +91,9 @@ export async function connectInstructorRoom(
   // 학생 목소리 재생. attach()가 audio 요소를 만들고 play()까지 부른다 — 문서에 붙이지 않아도 재생된다
   room.on(RoomEvent.TrackSubscribed, (track) => {
     if (track.kind !== Track.Kind.Audio) return
+    // 마이크 권한 프롬프트가 열려 있는 동안 이 접속이 밀려났으면(언마운트 등) 붙이지 않는다 —
+    // 아무도 참조하지 않을 방의 소리가 다음 화면에서 계속 재생되는 일을 막는다
+    if (listeners.isStale?.()) return
     track.attach()
     attached.add(track)
   })
@@ -117,9 +126,20 @@ export async function connectInstructorRoom(
     throw error
   }
   mic = true
-  // "수업 시작" 클릭에서 이어진 흐름이면 여기서 재생이 풀린다. 새로고침 자동 접속처럼 제스처가 없으면
-  // 막힐 수 있고, 그때는 화면이 "학생 소리 켜기" 버튼으로 다시 부른다
-  await startAudio()
+  if (listeners.isStale?.()) {
+    // 권한 프롬프트를 기다리는 사이 이 접속이 밀려났다 — 그새 붙였을 수 있는 오디오를 떼고
+    // 방을 바로 끊어, 호출자가 반환값을 확인하기 전에도 연결·재생이 남지 않게 한다
+    detachAll()
+    try {
+      await room.disconnect()
+    } catch {
+      // 이미 밀려난 접속의 정리 오류는 무시한다
+    }
+  } else {
+    // "수업 시작" 클릭에서 이어진 흐름이면 여기서 재생이 풀린다. 새로고침 자동 접속처럼 제스처가 없으면
+    // 막힐 수 있고, 그때는 화면이 "학생 소리 켜기" 버튼으로 다시 부른다
+    await startAudio()
+  }
 
   return {
     async setMicEnabled(enabled) {
