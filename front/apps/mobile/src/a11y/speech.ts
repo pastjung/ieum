@@ -115,6 +115,16 @@ function estimateMs(text: string, rate: number): number {
  * 안내를 읽고, 낭독이 끝나면 resolve되는 Promise를 돌려준다.
  * 자동 화면 전환(스플래시·분석 중·수업 대기)은 이걸 기다렸다가 이동해
  * 말이 끝나기 전에 화면이 넘어가지 않게 한다.
+ *
+ * **TTS 경로는 반드시 `systemSpeakAsync`를 탄다.** 예전에는 여기서 `Speech.speak`를 직접
+ * 부르고 onDone·onStopped·onError에만 기댔는데, 셋 중 무엇도 불리지 않는 경우가 실재한다 —
+ * 안드로이드 에뮬레이터에서 Google TTS 서비스가 한국어 합성 도중 죽는 것을 확인했다
+ * (logcat: "Scheduling restart of crashed service com.google.android.tts"). 그러면 이
+ * Promise가 영영 settle되지 않고, 이걸 기다리는 화면은 **이동하지 못한 채 멈춘다.**
+ * 스플래시(`src/app/index.tsx`)가 그래서 로고 화면에서 넘어가지 못했다. 아무것도 던지지
+ * 않으므로 오류 로그조차 남지 않아 원인을 찾기도 어렵다.
+ *
+ * `systemSpeakAsync`는 낭독 길이 추정치에 여유를 더한 상한으로 그 기다림을 끊는다.
  */
 export function speakAsync(text: string): Promise<void> {
   const { voiceEnabled, speechRate } = useSettingsStore.getState();
@@ -126,14 +136,6 @@ export function speakAsync(text: string): Promise<void> {
     AccessibilityInfo.announceForAccessibility(text);
     return new Promise((resolve) => setTimeout(resolve, estimateMs(text, rate)));
   }
-  Speech.stop();
-  return new Promise((resolve) => {
-    Speech.speak(text, {
-      language: "ko-KR",
-      rate,
-      onDone: () => resolve(),
-      onStopped: () => resolve(),
-      onError: () => resolve(),
-    });
-  });
+  // Speech.stop()은 systemSpeakAsync가 부른다 — 여기서 또 부르면 같은 일을 두 번 한다
+  return systemSpeakAsync(text, speechRate);
 }
