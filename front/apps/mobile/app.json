@@ -20,7 +20,8 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.BLUETOOTH_SCAN"
-      ]
+      ],
+      "blockedPermissions": ["android.permission.CAMERA"]
     },
     "plugins": [
       "expo-router",
