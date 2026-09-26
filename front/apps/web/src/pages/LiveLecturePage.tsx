@@ -194,8 +194,12 @@ export function LiveLecturePage() {
   const [mic, setMic] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [joining, setJoining] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const roomRef = useRef<InstructorRoom | null>(null)
+  // joinVoice 호출을 직렬화하는 세대 번호. 진입 자동 접속과 "음성 다시 연결" 클릭이
+  // 겹치거나 언마운트 중에도 이어질 수 있어, 매 await 뒤 이 값으로 내가 아직 최신 호출인지 확인한다
+  const joinSeqRef = useRef(0)
 
   const releaseRoom = useCallback(async () => {
     const room = roomRef.current
@@ -204,10 +208,25 @@ export function LiveLecturePage() {
   }, [])
 
   const joinVoice = useCallback(async () => {
-    await releaseRoom()
-    const token = await lectureApi.issueMediaToken(lectureId)
-    roomRef.current = await connectInstructorRoom(token, setRoomState)
-    setMic(true)
+    const seq = ++joinSeqRef.current
+    setJoining(true)
+    try {
+      await releaseRoom()
+      if (seq !== joinSeqRef.current) return // 더 나중 호출이나 언마운트에 밀려났다
+      const token = await lectureApi.issueMediaToken(lectureId)
+      if (seq !== joinSeqRef.current) return
+      const room = await connectInstructorRoom(token, setRoomState)
+      if (seq !== joinSeqRef.current) {
+        // 이 사이에 더 나중 호출이 이미 새 방을 roomRef에 넣었거나 언마운트됐다 —
+        // 내가 만든 방은 아무도 참조하지 않으므로 여기서 바로 정리한다 (누수 방지)
+        await room.disconnect()
+        return
+      }
+      roomRef.current = room
+      setMic(true)
+    } finally {
+      if (seq === joinSeqRef.current) setJoining(false)
+    }
   }, [lectureId, releaseRoom])
 
   useEffect(() => {
@@ -222,6 +241,7 @@ export function LiveLecturePage() {
       .catch((e) => !cancelled && setError(errorMessage(e)))
     return () => {
       cancelled = true
+      joinSeqRef.current += 1 // 진행 중인 joinVoice를 무효화해 언마운트 뒤 roomRef 대입을 막는다
       void releaseRoom()
     }
   }, [lectureId, joinVoice, releaseRoom])
@@ -369,9 +389,9 @@ export function LiveLecturePage() {
           {lecture.status === 'SCHEDULED' ? (
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || joining}
               onClick={start}
-              style={{ ...buttonStyle('primary', 'sm'), fontSize: 13.5, boxShadow: 'none', ...(busy ? dimmed : {}) }}
+              style={{ ...buttonStyle('primary', 'sm'), fontSize: 13.5, boxShadow: 'none', ...(busy || joining ? dimmed : {}) }}
             >
               수업 시작
             </button>
@@ -544,9 +564,9 @@ export function LiveLecturePage() {
               ) : open && roomState === 'disconnected' ? (
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || joining}
                   onClick={reconnect}
-                  style={{ ...micButton, border: `1.5px solid ${c.primary}`, background: c.primary, ...(busy ? dimmed : {}) }}
+                  style={{ ...micButton, border: `1.5px solid ${c.primary}`, background: c.primary, ...(busy || joining ? dimmed : {}) }}
                 >
                   음성 다시 연결
                 </button>
