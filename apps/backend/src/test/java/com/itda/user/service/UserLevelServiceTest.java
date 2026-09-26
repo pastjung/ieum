@@ -22,8 +22,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 /**
  * 학습 단계 설정.
  *
- * <p>{@code users.level}은 오랫동안 아무도 설정하지 않아 모든 계정이 {@code NULL}이었다 — {@link User#changeLevel}은
- * 정의만 있고 호출부가 없었다. 그 탓에 복습 출제가 누구에게도 열리지 않았다.
+ * <p>{@code users.level}은 오랫동안 아무도 설정하지 않아 모든 계정이 {@code NULL}이었다 — {@link User#changeLevel}은 정의만
+ * 있고 호출부가 없었다. 그 탓에 복습 출제가 누구에게도 열리지 않았다.
  */
 @ExtendWith(MockitoExtension.class)
 class UserLevelServiceTest {

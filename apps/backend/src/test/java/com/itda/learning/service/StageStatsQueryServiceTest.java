@@ -22,8 +22,8 @@ import org.mockito.quality.Strictness;
 /**
  * 테마(커리큘럼 단계)별 풀이 통계.
  *
- * <p>테마 선택 화면이 {@code mockData.learningThemes}의 고정 숫자를 보여주고 있었다 — "자음 48문제 중 43개 맞힘 90%" 같은 값이
- * 전부 지어낸 것이었고, 학습자는 이것을 자기 기록으로 읽었다.
+ * <p>테마 선택 화면이 {@code mockData.learningThemes}의 고정 숫자를 보여주고 있었다 — "자음 48문제 중 43개 맞힘 90%" 같은 값이 전부
+ * 지어낸 것이었고, 학습자는 이것을 자기 기록으로 읽었다.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
