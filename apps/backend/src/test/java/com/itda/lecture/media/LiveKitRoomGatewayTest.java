@@ -67,7 +67,7 @@ class LiveKitRoomGatewayTest {
   }
 
   @Test
-  void 학습자_토큰은_수신만_허용한다() throws Exception {
+  void 학습자_토큰은_입장_시_수신과_자기_속성_갱신만_허용한다() throws Exception {
     IssuedMediaToken issued =
         gateway.issueToken(new MediaTokenRequest("lecture-42", "user-8", "learner", false));
 
@@ -75,8 +75,10 @@ class LiveKitRoomGatewayTest {
     assertThat(video).containsEntry("canPublish", false).containsEntry("canPublishData", false);
     assertThat(video).containsEntry("canSubscribe", true);
     assertThat(video).doesNotContainKey("canPublishSources");
-    // 학습자끼리 참가자 목록으로 서로를 보지 않는다 (API 명세 8.2절 다른 참여자 비노출).
-    assertThat(video).containsEntry("hidden", true);
+    // 손들기(hand 속성)를 학습자가 직접 쓴다 (API 명세 8.5.1절).
+    assertThat(video).containsEntry("canUpdateOwnMetadata", true);
+    // 강사가 참가자 목록에서 학습자를 보고 발언을 허용해야 하므로 숨기지 않는다 (API 명세 8.5절).
+    assertThat(video.get("hidden")).isNotEqualTo(true);
   }
 
   @Test

@@ -7,7 +7,7 @@ import io.livekit.server.CanPublish;
 import io.livekit.server.CanPublishData;
 import io.livekit.server.CanPublishSources;
 import io.livekit.server.CanSubscribe;
-import io.livekit.server.Hidden;
+import io.livekit.server.CanUpdateOwnMetadata;
 import io.livekit.server.RoomJoin;
 import io.livekit.server.RoomName;
 import io.livekit.server.RoomServiceClient;
@@ -69,9 +69,10 @@ public class LiveKitRoomGateway implements LiveRoomGateway {
       grants.add(new CanPublish(true));
       grants.add(new CanPublishSources(List.of("microphone")));
     } else {
+      // 입장할 때는 말할 수 없다. 발언은 강사가 허용할 때 서버가 참가자 권한을 바꿔 준다 (setSpeaking).
       grants.add(new CanPublish(false));
-      // 숨은 참가자는 다른 참가자 목록에 나타나지 않는다 — 학습자끼리 서로를 보지 않는다 (API 명세 8.2절).
-      grants.add(new Hidden(true));
+      // 손들기 속성(hand)을 학습자가 직접 쓴다. 숨기지 않는다 — 강사 참가자 목록에 보여야 한다 (API 명세 8.5절).
+      grants.add(new CanUpdateOwnMetadata(true));
     }
     token.addGrants(grants.toArray(VideoGrant[]::new));
 
