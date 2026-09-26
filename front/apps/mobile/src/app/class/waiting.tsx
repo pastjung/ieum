@@ -11,6 +11,7 @@ import { isUserBackAction } from "@/services/lectureSignals";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticSuccess, speakAsync } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
+import { SPEAKING_ALLOWED_MESSAGE, SPEAKING_REVOKED_MESSAGE } from "@/services/lectureVoiceControls";
 
 /** V22 수업 대기 — 선생님이 시작하면 자동 입장 */
 export default function ClassWaiting() {
@@ -85,8 +86,10 @@ export default function ClassWaiting() {
           if (exit === "ended") router.replace("/class/end");
           else if (exit === "lost") router.replace({ pathname: "/class/disconnected", params: { lectureId: validLectureId, title } });
         },
-        onSpeakingChanged: () => {
-          // 허용·회수 낭독은 Task 6에서 채운다
+        onSpeakingChanged: (allowed) => {
+          // 풀이·채점 화면에 있어도 알린다 — 이 핸들러는 대기 화면이 사라진 뒤에도 불린다
+          if (allowed) void hapticSuccess();
+          announce(allowed ? SPEAKING_ALLOWED_MESSAGE : SPEAKING_REVOKED_MESSAGE);
         },
       })
       .catch((error: unknown) => {

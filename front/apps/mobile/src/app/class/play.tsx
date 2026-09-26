@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useNavigation, useRouter } from "expo-router";
 import type { Cell } from "@ieum/domain";
@@ -8,8 +8,20 @@ import { DotPad } from "@/components/DotPad";
 import { AppButton } from "@/components/AppButton";
 import { liveLecture } from "@/services/liveLecture";
 import { isUserBackAction } from "@/services/lectureSignals";
+import { ensureMicPermission } from "@/services/micPermission";
+import {
+  HAND_DOWN_MESSAGE,
+  HAND_FAILED_MESSAGE,
+  HAND_UP_MESSAGE,
+  lectureVoiceControls,
+  MIC_FAILED_MESSAGE,
+  MIC_OFF_MESSAGE,
+  MIC_ON_MESSAGE,
+  MIC_PERMISSION_DENIED_MESSAGE,
+} from "@/services/lectureVoiceControls";
+import { useLectureVoiceStore } from "@/stores/lectureVoiceStore";
 import { useSessionStore } from "@/stores/sessionStore";
-import { announce, speak } from "@/a11y";
+import { announce, hapticSuccess, speak, speakAsync } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
 /** V23 수업 진행 · 풀이 */
@@ -22,6 +34,13 @@ export default function ClassPlay() {
   const submit = useSessionStore((s) => s.submit);
   const problem = useSessionStore((s) => s.current)();
   const [cells, setCells] = useState<Cell[]>([]);
+  // 발언 상태는 liveLecture가 스토어에 쓴다. 객체로 한 번에 고르면 매번 새 참조라 값별로 고른다
+  const speakingAllowed = useLectureVoiceStore((s) => s.speakingAllowed);
+  const micOn = useLectureVoiceStore((s) => s.micOn);
+  const handUp = useLectureVoiceStore((s) => s.handUp);
+  const voice = lectureVoiceControls({ speakingAllowed, micOn, handUp });
+  // 손들기·마이크 요청이 진행 중이다 — 겹쳐 누른 것을 무시한다 (버튼을 비활성으로 바꾸면 TalkBack이 "사용할 수 없음"을 끼워 읽는다)
+  const voiceBusyRef = useRef(false);
 
   // 하드웨어 뒤로 가기·제스처로 떠나면 음성 방을 먼저 정리한다. 뒤로 가면 대기 화면을 열었던
   // 수업 탭이 나온다(대기 화면은 이 화면으로 replace됐다). 채점 화면으로의 이동은
@@ -80,13 +99,51 @@ export default function ClassPlay() {
     router.replace("/session/grade");
   };
 
+  const toggleHand = async () => {
+    if (voiceBusyRef.current) return;
+    voiceBusyRef.current = true;
+    const up = !handUp;
+    const ok = await liveLecture.raiseHand(up);
+    voiceBusyRef.current = false;
+    announce(ok ? (up ? HAND_UP_MESSAGE : HAND_DOWN_MESSAGE) : HAND_FAILED_MESSAGE);
+  };
+
+  const toggleMic = async () => {
+    if (voiceBusyRef.current) return;
+    voiceBusyRef.current = true;
+    try {
+      if (micOn) {
+        const ok = await liveLecture.setMicrophone(false);
+        announce(ok ? MIC_OFF_MESSAGE : MIC_FAILED_MESSAGE);
+        return;
+      }
+      if (!(await ensureMicPermission())) {
+        announce(MIC_PERMISSION_DENIED_MESSAGE);
+        return;
+      }
+      // 켠 뒤에 읽으면 안내 음성이 수업에 그대로 전해진다 — 켜기 전에 말하고, 켜진 것은 진동으로 알린다
+      await speakAsync(MIC_ON_MESSAGE);
+      const ok = await liveLecture.setMicrophone(true);
+      if (ok) void hapticSuccess();
+      // 그 사이 선생님이 거뒀다면 회수 안내가 이미 나갔다 — 실패 안내를 겹쳐 읽지 않는다
+      else if (useLectureVoiceStore.getState().speakingAllowed) announce(MIC_FAILED_MESSAGE);
+    } finally {
+      voiceBusyRef.current = false;
+    }
+  };
+
   return (
     <ScreenShell>
       <View style={styles.statusRow}>
-        <View style={styles.statusItem} accessibilityLabel="수업 중, 선생님 음성 연결됨">
+        <View
+          style={styles.statusItem}
+          accessibilityLabel={`수업 중, 선생님 음성 연결됨${voice.status ? `, ${voice.status}` : ""}`}
+        >
           {dot(theme.color.primary)}
           <Text style={{ fontSize: 16, fontWeight: "800", color: theme.color.text }}>수업 중</Text>
-          <Text style={{ fontSize: 14, color: theme.color.textMuted, marginLeft: 6 }}>선생님 음성</Text>
+          <Text style={{ fontSize: 14, color: theme.color.textMuted, marginLeft: 6 }}>
+            {voice.status || "선생님 음성"}
+          </Text>
         </View>
         <View
           style={[styles.chip, { borderColor: theme.color.border }]}
@@ -94,6 +151,27 @@ export default function ClassPlay() {
         >
           {dot(theme.color.primary)}
           <Text style={{ fontSize: 14, fontWeight: "700", color: theme.color.text }}>장치 연결됨</Text>
+        </View>
+      </View>
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        {voice.hand && (
+          <View style={{ flex: 1 }}>
+            <AppButton
+              label={voice.hand.label}
+              variant="compact"
+              accessibilityHint={voice.hand.hint}
+              onPress={() => void toggleHand()}
+            />
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <AppButton
+            label={voice.mic.label}
+            variant={speakingAllowed ? "primary" : "compact"}
+            accessibilityHint={voice.mic.hint}
+            disabled={voice.mic.disabled}
+            onPress={() => void toggleMic()}
+          />
         </View>
       </View>
       <Text accessibilityRole="header" style={{ fontSize: 28 * fontScale, fontWeight: "900", lineHeight: 38, color: theme.color.text }}>
