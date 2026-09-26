@@ -27,6 +27,7 @@
 | [docker.md](./docker.md) | 단일 멀티스테이지 Dockerfile 전략, 로컬 개발(compose --watch), 이미지 보존 정책 |
 | [deploy.md](./deploy.md) | EC2 구축, HTTPS(Certbot), 3중 방어, 수동 배포·롤백 절차(비상용), blue-green 원리 |
 | [jenkins.md](./jenkins.md) | Jenkins 설치 구성, docker.sock 보안 원칙, Credentials 계약 표, 백업 |
+| [openvidu.md](./openvidu.md) | 실시간 수업 음성(OpenVidu 3.8) — 구성, 포트·ufw, 공인 IP 고정, backend 연결 설정, 트러블슈팅 |
 | [pipeline.md](./pipeline.md) | MR 검증·AI 리뷰·배포·롤백 파이프라인, Mattermost 알림, **재현 체크리스트(7절)**, 트러블슈팅 사례집 |
 
 팀 노션에도 같은 주제의 개념 설명 문서가 있다 (초심자용 — 주요 로직 설계 페이지).

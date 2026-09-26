@@ -1008,7 +1008,7 @@ assigned_problems에는 item_no와 problem_id만 저장한다. 기본/개인화 
 | A-18 / F-20 수업 생성·시작·종료 | 담당 강사의 제목·설명·선택 예정 시각과 상태 전환 요청 | 담당 INSTRUCTOR만 SCHEDULED → OPEN → CLOSED 단방향 전이. SCHEDULED에서만 메타데이터 수정 | 저장·상태 불변식과 `/api/v1/lectures` 공개 계약. 취소·삭제·재개 없음 |
 | A-19 / F-21 코드 입장·대기·퇴장 | 인증·이메일 인증된 LEARNER와 숫자 6자리 코드 | SCHEDULED/OPEN 직접 참여, 최초 입장 시각 유지, 퇴장 기록·재입장 시 left_at 초기화, CLOSED 입장 거부 | participants 한 행 유지·종료 시 left_at 처리, 참여 API·오류 계약 |
 | A-20 / F-22 문제 연결·전달·상태 동기화 | 담당 강사·수업·검증 문제, 참여 학습자의 현재 문제 답안 | HTTP로 수업·문제·답안을 저장하고 WebSocket으로 메타데이터·상태·현재 문제 변경만 알림 | UNIQUE/동시성과 HTTP·WS·재접속 Snapshot 계약 |
-| A-21 / F-23 음성 접속 | 담당 강사·해당 참여 학습자의 수업 문맥 | OpenVidu 강사 송출·학습자 수신 단방향 음성. 학습자 마이크·영상·화면 공유·녹음/저장/전사/다시보기 제외 | 제품 범위 승인. 버전·SDK·토큰 endpoint·미디어 식별·배포·복구는 다음 스프린트 |
+| A-21 / F-23 음성 접속 | 담당 강사·해당 참여 학습자의 수업 문맥 | OpenVidu 강사 송출·학습자 수신 단방향 음성. 학습자 마이크·영상·화면 공유·녹음/저장/전사/다시보기 제외 | 제품 범위 승인. 토큰·방 규칙은 8.5절 |
 
 수강 등록·강사 승인 대기·출결 판정·강사 별도 피드백 저장·문제별 수동 제출 마감·해설 상태 API는 두지 않는다. 사전 입장은 수업 시작이 아니다. 개인 학습 세션의 10문항·완료 분석 단위를 실제 수업에 자동 적용하지 않는다. 수업 후 복습은 별도 수업 endpoint가 아니라 기존 개인 세션 생성의 선택 문맥으로 처리한다.
 
@@ -1043,6 +1043,7 @@ assigned_problems에는 item_no와 problem_id만 저장한다. 기본/개인화 
 | `PUT /api/v1/lectures/{lectureId}/current-problem` | 200 | 담당 INSTRUCTOR, OPEN 전용. body의 `problemId`를 같은 수업에 연결된 문제에서 찾아 현재 문제로 교체한다. 동일 값 재요청은 새 이벤트를 만들지 않는다. |
 | `POST /api/v1/lectures/{lectureId}/problems/{problemId}/answers` | 201 신규 / 동일 멱등 재전송 200 | 활성 LEARNER·OPEN·현재 문제 전용. `Idempotency-Key` UUID v4 필수. |
 | `POST /api/v1/lectures/{lectureId}/realtime-tickets` | 201 | 담당 INSTRUCTOR 또는 SCHEDULED/OPEN의 활성 LEARNER. 60초 유효 일회용 WebSocket 티켓 발급. |
+| `POST /api/v1/lectures/{lectureId}/media-tokens` | 201 | 담당 INSTRUCTOR(OPEN) 또는 SCHEDULED/OPEN의 활성 LEARNER. OpenVidu 음성 접속 토큰 발급 (8.5절). |
 
 강의 생성 요청은 다음과 같다. `title`은 비어 있지 않고 DB VARCHAR(150) 범위이며 `description`·`scheduledAt`은 생략하거나 null일 수 있다. `PATCH`에서도 description·scheduledAt을 null로 보내 값을 지울 수 있다.
 
@@ -1116,10 +1117,45 @@ WebSocket은 서버→클라이언트 알림 전용이다. 클라이언트는 �
 | 409 | LECTURE_PROBLEM_ALREADY_ANSWERED | 다른 멱등 키로 같은 수업·학습자·문제 재제출 |
 | 409 | IDEMPOTENCY_KEY_REUSED | 같은 키에 다른 정규화 답안 내용 |
 | 422 | INVALID_ANSWER_CELLS | Cell 수·순번·범위 검증 실패 |
+| 503 | MEDIA_SERVER_UNAVAILABLE | OpenVidu 방 생성·metadata 설정·삭제 호출 실패 (상태 변경, 강사 음성 토큰 요청의 방 다시 열기) |
 
 오류 body는 `{"code":"...","message":"..."}`다. 수업 목록의 page는 0 이상, size는 1~100으로 검증한다. HTTP 5xx·시간 제한·재시도 수치는 기준선 측정 뒤 정하며, 오류가 발생한 신규 LIVE 풀이를 일부 저장하지 않는다.
 
-OpenVidu 강사 단방향 음성은 제품 MVP에 포함하지만 버전 선정과 이에 의존하는 SDK·토큰 endpoint·배포·복구 계약은 다음 스프린트에서 검토한다. 강사 publish·학습자 subscribe만 허용하고 녹음·저장·전사·다시 듣기·학습자 마이크·영상·화면 공유는 추가하지 않는다. 미디어 접속 상태·토큰은 participants 행과 서비스 WebSocket 티켓이 아니며 이전 WEBRTC_SIGNAL 직접 시그널링 계약도 현행 확정 API가 아니다.
+OpenVidu 강사 단방향 음성은 제품 MVP에 포함하며 버전·토큰 endpoint·복구는 8.5절을 따른다. 강사 publish·학습자 subscribe만 허용하고 녹음·저장·전사·다시 듣기·학습자 마이크·영상·화면 공유는 추가하지 않는다. 미디어 접속 상태·토큰은 participants 행과 서비스 WebSocket 티켓이 아니며 이전 WEBRTC_SIGNAL 직접 시그널링 계약도 현행 확정 API가 아니다.
+
+### 8.5 OpenVidu 음성 접속
+
+OpenVidu 3.x(LiveKit 기반)를 사용한다. 음성 토큰은 participants 행·WebSocket 티켓과 별개이며 서버에 저장하지 않는다.
+
+`POST /api/v1/lectures/{lectureId}/media-tokens` 는 body가 없고 응답은 다음과 같다.
+
+```json
+{ "serverUrl": "wss://openvidu.i-eum.site", "token": "<LiveKit JWT>", "expiresAt": "2026-09-26T10:10:00.000Z" }
+```
+
+| 요청자 | 허용 상태 | 권한 |
+| --- | --- | --- |
+| 담당 INSTRUCTOR | OPEN | 입장, 마이크 음성 publish, subscribe |
+| 활성 참여 LEARNER (left_at NULL) | SCHEDULED, OPEN | 입장, subscribe만. publish·데이터 전송 불가 |
+
+- 방 이름은 `lecture-{lectureId}`, 참가자 identity는 `user-{userId}`, 표시 이름은 username이다.
+- 학습자는 숨은 참가자(hidden)로 입장한다. 다른 참가자 목록에 나타나지 않아 학습자끼리 서로를 볼 수 없고, 강사는 모두에게 보인다.
+- 토큰 유효기간은 10분이다. 접속 중 갱신은 OpenVidu가 처리하며, 클라이언트는 재접속할 때만 새 토큰을 받는다. JWT `exp` 와 응답 `expiresAt` 은 같은 시각이다.
+- 강사가 OPEN으로 바꾸면 서버가 방을 만들고 방 metadata를 `{"status":"OPEN"}` 으로 설정한다. 학습자는 SCHEDULED에서 미리 접속해 대기할 수 있으므로 클라이언트는 접속 시 metadata와 metadata 변경 이벤트로 시작을 안다.
+- 강사가 CLOSED로 바꾸면 서버가 방을 삭제한다. 클라이언트는 연결 해제 사유 `ROOM_DELETED` 를 수업 종료로, 그 밖의 해제를 음성 장애로 구분한다. 음성 장애가 곧 수업 종료는 아니며 `GET /api/v1/lectures/{lectureId}` 로 상태를 확인한다.
+- 상태 저장이 끝난 뒤 방 생성·삭제가 실패하면 상태는 유지하고 `503 MEDIA_SERVER_UNAVAILABLE` 로 응답한다. 강사는 같은 상태로 다시 요청해 방 작업만 재시도한다(동일 상태 재요청은 현재 자원 — 8.2절).
+- 방 metadata는 접속해 있는 동안 시작을 알리는 신호일 뿐 수업 상태의 권위가 아니다. 마지막 참가자가 나가면 OpenVidu가 방을 닫아 metadata도 사라진다. 클라이언트는 (재)접속할 때 `GET /api/v1/lectures/{lectureId}` 의 status를 권위로 삼는다. OPEN 수업의 담당 강사가 음성 토큰을 요청하면 서버가 방을 다시 열어(이미 있으면 그대로) metadata를 복구한 뒤 토큰을 발급한다.
+
+음성 토큰 요청의 오류는 다음과 같다.
+
+| HTTP | code | 조건 |
+| --- | --- | --- |
+| 404 | LECTURE_NOT_FOUND | 수업이 없거나, 담당 강사도 participants 행이 있는 학습자도 아님(다른 강사·참여한 적 없는 학습자) |
+| 409 | INVALID_LECTURE_STATE | 강사: 수업이 OPEN이 아님. 학습자: 수업이 CLOSED — 참여 여부보다 먼저 판정한다 |
+| 403 | LECTURE_PARTICIPATION_REQUIRED | 학습자가 퇴장한 상태(left_at 있음). 코드로 다시 입장해야 한다 |
+| 503 | MEDIA_SERVER_UNAVAILABLE | 강사 요청의 방 다시 열기(생성·metadata 설정) 실패. 토큰은 발급하지 않는다 |
+
+토큰 서명은 네트워크 호출 없이 서버 안에서 끝나며, OpenVidu 접속 설정이 없으면 서버가 기동하지 않는다.
 
 ## 9. 장치·실시간 전송 경계
 
@@ -1133,7 +1169,7 @@ Android 학습자 모바일과 아두이노는 BLE로 장치 검색·연결·해
 | --- | --- | --- |
 | HTTPS | 계정·문제·단계·학습 상태 등의 조회/처리 | 계정·개인 학습·문제·수업 HTTP는 이 문서 3~8절의 요청·응답·오류 계약 적용 |
 | 서비스 WebSocket | 수업 메타데이터·상태·현재 문제 변경 알림 | 60초 일회용 ticket·eventId·3개 이벤트·HTTP Snapshot 재연결. 답안/결과/장치 중계·sequence/replay 없음 |
-| OpenVidu | 강사 publish·학습자 subscribe 단방향 음성 | 다음 스프린트에 버전·SDK·토큰 endpoint·접속·복구 확정 |
+| OpenVidu | 강사 publish·학습자 subscribe 단방향 음성 | 8.5절 (OpenVidu 3.x, 토큰 endpoint·방 규칙 확정) |
 | BLE | Android 모바일↔장치 연결·1~6 Cell 출력·해제·상태·ACK | 실제 UUID·Frame·오류 code·시간/재시도 상수는 IoT 계약에서 확정 |
 
 같은 논리적 답안은 HTTP와 UUID v4 `Idempotency-Key`로만 저장한다. WebSocket eventId는 알림 중복 방지용이며 답안 멱등 키와 동일시하거나 DB에 저장하지 않는다. 새 학습 풀이와 전송 재시도는 구분한다.
