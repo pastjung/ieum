@@ -75,6 +75,10 @@ public enum ErrorCode {
   LECTURE_NOT_FOUND(HttpStatus.NOT_FOUND, "수업을 찾을 수 없습니다."),
   /** 코드가 없는 경우와 CLOSED인 경우를 구분하지 않는다 — 구분하면 코드 존재 여부를 탐색할 수 있다 (8.4절). */
   LECTURE_NOT_JOINABLE(HttpStatus.NOT_FOUND, "입장할 수 있는 수업이 없습니다. 참여 코드를 확인해 주세요."),
+  /** 발언 권한 대상이 이 수업의 활성 참여자(participants 행, left_at NULL)가 아니다 (8.5.1절). */
+  LECTURE_PARTICIPANT_NOT_FOUND(HttpStatus.NOT_FOUND, "수업에 참여 중인 학습자가 아닙니다."),
+  /** 활성 참여자지만 지금 음성 방에 접속해 있지 않다 — OpenVidu가 그 참가자를 모른다 (8.5.1절). */
+  LECTURE_PARTICIPANT_NOT_CONNECTED(HttpStatus.NOT_FOUND, "지금 음성에 연결돼 있지 않은 학습자입니다."),
   INVALID_LECTURE_STATE(HttpStatus.CONFLICT, "현재 수업 상태에서는 요청을 처리할 수 없습니다."),
   MEDIA_SERVER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "음성 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."),
 
