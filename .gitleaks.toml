@@ -1,0 +1,48 @@
+# gitleaks 설정 — 기본 규칙 + 이 프로젝트에서 실제로 다루는 시크릿 패턴
+# 실행: pre-commit(커밋 시 자동). 규칙 배경: docs/conventions/quality/security.md
+
+[extend]
+useDefault = true   # gitleaks 기본 규칙(AWS·GitHub·private key 등) 유지
+
+[[rules]]
+id = "itda-mattermost-webhook"
+description = "Mattermost Incoming Webhook URL"
+regex = '''https?://[A-Za-z0-9.\-]+/hooks/[A-Za-z0-9]{16,}'''
+tags = ["webhook", "mattermost"]
+
+[[rules]]
+id = "itda-gms-api-key"
+description = "GMS API 키 (배포·MR 리뷰용 LLM 키)"
+regex = '''(?i)gms[_\-]?(api[_\-]?)?key\s*[:=]\s*['"]?[A-Za-z0-9\-_.]{16,}'''
+tags = ["api-key", "gms"]
+
+[[rules]]
+id = "itda-db-password"
+description = "DB 비밀번호 하드코딩 (환경변수로 주입해야 한다)"
+regex = '''(?i)(db|database|spring\.datasource)[_.\-]?password\s*[:=]\s*['"]?[^\s'"$][^\s'"]{3,}'''
+tags = ["password", "database"]
+
+[[rules]]
+id = "itda-generic-password-assignment"
+description = "코드에 직접 대입된 비밀번호·시크릿"
+regex = '''(?i)[a-z0-9_.\-]*(password|passwd|secret|token|apikey|api_key)\s*[:=]\s*['"][^\s'"]{8,}['"]'''
+tags = ["password", "secret"]
+
+  # RE2에는 부정형 전방탐색이 없다. 플레이스홀더 제외는 allowlist로 처리한다
+  [rules.allowlist]
+  regexTarget = "match"
+  regexes = ['''['"](\$\{|\{\{|<|change|your|example|placeholder|dummy|test)''']
+
+[allowlist]
+description = "오탐 제외 — 예시·템플릿·문서"
+paths = [
+  '''\.example$''',
+  '''(^|/)\.env\.[a-z]+\.example$''',
+  '''^docs/''',
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)node_modules/''',
+]
+regexes = [
+  '''\$\{[A-Z_]+\}''',        # ${DB_PASSWORD} 같은 변수 참조
+  '''(?i)(changeme|your[_-]?password|example|placeholder)''',
+]

@@ -1,0 +1,68 @@
+# ==========================================================================
+# 운영 배포용 Compose — 빌드하지 않고 이미지 태그만 참조한다.
+# 기동은 scripts/deploy.sh가 서비스 단위로 수행한다.
+#   예) docker compose -f docker-compose.prod.yml up -d backend-green
+#
+# 주의: 인자 없이 `up -d`를 실행하지 않는다 (blue/green 6개가 전부 뜬다).
+# 포트 규칙 (전부 127.0.0.1 바인딩, 외부 트래픽은 호스트 Nginx가 받음):
+#   web     blue 3001 / green 3002
+#   backend blue 8081 / green 8082
+#   ai      blue 8101 / green 8102  (외부 미노출 — Backend가 호스트 Nginx 내부
+#                                    리스너 127.0.0.1:9100을 거쳐 활성 색으로 호출)
+# ==========================================================================
+name: itda
+
+x-backend-env: &backend-env
+  # RDS 연결 전까지 local(H2)로 운용. RDS 연결 시 .env에서 BACKEND_PROFILE=prod로 전환
+  SPRING_PROFILES_ACTIVE: ${BACKEND_PROFILE:-prod}
+  DB_URL: ${DB_URL:?DB_URL is required}
+  DB_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+  AI_BASE_URL: ${AI_BASE_URL:-http://host.docker.internal:9100/api/v1}
+
+services:
+  web-blue:
+    image: ${REGISTRY_PREFIX:-}itda-web:${WEB_TAG:?WEB_TAG is required}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:80"
+
+  web-green:
+    image: ${REGISTRY_PREFIX:-}itda-web:${WEB_TAG:?WEB_TAG is required}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:80"
+
+  backend-blue:
+    image: ${REGISTRY_PREFIX:-}itda-backend:${BACKEND_TAG:?BACKEND_TAG is required}
+    restart: unless-stopped
+    environment: *backend-env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8081:8080"
+
+  backend-green:
+    image: ${REGISTRY_PREFIX:-}itda-backend:${BACKEND_TAG:?BACKEND_TAG is required}
+    restart: unless-stopped
+    environment: *backend-env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8082:8080"
+
+  ai-blue:
+    image: ${REGISTRY_PREFIX:-}itda-ai:${AI_TAG:?AI_TAG is required}
+    restart: unless-stopped
+    environment:
+      ITDA_DEBUG: "false"
+    ports:
+      - "127.0.0.1:8101:8000"
+
+  ai-green:
+    image: ${REGISTRY_PREFIX:-}itda-ai:${AI_TAG:?AI_TAG is required}
+    restart: unless-stopped
+    environment:
+      ITDA_DEBUG: "false"
+    ports:
+      - "127.0.0.1:8102:8000"

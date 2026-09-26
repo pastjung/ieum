@@ -1,0 +1,10 @@
+{
+  "name": "@ieum/frontend",
+  "private": true,
+  "scripts": {
+    "dev:mobile": "pnpm --filter @ieum/mobile start",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}

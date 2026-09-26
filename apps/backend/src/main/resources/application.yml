@@ -1,0 +1,190 @@
+spring:
+  application:
+    name: itda-backend
+  profiles:
+    default: local
+  autoconfigure:
+    # 인증 방식이 Access Token뿐이라 in-memory 사용자가 필요 없다. 두면 기동 로그에 생성된 비밀번호가 찍힌다.
+    exclude:
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  security:
+    filter:
+      # ERROR dispatch에서 Security chain이 다시 돌면 이미 끝난 오류 응답을 또 인증 판정하게 된다.
+      # async 인증 전파는 이번 범위가 아니므로 켜지 않는다.
+      dispatcher-types: request
+  data:
+    redis:
+      # 인증 상태 조회는 요청 경로 위에 있다. 응답을 오래 붙들고 있느니 빨리 포기하고
+      # AUTH_STATE_UNAVAILABLE(503)로 끊는 편이 낫다 — 계약은 불확실한 처리를 성공으로 단정하지 말라고 정한다.
+      # host·port는 프로필별로 지정한다.
+      connect-timeout: 1s
+      timeout: 1s
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        # ERD 7절: 서버 영속 시각은 전부 UTC DATETIME(6)이다.
+        jdbc.time_zone: UTC
+        format_sql: true
+        # Boot 4의 Jackson 3을 Hibernate JSON 매핑에 연결한다 (Jackson3JsonFormatMapper 주석 참고).
+        type.json_format_mapper: com.itda.global.config.Jackson3JsonFormatMapper
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
+itda:
+  security:
+    password:
+      # 기능 명세 2.1절이 정한 Argon2id 최소 설정이 기본값이다. 배포 환경 측정 결과에 따라 올릴 수는 있어도
+      # 내릴 수는 없다 — 범위 밖 값은 Argon2idProperties가 기동 단계에서 거부한다.
+      argon2:
+        memory-kib: 19456
+        iterations: 2
+        parallelism: 1
+      # 유출 비밀번호 조회(Pwned Passwords range API). API key가 없어 비밀값이 아니므로 .env를 쓰지 않는다.
+      # 검사를 끄는 스위치는 두지 않는다 (API 명세 3.6.2절 fail-closed).
+      breach:
+        base-url: https://api.pwnedpasswords.com/range/
+        connect-timeout: 2s
+        read-timeout: 3s
+    # Access Token 서명 설정 (docs/product/api-spec.md 3.6.1). 유효기간 15분은 계약 값이라 코드 상수로 고정한다.
+    # 기본값을 두지 않는다 — 소스에 들어간 기본 key는 그대로 운영에 올라간다.
+    jwt:
+      access:
+        issuer: ${AUTH_JWT_ISSUER}
+        active-kid: ${AUTH_ACCESS_ACTIVE_KID}
+        active-key: ${AUTH_ACCESS_ACTIVE_KEY}
+        # kid1:base64url,kid2:base64url 형식. 회전 중 아직 수명이 남은 토큰을 검증하기 위한 목록이다.
+        retired-keys: ${AUTH_ACCESS_RETIRED_KEYS:}
+      # Refresh Token 서명 설정. issuer는 Access와 같은 값을 쓰므로 여기에 다시 두지 않는다
+      # (RefreshTokenConfiguration이 Access 설정에서 가져온다). 유효기간 14일도 계약 값이라 코드 상수다.
+      refresh:
+        active-kid: ${AUTH_REFRESH_ACTIVE_KID}
+        active-key: ${AUTH_REFRESH_ACTIVE_KEY}
+        # Refresh는 수명이 14일이라 회전 후에도 retired key를 그만큼 들고 있어야 한다.
+        retired-keys: ${AUTH_REFRESH_RETIRED_KEYS:}
+      # 계정 작업 토큰(이메일 인증·비밀번호 재설정) 서명 설정. 두 용도가 ring 하나를 공유하고
+      # 종류 분리는 typ·aud·purpose와 전용 발급기·검증기가 담당한다 (API 명세 3.6.1절).
+      # 유효기간 24시간·30분도 계약 값이라 코드 상수다. kid는 세 ring을 통틀어 유일해야 한다.
+      action:
+        active-kid: ${AUTH_ACTION_ACTIVE_KID}
+        active-key: ${AUTH_ACTION_ACTIVE_KEY}
+        retired-keys: ${AUTH_ACTION_RETIRED_KEYS:}
+    # 인증 상태 Redis 키 앞에 붙는 환경 이름 (local·test·prod). DB index로 환경을 나누지 않는 이유는
+    # AuthRedisProperties 주석 참고. 값이 틀리면 다른 환경의 토큰 상태를 조용히 읽게 되므로 기본값을 두지 않는다.
+    auth-redis:
+      key-prefix: ${AUTH_REDIS_KEY_PREFIX}
+  # 오답 분석·맞춤 학습을 담당하는 FastAPI 서비스 (apps/ai). 주소가 환경마다 달라 소스에 두지 않는다.
+  # 기본값은 로컬 개발용이며 배포 환경은 AI_BASE_URL로 덮어쓴다.
+  ai:
+    base-url: ${AI_BASE_URL:http://localhost:8000}
+  mail:
+    # 계정 메일(이메일 인증·비밀번호 재설정) SMTP 발송. 재시도·backoff·제한 시간·보존 기간은 ERD 3.5절의 계약 값이라
+    # MailDispatchProperties 기본값으로 고정하고 여기서 열지 않는다.
+    dispatch:
+      schedule:
+        # 기본값 꺼짐. 꺼져 있으면 outbox 접수는 되지만 어떤 메일도 나가지 않는다 — "꺼짐"은 "준비됨"이 아니다.
+        # 켜면 아래 provider·link 값이 모두 필요하고, 빠지면 기동 단계에서 실패한다. poll 주기·batch·종료 대기는
+        # MailDispatchScheduleProperties 기본값(10s·5m·20·30s)을 쓴다 (README 「계정 메일 발송」).
+        enabled: ${MAIL_DISPATCH_ENABLED:false}
+    provider:
+      # 기본값을 두지 않는다. 제공자·포트·보안 방식(SSL|STARTTLS)은 운영 계정에 묶인 값이다. 미해결 플레이스홀더는
+      # MailProviderProperties가 기동 단계에서 거부한다.
+      host: ${MAIL_SMTP_HOST}
+      port: ${MAIL_SMTP_PORT}
+      security: ${MAIL_SMTP_SECURITY}
+      username: ${MAIL_SMTP_USERNAME:}
+      password: ${MAIL_SMTP_PASSWORD:}
+      from-address: ${MAIL_FROM_ADDRESS}
+      # 서비스 표시 이름. 환경변수를 생략하면 이음(I:EUM)을 쓰며 제공자 계정·발신 주소와는 별개다.
+      from-name: ${MAIL_FROM_NAME:이음(I:EUM)}
+      # 선택값. 비워 두면 Reply-To 헤더를 만들지 않는다.
+      reply-to: ${MAIL_REPLY_TO:}
+    link:
+      # 메일 링크의 프론트 주소. 토큰은 fragment(#token=)로만 붙는다.
+      # http는 local·test의 루프백에만 허용한다. prod는 루프백을 포함해 https만 허용한다.
+      email-verification-url: ${MAIL_LINK_EMAIL_VERIFICATION_URL}
+      password-reset-url: ${MAIL_LINK_PASSWORD_RESET_URL}
+
+logging:
+  pattern:
+    # 요청 처리 중의 모든 로그 줄에 X-Request-Id를 붙인다. 값은 RequestTracingFilter가 MDC에 넣는다.
+    # Boot 기본 콘솔 패턴은 MDC를 출력하지 않아, 이 설정이 없으면 로그와 응답 헤더를 이을 수 없다.
+    correlation: "[%X{requestId:-}] "
+
+---
+# ---------- local: MariaDB (docker-compose의 db 서비스) ----------
+# 컨테이너에서 실행하면 DB_HOST=db, 호스트에서 bootRun하면 기본값 localhost:3306을 쓴다.
+spring:
+  config:
+    activate:
+      on-profile: local
+    # 호스트에서 ./gradlew bootRun으로 띄울 때 저장소 루트의 .env를 읽는다.
+    # compose는 env_file로 주입하지만 Gradle 실행에는 그 경로가 없다. 없으면 비밀번호
+    # 자리에 미해결 플레이스홀더가 그대로 전송돼 Access denied로 끝난다(Spring은 미해결
+    # 플레이스홀더에 예외를 던지지 않는다). ai 앱이 pydantic env_file로 하는 것과 같은 규약.
+    # optional이라 파일이 없거나 컨테이너 안이면 무시되고, OS 환경변수가 이 파일보다 우선한다.
+    import:
+      - optional:file:../../.env[.properties]
+      - optional:file:./.env[.properties]
+  datasource:
+    url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:itda}?connectionTimeZone=UTC
+    driver-class-name: org.mariadb.jdbc.Driver
+    username: ${DB_USERNAME:itda}
+    # 기본값을 두지 않는다 — 저장소에 자격증명을 남기지 않기 위해서다.
+    # 주의: Spring은 미해결 플레이스홀더에 예외를 던지지 않고 리터럴을 그대로 넘긴다.
+    # 값이 없으면 기동 실패 메시지가 Access denied로 나온다 (설정 누락이라고 알려 주지 않는다).
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      # 스키마 원본은 엔티티다 (docs/superpowers/specs/2026-09-09-backend-ddd-entities-design.md 3.2절).
+      ddl-auto: update
+    properties:
+      hibernate:
+        show_sql: true
+  data:
+    # 컨테이너에서 실행하면 REDIS_HOST=redis, 호스트에서 bootRun하면 기본값 localhost:6379를 쓴다.
+    # 운영 Redis 연결은 배포 작업에서 prod 프로필에 별도로 추가한다.
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+---
+# ---------- test: H2 (MySQL 모드) ----------
+# Dockerfile의 test 스테이지는 DB 컨테이너·네트워크 없이 실행되므로 인메모리여야 한다.
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: jdbc:h2:mem:itda;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  data:
+    # Redis는 인메모리 대체재가 없다. 실제 Redis에 붙는 통합 테스트는 서버가 떠 있을 때만 실행하고
+    # (RealRedisCondition), Dockerfile test 스테이지는 8.2.9를 띄운 뒤 Gradle을 돌려 항상 실행되게 한다.
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+---
+# ---------- prod: MariaDB (RDS) ----------
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${DB_URL}
+    driver-class-name: org.mariadb.jdbc.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      # 운영에서는 스키마를 자동 변경하지 않고 엔티티와 일치하는지만 검증한다.
+      ddl-auto: validate

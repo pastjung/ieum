@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "이음",
+    "slug": "ieum-mobile",
+    "scheme": "ieum",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0B0C",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.ieum.mobile",
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "./plugins/withCmakeNinja.js",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "내 목소리를 녹음해 복제하려면 마이크가 필요해요."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "\"하이 잇다\"를 듣고 명령을 받으려면 마이크가 필요해요.",
+          "speechRecognitionPermission": "말씀하신 명령을 알아듣기 위해 음성 인식을 사용해요.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

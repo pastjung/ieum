@@ -1,0 +1,713 @@
+{
+ "analyze:가방": {
+  "request": {
+   "targetText": "가방"
+  },
+  "response": {
+   "level": "CONTRACTION",
+   "cells": [
+    43,
+    24,
+    54
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_13",
+     "metadata": "가"
+    },
+    {
+     "skillType": "SKILL_13",
+     "metadata": "바"
+    },
+    {
+     "skillType": "SKILL_03",
+     "metadata": "ㅇ"
+    }
+   ]
+  }
+ },
+ "analyze:음식": {
+  "request": {
+   "targetText": "음식"
+  },
+  "response": {
+   "level": "VOWEL",
+   "cells": [
+    42,
+    34,
+    32,
+    21,
+    1
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㅇ생략"
+    },
+    {
+     "skillType": "SKILL_03",
+     "metadata": "ㄱ"
+    },
+    {
+     "skillType": "SKILL_03",
+     "metadata": "ㅁ"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅡ"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅣ"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㅅ"
+    }
+   ]
+  }
+ },
+ "analyze:나이": {
+  "request": {
+   "targetText": "나이"
+  },
+  "response": {
+   "level": "CONTRACTION",
+   "cells": [
+    9,
+    35,
+    21
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_14",
+     "metadata": "약자미사용"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㅇ생략"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅏ"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅣ"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㄴ"
+    }
+   ]
+  }
+ },
+ "analyze:학교": {
+  "request": {
+   "targetText": "학교"
+  },
+  "response": {
+   "level": "CONTRACTION",
+   "cells": [
+    26,
+    1,
+    8,
+    44
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_13",
+     "metadata": "하"
+    },
+    {
+     "skillType": "SKILL_03",
+     "metadata": "ㄱ"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅛ"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㄱ"
+    }
+   ]
+  }
+ },
+ "analyze:그래서": {
+  "request": {
+   "targetText": "그래서"
+  },
+  "response": {
+   "level": "CONTRACTION_WORD",
+   "cells": [
+    1,
+    14
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_18",
+     "metadata": "그래서"
+    }
+   ]
+  }
+ },
+ "analyze:까치": {
+  "request": {
+   "targetText": "까치"
+  },
+  "response": {
+   "level": "CONTRACTION",
+   "cells": [
+    32,
+    43,
+    48,
+    21
+   ],
+   "skillSets": [
+    {
+     "skillType": "SKILL_02",
+     "metadata": "된소리표"
+    },
+    {
+     "skillType": "SKILL_13",
+     "metadata": "가"
+    },
+    {
+     "skillType": "SKILL_06",
+     "metadata": "ㅣ"
+    },
+    {
+     "skillType": "SKILL_01",
+     "metadata": "ㅊ"
+    }
+   ]
+  }
+ },
+ "reviewAnalyze:basic": {
+  "request": {
+   "skillStates": [
+    {
+     "learningSkillId": 23,
+     "nAttempts": 12,
+     "nCorrect": 4,
+     "lastPracticedAt": "2026-09-18T10:20:00",
+     "masteryProb": 0.31,
+     "errorCounts": {
+      "dot_missing": 1,
+      "dot_extra": 2,
+      "mirror": 3
+     }
+    },
+    {
+     "learningSkillId": 16,
+     "nAttempts": 8,
+     "nCorrect": 2,
+     "lastPracticedAt": "2026-09-20T10:20:00",
+     "masteryProb": 0.4,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 66,
+     "nAttempts": 9,
+     "nCorrect": 8,
+     "lastPracticedAt": "2026-09-22T09:00:00",
+     "masteryProb": 0.91,
+     "errorCounts": {}
+    }
+   ]
+  },
+  "response": {
+   "learningSkillIds": [
+    16,
+    23
+   ]
+  }
+ },
+ "reviewAnalyze:empty": {
+  "request": {
+   "skillStates": []
+  },
+  "response": {
+   "learningSkillIds": [
+    1,
+    2,
+    43
+   ]
+  }
+ },
+ "attempt-analyze:가방_점누락": {
+  "request": {
+   "attempt": {
+    "targetText": "가방",
+    "expectedPatterns": [
+     43,
+     24,
+     54
+    ],
+    "inputPatterns": [
+     43,
+     24,
+     32
+    ]
+   },
+   "skillStates": [
+    {
+     "learningSkillId": 23,
+     "nAttempts": 12,
+     "nCorrect": 4,
+     "lastPracticedAt": "2026-09-18T10:20:00",
+     "masteryProb": 0.31,
+     "errorCounts": {
+      "mirror": 3,
+      "dot_missing": 1
+     }
+    },
+    {
+     "learningSkillId": 16,
+     "nAttempts": 9,
+     "nCorrect": 3,
+     "lastPracticedAt": "2026-09-25T09:30:45",
+     "masteryProb": 0.1494,
+     "errorCounts": {
+      "mirror": 3
+     }
+    },
+    {
+     "learningSkillId": 1,
+     "nAttempts": 21,
+     "nCorrect": 20,
+     "lastPracticedAt": "2026-09-25T09:30:45",
+     "masteryProb": 0.9898,
+     "errorCounts": {
+      "dot_missing": 1
+     }
+    }
+   ]
+  },
+  "response": {
+   "feedback": {
+    "tts": "세 번째 칸에서 2, 3, 5점이 빠졌어요. 받침 이응은 2, 3, 5, 6점이에요.",
+    "detail": "받침 이응은 2, 3, 5, 6점입니다. 점을 하나씩 확인하며 다시 눌러 보세요."
+   },
+   "skillResults": [
+    {
+     "learningSkillId": 66,
+     "correct": true,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 70,
+     "correct": true,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 23,
+     "correct": false,
+     "errorCounts": {
+      "dot_missing": 1
+     }
+    }
+   ],
+   "updatedSkillStates": [
+    {
+     "learningSkillId": 66,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:01",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 70,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:01",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 23,
+     "nAttempts": 13,
+     "nCorrect": 4,
+     "lastPracticedAt": "2026-09-24T17:58:01",
+     "masteryProb": 0.133,
+     "errorCounts": {
+      "dot_missing": 2,
+      "mirror": 3
+     }
+    }
+   ]
+  }
+ },
+ "attempt-analyze:음식_첫소리ㅇ_6칸": {
+  "request": {
+   "attempt": {
+    "targetText": "음식",
+    "expectedPatterns": [
+     42,
+     34,
+     32,
+     21,
+     1
+    ],
+    "inputPatterns": [
+     54,
+     42,
+     34,
+     32,
+     21,
+     1
+    ]
+   },
+   "skillStates": [
+    {
+     "learningSkillId": 23,
+     "nAttempts": 12,
+     "nCorrect": 4,
+     "lastPracticedAt": "2026-09-18T10:20:00",
+     "masteryProb": 0.31,
+     "errorCounts": {
+      "mirror": 3,
+      "dot_missing": 1
+     }
+    },
+    {
+     "learningSkillId": 16,
+     "nAttempts": 9,
+     "nCorrect": 3,
+     "lastPracticedAt": "2026-09-25T09:30:45",
+     "masteryProb": 0.1494,
+     "errorCounts": {
+      "mirror": 3
+     }
+    },
+    {
+     "learningSkillId": 1,
+     "nAttempts": 21,
+     "nCorrect": 20,
+     "lastPracticedAt": "2026-09-25T09:30:45",
+     "masteryProb": 0.9898,
+     "errorCounts": {
+      "dot_missing": 1
+     }
+    }
+   ]
+  },
+  "response": {
+   "feedback": {
+    "tts": "첫소리 이응은 점자로 적지 않아요. '음'은 두 칸이에요.",
+    "detail": "첫소리 이응은 점자로 적지 않습니다. 모음부터 바로 씁니다."
+   },
+   "skillResults": [
+    {
+     "learningSkillId": 51,
+     "correct": true,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 20,
+     "correct": true,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 7,
+     "correct": true,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 52,
+     "correct": true,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 16,
+     "correct": true,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 14,
+     "correct": false,
+     "errorCounts": {
+      "silent_onset_written": 1
+     }
+    }
+   ],
+   "updatedSkillStates": [
+    {
+     "learningSkillId": 51,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:02",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 20,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:02",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 7,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:02",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 52,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:02",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 16,
+     "nAttempts": 10,
+     "nCorrect": 4,
+     "lastPracticedAt": "2026-09-24T17:58:02",
+     "masteryProb": 0.4973,
+     "errorCounts": {
+      "mirror": 3
+     }
+    },
+    {
+     "learningSkillId": 14,
+     "nAttempts": 1,
+     "nCorrect": 0,
+     "lastPracticedAt": "2026-09-24T17:58:02",
+     "masteryProb": 0.1273,
+     "errorCounts": {
+      "silent_onset_written": 1
+     }
+    }
+   ]
+  }
+ },
+ "attempt-analyze:사과_정답": {
+  "request": {
+   "attempt": {
+    "targetText": "사과",
+    "expectedPatterns": [
+     7,
+     8,
+     39
+    ],
+    "inputPatterns": [
+     7,
+     8,
+     39
+    ]
+   },
+   "skillStates": [
+    {
+     "learningSkillId": 23,
+     "nAttempts": 12,
+     "nCorrect": 4,
+     "lastPracticedAt": "2026-09-18T10:20:00",
+     "masteryProb": 0.31,
+     "errorCounts": {
+      "mirror": 3,
+      "dot_missing": 1
+     }
+    },
+    {
+     "learningSkillId": 16,
+     "nAttempts": 9,
+     "nCorrect": 3,
+     "lastPracticedAt": "2026-09-25T09:30:45",
+     "masteryProb": 0.1494,
+     "errorCounts": {
+      "mirror": 3
+     }
+    },
+    {
+     "learningSkillId": 1,
+     "nAttempts": 21,
+     "nCorrect": 20,
+     "lastPracticedAt": "2026-09-25T09:30:45",
+     "masteryProb": 0.9898,
+     "errorCounts": {
+      "dot_missing": 1
+     }
+    }
+   ]
+  },
+  "response": {
+   "feedback": {
+    "tts": "정답이에요. 이 단어에는 약자 사가 들어 있어요.",
+    "detail": "정답이에요. 다음 문제로 넘어갈게요."
+   },
+   "skillResults": [
+    {
+     "learningSkillId": 71,
+     "correct": true,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 1,
+     "correct": true,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 57,
+     "correct": true,
+     "errorCounts": {}
+    }
+   ],
+   "updatedSkillStates": [
+    {
+     "learningSkillId": 71,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:02",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 1,
+     "nAttempts": 22,
+     "nCorrect": 21,
+     "lastPracticedAt": "2026-09-24T17:58:02",
+     "masteryProb": 0.9979,
+     "errorCounts": {
+      "dot_missing": 1
+     }
+    },
+    {
+     "learningSkillId": 57,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:02",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    }
+   ]
+  }
+ },
+ "session-summary:3문항": {
+  "request": {
+   "attempts": [
+    {
+     "targetText": "학교",
+     "expectedPatterns": [
+      26,
+      1,
+      8,
+      44
+     ],
+     "inputPatterns": [
+      26,
+      8,
+      8,
+      44
+     ]
+    },
+    {
+     "targetText": "나무",
+     "expectedPatterns": [
+      9,
+      17,
+      13
+     ],
+     "inputPatterns": [
+      9,
+      17,
+      13
+     ]
+    },
+    {
+     "targetText": "가방",
+     "expectedPatterns": [
+      43,
+      24,
+      54
+     ],
+     "inputPatterns": [
+      43,
+      24,
+      32
+     ]
+    }
+   ],
+   "skillStates": [
+    {
+     "learningSkillId": 66,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:01",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 70,
+     "nAttempts": 1,
+     "nCorrect": 1,
+     "lastPracticedAt": "2026-09-24T17:58:01",
+     "masteryProb": 0.5765,
+     "errorCounts": {}
+    },
+    {
+     "learningSkillId": 23,
+     "nAttempts": 13,
+     "nCorrect": 4,
+     "lastPracticedAt": "2026-09-24T17:58:01",
+     "masteryProb": 0.133,
+     "errorCounts": {
+      "dot_missing": 2,
+      "mirror": 3
+     }
+    },
+    {
+     "learningSkillId": 16,
+     "nAttempts": 9,
+     "nCorrect": 3,
+     "lastPracticedAt": "2026-09-25T09:30:45",
+     "masteryProb": 0.1494,
+     "errorCounts": {
+      "mirror": 3
+     }
+    },
+    {
+     "learningSkillId": 1,
+     "nAttempts": 21,
+     "nCorrect": 20,
+     "lastPracticedAt": "2026-09-25T09:30:45",
+     "masteryProb": 0.9898,
+     "errorCounts": {
+      "dot_missing": 1
+     }
+    }
+   ]
+  },
+  "response": {
+   "summary": "3문제 중 1문제를 맞혔어요. 받침 이응, 받침 기역은 조금 더 연습하면 좋겠어요.",
+   "ttsText": "오늘 3문제 중 1문제를 맞혔어요. 받침 이응, 받침 기역을 다시 연습해 보세요.",
+   "errorTypeCounts": {
+    "mirror": 1,
+    "dot_missing": 1
+   },
+   "weakSkills": [
+    {
+     "learningSkillId": 23,
+     "masteryProb": 0.1325,
+     "label": "더 연습해요",
+     "dominantErrorType": "mirror",
+     "explanation": "받침 이응에서 좌우를 뒤집어 쓰는 실수가 반복됐어요."
+    },
+    {
+     "learningSkillId": 16,
+     "masteryProb": 0.1494,
+     "label": "더 연습해요",
+     "dominantErrorType": "mirror",
+     "explanation": "받침 기역에서 좌우를 뒤집어 쓰는 실수가 반복됐어요."
+    }
+   ]
+  }
+ }
+}
