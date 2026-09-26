@@ -57,8 +57,14 @@ interface SessionState {
   start: (session: LearningSession, kind?: SessionKind, meta?: ServerSessionMeta) => void;
   current: () => Problem | null;
   submit: (cells: Cell[]) => GradeResult;
-  /** 다음 문항으로. 마지막이었으면 false */
-  next: () => boolean;
+  /**
+   * `from` 문항에서 다음 문항으로 넘어간다. 넘어갔으면 true.
+   *
+   * 지금 문항이 `from`이 아니면 아무것도 하지 않는다. 빠르게 두 번 누르면 화면이 다시
+   * 그려지기 전에 같은 처리가 두 번 불리는데, 그때마다 하나씩 넘기면 문항을 건너뛴다.
+   * 건너뛴 문항은 풀지 않은 채 남아 완료 제출이 거부된다.
+   */
+  next: (from: number) => boolean;
   correctCount: () => number;
   markDisconnectShown: () => void;
   /** 완료 제출 페이로드. 목 세션이면 빈 배열이다 */
@@ -126,9 +132,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     }));
     return result;
   },
-  next: () => {
+  next: (from) => {
     const { session, index } = get();
-    if (!session) return false;
+    if (!session || index !== from) return false;
     if (index + 1 >= session.problems.length) return false;
     set({ index: index + 1, lastResult: null, lastAnalysis: null, lastAttemptNotice: null });
     return true;

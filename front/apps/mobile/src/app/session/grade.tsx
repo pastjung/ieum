@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ordinalKo } from "@ieum/domain";
@@ -10,6 +10,13 @@ import { useSessionStore } from "@/stores/sessionStore";
 import { selectGradeFeedback } from "@/services/gradeFeedback";
 import { announce, hapticError, hapticSuccess, hapticTap } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
+
+/**
+ * 화면이 바뀐 직후(문항 도착, 칸 넘김) 탭을 받지 않는 시간. 연타가 새 화면에 그대로
+ * 떨어지면 방금 뜬 칸 설명을 듣지도 못하고 넘어간다. TalkBack의 두 번 탭은 한 번 누른
+ * 것으로 들어와 영향이 없다.
+ */
+const INPUT_COOLDOWN_MS = 400;
 
 /** V15 채점 정답 · V16 채점 오답+차이 · V17 서버 분석(문항별 칸 진단) */
 export default function Grade() {
@@ -43,6 +50,25 @@ export default function Grade() {
     setStep(0);
   }, [index]);
 
+  /*
+    연타 방지. 두 번째 탭은 화면이 다시 그려지기 전에 들어와 같은 핸들러를 한 번 더 부른다.
+    - 이동이 시작되면 이후 탭은 전부 버린다(`leavingRef`). 스토어의 `next(from)`도 같은
+      문항에서 두 번 넘기지 않지만, 화면에서 먼저 막는다.
+    - 이동 중에는 버튼 없는 화면을 그린다(`leaving`). `next`가 이번 채점을 비우는 순간
+      아래 진입 가드가 "홈으로" 버튼을 그리는데, 연타가 거기 닿으면 세션을 빠져나간다.
+    - 문항에 도착하거나 칸을 넘긴 직후에는 잠깐 탭을 받지 않는다(`readyAtRef`).
+  */
+  const [leaving, setLeaving] = useState(false);
+  const leavingRef = useRef(false);
+  const readyAtRef = useRef(0);
+  useEffect(() => {
+    readyAtRef.current = Date.now() + INPUT_COOLDOWN_MS;
+  }, [index, step]);
+  const whenReady = (action: () => void) => () => {
+    if (leavingRef.current || Date.now() < readyAtRef.current) return;
+    action();
+  };
+
   const steps = feedback?.steps ?? [];
   // step이 범위를 벗어나는 순간(위 초기화가 도는 렌더 사이)에도 무언가는 그려야 한다
   const current = steps[step] ?? steps[0];
@@ -71,6 +97,10 @@ export default function Grade() {
     announce(current.speech);
   }, [current, feedback, notice, step]);
 
+  if (leaving) {
+    return <ScreenShell />;
+  }
+
   if (!session || !local || !feedback || !current) {
     return (
       <ScreenShell style={styles.center}>
@@ -81,19 +111,30 @@ export default function Grade() {
 
   const progress = `${index + 1} / ${session.problems.length}`;
 
-  const goNext = () => {
-    if (next()) {
-      // 수업 데모: 두 번째 문항 뒤 연결 끊김(V29)을 한 번 보여 준다 — 실연동 시 실제 이벤트로 교체
-      if (kind === "class" && !disconnectShown && index + 1 === 2) {
-        markDisconnectShown();
-        router.replace("/class/disconnected");
-        return;
-      }
-      router.replace(kind === "class" ? "/class/play" : "/session/play");
-    } else {
+  const goNext = whenReady(() => {
+    leavingRef.current = true;
+    setLeaving(true);
+    if (index + 1 >= session.problems.length) {
       router.replace(kind === "class" ? "/class/end" : "/session/analyzing");
+      return;
     }
-  };
+    // 스토어가 이미 다른 문항에 있으면 넘기지 않는다. 빈 화면에 갇히지 않도록 잠금을 푼다
+    if (!next(index)) {
+      leavingRef.current = false;
+      setLeaving(false);
+      return;
+    }
+    // 수업 데모: 두 번째 문항 뒤 연결 끊김(V29)을 한 번 보여 준다 — 실연동 시 실제 이벤트로 교체
+    if (kind === "class" && !disconnectShown && index + 1 === 2) {
+      markDisconnectShown();
+      router.replace("/class/disconnected");
+      return;
+    }
+    router.replace(kind === "class" ? "/class/play" : "/session/play");
+  });
+
+  // 마지막 칸을 넘어가지 않는다. 넘어가면 `current`가 첫 칸으로 되돌아가 보인다
+  const nextStep = whenReady(() => setStep((s) => Math.min(s + 1, steps.length - 1)));
 
   // 서버가 이미 끝낸 문항(LEARNING_PROBLEM_ALREADY_ANALYZED). 이 경로는 lastAnalysis가
   // null이라 feedback이 로컬 분기로 떨어지는데, 그 정오 판정을 헤드라인으로 쓰면 서버가
@@ -200,7 +241,7 @@ export default function Grade() {
                 : "다음 문항"
               : "다음 점자"
           }
-          onPress={isLastStep ? goNext : () => setStep((s) => s + 1)}
+          onPress={isLastStep ? goNext : nextStep}
         />
       </View>
     </ScreenShell>
