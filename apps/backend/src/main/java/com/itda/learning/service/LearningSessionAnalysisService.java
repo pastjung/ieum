@@ -437,7 +437,8 @@ public class LearningSessionAnalysisService {
     return new AttemptAnalysisResult(
         new FeedbackResult(response.feedback().tts(), response.feedback().detail()),
         skillResults,
-        response.cellSkills());
+        response.cellSkills(),
+        response.feedbackSteps());
   }
 
   private static SessionSummaryResult toSessionSummaryResult(
@@ -471,14 +472,23 @@ public class LearningSessionAnalysisService {
   public record AttemptAnalysisResult(
       FeedbackResult feedback,
       List<SkillResult> skillResults,
-      List<LearningAttemptAnalysisFastApiResponse.CellSkill> cellSkills) {
+      List<LearningAttemptAnalysisFastApiResponse.CellSkill> cellSkills,
+      List<LearningAttemptAnalysisFastApiResponse.FeedbackStep> feedbackSteps) {
     public AttemptAnalysisResult {
       skillResults = List.copyOf(skillResults);
       cellSkills = cellSkills == null ? List.of() : List.copyOf(cellSkills);
+      feedbackSteps = feedbackSteps == null ? List.of() : List.copyOf(feedbackSteps);
     }
 
     public AttemptAnalysisResult(FeedbackResult feedback, List<SkillResult> skillResults) {
-      this(feedback, skillResults, List.of());
+      this(feedback, skillResults, List.of(), List.of());
+    }
+
+    public AttemptAnalysisResult(
+        FeedbackResult feedback,
+        List<SkillResult> skillResults,
+        List<LearningAttemptAnalysisFastApiResponse.CellSkill> cellSkills) {
+      this(feedback, skillResults, cellSkills, List.of());
     }
   }
 

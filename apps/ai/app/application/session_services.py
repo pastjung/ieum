@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.domain.skills.models import SkillCatalog
+from app.infrastructure.braille_core.braille_utils import dots_to_int
 from app.infrastructure.braille_core.drill_items import build_drill_item
 from app.infrastructure.braille_core.estimate import BKTEstimator, label_of
 from app.infrastructure.braille_core.grader import grade, josa, speak_kc
@@ -111,6 +112,47 @@ class AttemptAnalysis:
     updated_skill_states: list[SkillState]
     warnings: list[str]
     cell_skills: list["CellSkill"] = field(default_factory=list)
+    feedback_steps: list["FeedbackStep"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class FeedbackStep:
+    """오답의 '틀린 곳' 하나 — 화면 한 장. 정답 칸이 없으면(없어야 할 칸을 넣음) expected_* 가 None 이고 label='빈칸'."""
+
+    expected_cell_index: int | None  # 1부터. 정답 칸이 없으면 None
+    expected_pattern: int | None
+    input_pattern: int | None  # 학습자가 그 자리에 쓴 칸. 빠뜨렸으면 None
+    missing_dots: list[int]
+    extra_dots: list[int]
+    label: str  # 정답 칸의 요소 이름("받침 이응") 또는 "빈칸"
+    error_type: str
+    tts: str  # 이 틀린 곳을 설명하는 한 문장 (AI 채점기 문장)
+
+
+def _is_dots(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(d, int) for d in value)
+
+
+def label_cells(
+    kcs: list[str], cell_syllables: list[int | None] | None, catalog: SkillCatalog
+) -> list["CellSkill"]:
+    """정답 칸마다 요소 라벨. 한 요소가 이어진 여러 칸을 차지하면(ㅙ, ㄳ, 약어, 받침 ㄲ) '(1/2)'를 붙인다.
+    같은 요소라도 다른 음절이면('가가') 따로 센다."""
+    syls: list[int | None] = list(cell_syllables or [None] * len(kcs))
+    groups: list[list[int]] = []
+    for i, kc in enumerate(kcs):
+        if groups and kcs[groups[-1][-1]] == kc and syls[groups[-1][-1]] == syls[i]:
+            groups[-1].append(i)
+        else:
+            groups.append([i])
+    out: list[CellSkill] = []
+    for g in groups:
+        skill = catalog.by_kc(kcs[g[0]])
+        base = skill_label(skill.display_name)
+        for k, i in enumerate(g, 1):
+            label = f"{base} ({k}/{len(g)})" if len(g) > 1 else base
+            out.append(CellSkill(i + 1, skill.id, label))
+    return out
 
 
 @dataclass(frozen=True)
@@ -396,28 +438,67 @@ class SessionService:
             skill_results=results,
             updated_skill_states=updated,
             warnings=warnings,
-            cell_skills=self._cell_skills(graded),
+            cell_skills=(cells := self._cell_skills(graded)),
+            feedback_steps=self._feedback_steps(graded, cells),
         )
 
     def _cell_skills(self, graded: dict[str, Any]) -> list[CellSkill]:
-        """정답 칸마다 요소 라벨. 한 요소가 이어진 여러 칸을 차지하면(ㅙ, ㄳ, 약어, 받침 ㄲ) '(1/2)'를 붙인다.
-        같은 요소라도 다른 음절이면('가가') 따로 센다."""
-        kcs: list[str] = list(graded["kc"])
-        syls: list[int | None] = list(graded.get("cell_syllables") or [None] * len(kcs))
-        groups: list[list[int]] = []
-        for i, kc in enumerate(kcs):
-            if groups and kcs[groups[-1][-1]] == kc and syls[groups[-1][-1]] == syls[i]:
-                groups[-1].append(i)
+        return label_cells(list(graded["kc"]), graded.get("cell_syllables"), self.catalog)
+
+    def _feedback_steps(
+        self, graded: dict[str, Any], cell_skills: list[CellSkill]
+    ) -> list["FeedbackStep"]:
+        """오답 화면이 하나씩 넘겨 보여줄 '틀린 곳'. 오류 하나 = 단계 하나, 앞 칸부터.
+
+        백엔드의 칸 비교는 같은 번호끼리 맞대므로 칸을 하나 더 넣으면 뒤가 전부 밀려 '모두 N칸이 틀렸어요'가 된다.
+        여기서는 정렬(칸 맞추기) 뒤의 오류만 단계로 만든다 — '음식'을 ㅇ까지 6칸으로 쓰면 단계는 하나,
+        '첫소리 이응은 점자로 적지 않아요'이고 정답 칸은 빈칸이다."""
+        if graded["correct"]:
+            return []
+        exp: list[list[int]] = graded["expected_dots"]
+        labels = {c.cell_index - 1: c.label for c in cell_skills}
+        steps: list[FeedbackStep] = []
+        for e in sorted(
+            graded["errors"], key=lambda x: (x.get("cell") if x.get("cell") is not None else 1_000)
+        ):
+            etype: str = e["type"]
+            i = e.get("cell")
+            act = e.get("actual")
+            if etype in (
+                "silent_onset_written",
+                "cell_inserted",
+            ):  # 없어야 할 칸을 넣음 → 정답은 빈칸
+                exp_dots, act_dots, exp_idx = None, act if _is_dots(act) else None, None
             else:
-                groups.append([i])
-        out: list[CellSkill] = []
-        for g in groups:
-            skill = self.catalog.by_kc(kcs[g[0]])
-            base = skill_label(skill.display_name)
-            for k, i in enumerate(g, 1):
-                label = f"{base} ({k}/{len(g)})" if len(g) > 1 else base
-                out.append(CellSkill(i + 1, skill.id, label))
-        return out
+                exp_dots = exp[i] if isinstance(i, int) and 0 <= i < len(exp) else None
+                if etype in (
+                    "cell_omitted",
+                    "abbr_overused",
+                ):  # 있어야 할 칸을 빠뜨림 → 내 입력은 없음
+                    act_dots = None
+                elif (
+                    isinstance(act, list) and act and isinstance(act[0], list)
+                ):  # 순서 바뀜·약자 풀어 씀: 첫 칸
+                    act_dots = act[0]
+                else:
+                    act_dots = act if _is_dots(act) else None
+                exp_idx = i + 1 if exp_dots is not None and isinstance(i, int) else None
+            e_set, a_set = set(exp_dots or []), set(act_dots or [])
+            steps.append(
+                FeedbackStep(
+                    expected_cell_index=exp_idx,
+                    expected_pattern=dots_to_int(exp_dots) if exp_dots is not None else None,
+                    input_pattern=dots_to_int(act_dots) if act_dots is not None else None,
+                    missing_dots=sorted(e_set - a_set),
+                    extra_dots=sorted(a_set - e_set),
+                    label=labels.get(i, "빈칸")
+                    if exp_idx is not None and isinstance(i, int)
+                    else "빈칸",
+                    error_type=etype,
+                    tts=str(e.get("sentence") or ""),
+                )
+            )
+        return steps
 
     def _detail(self, graded: dict[str, Any], results: list[SkillResult]) -> str:
         wrong = [r for r in results if not r.correct]

@@ -247,6 +247,25 @@ export const attemptCellAnalysisSchema = cellCompletionSchema.extend({
 });
 export type AttemptCellAnalysis = z.infer<typeof attemptCellAnalysisSchema>;
 
+/**
+ * 오답의 "틀린 곳" 하나 (AI 채점기가 칸을 맞춘 뒤 고른 것). 오답 화면이 한 장씩 넘겨 보여준다.
+ *
+ * 백엔드의 `cells`는 같은 번호끼리 맞대서, 칸을 하나 더 넣으면 뒤가 전부 밀려 "모두 N칸이 틀렸어요"가 된다. 이쪽은
+ * 정렬 뒤의 오류라 '음식'을 ㅇ까지 6칸으로 써도 한 장("첫소리 이응은 점자로 적지 않아요")이다.
+ * 정답 칸이 없는 자리(없어야 할 칸을 넣음)는 `expectedPattern`이 null, `label`이 "빈칸"이다.
+ */
+export const attemptFeedbackStepSchema = z.object({
+  expectedCellIndex: z.number().int().nullable(),
+  expectedPattern: z.number().int().nullable(),
+  inputPattern: z.number().int().nullable(),
+  missingDots: z.array(z.number().int()),
+  extraDots: z.array(z.number().int()),
+  label: z.string(),
+  errorType: z.string(),
+  tts: z.string(),
+});
+export type AttemptFeedbackStep = z.infer<typeof attemptFeedbackStepSchema>;
+
 export const attemptAnalysisResponseSchema = z.object({
   problemSessionId: identifierSchema,
   problemId: identifierSchema,
@@ -279,6 +298,8 @@ export const attemptAnalysisResponseSchema = z.object({
       }),
     )
     .default([]),
+  /** 오답일 때 틀린 곳마다 한 장. 서버가 주지 않으면 빈 목록 → 앱은 `cells` 기반 설명으로 돌아간다 */
+  feedbackSteps: z.array(attemptFeedbackStepSchema).default([]),
 });
 export type AttemptAnalysisResponse = z.infer<typeof attemptAnalysisResponseSchema>;
 
@@ -412,3 +433,51 @@ export const completionResponseSchema = z.object({
   weakSkills: z.array(weakSkillSchema).catch([]),
 });
 export type CompletionResponse = z.infer<typeof completionResponseSchema>;
+
+/**
+ * 점자 사전 (`GET /braille-dictionary?word=`). 등록된 문제면 정답 칸을(`PROBLEM`), 아니면 AI 규칙 점역기로 바꾼 칸을
+ * (`CONVERTED`) 준다. 등록된 문제에서 온 칸은 요소 이름이 없다(`label` null).
+ */
+export const brailleDictionaryCellSchema = z.object({
+  cellIndex: z.number().int(),
+  pattern: cellSchema,
+  learningSkillId: z.number().int().nullable(),
+  label: z.string().nullable(),
+});
+export const brailleDictionarySchema = z.object({
+  word: z.string(),
+  source: z.enum(["PROBLEM", "CONVERTED"]),
+  braille: z.string(),
+  cells: z.array(brailleDictionaryCellSchema).min(1),
+});
+export type BrailleDictionary = z.infer<typeof brailleDictionarySchema>;
+
+/* ─── 실시간 수업 (API 명세 8.2·8.5절) ─── */
+
+export const lectureStatusSchema = z.enum(["SCHEDULED", "OPEN", "CLOSED"]);
+export type LectureStatus = z.infer<typeof lectureStatusSchema>;
+
+/** 참여 학습자용 수업 Snapshot. 참여 코드·다른 참여자 정보는 오지 않는다 */
+export const learnerLectureSchema = z.object({
+  /** BIGINT의 10진수 문자열. number로 바꾸지 않는다 */
+  lectureId: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  status: lectureStatusSchema,
+  scheduledAt: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  endedAt: z.string().nullable(),
+  currentProblem: z.unknown().nullable(),
+  createdAt: z.string(),
+  myParticipation: z.object({ joinedAt: z.string(), leftAt: z.string().nullable() }),
+  reviewableCurriculumStages: z.array(z.unknown()),
+});
+export type LearnerLecture = z.infer<typeof learnerLectureSchema>;
+
+/** OpenVidu 음성 접속 토큰. 서버에 저장되지 않으며 10분 유효 */
+export const mediaTokenSchema = z.object({
+  serverUrl: z.string().regex(/^wss?:\/\//),
+  token: z.string().min(1),
+  expiresAt: z.string(),
+});
+export type MediaToken = z.infer<typeof mediaTokenSchema>;

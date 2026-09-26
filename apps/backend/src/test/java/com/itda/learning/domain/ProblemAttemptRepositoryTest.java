@@ -15,8 +15,8 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 /**
  * 문제 단계(Level)별 풀이 집계 쿼리.
  *
- * <p>{@code problem_attempts}는 문제를 연관관계가 아니라 {@code problemId} 컬럼으로 들고 있어서 단계를 알려면 {@code problems}와
- * 엔티티 조인을 해야 한다. 조인이 깨지면 애플리케이션이 뜰 때가 아니라 화면이 통계를 부를 때 터지므로 실제 DB로 확인한다.
+ * <p>{@code problem_attempts}는 문제를 연관관계가 아니라 {@code problemId} 컬럼으로 들고 있어서 단계를 알려면 {@code
+ * problems}와 엔티티 조인을 해야 한다. 조인이 깨지면 애플리케이션이 뜰 때가 아니라 화면이 통계를 부를 때 터지므로 실제 DB로 확인한다.
  */
 @DataJpaTest
 class ProblemAttemptRepositoryTest {
@@ -55,8 +55,7 @@ class ProblemAttemptRepositoryTest {
             LevelAttemptCount::getLevel,
             LevelAttemptCount::getSolvedCount,
             LevelAttemptCount::getCorrectCount)
-        .containsExactlyInAnyOrder(
-            tuple(Level.CONSONANT, 2L, 1L), tuple(Level.WORD, 1L, 1L));
+        .containsExactlyInAnyOrder(tuple(Level.CONSONANT, 2L, 1L), tuple(Level.WORD, 1L, 1L));
   }
 
   @Test

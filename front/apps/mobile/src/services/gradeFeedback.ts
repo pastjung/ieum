@@ -1,5 +1,5 @@
 import { describeDiff, type Cell, type Dot, type GradeResult } from "@ieum/domain";
-import type { AttemptAnalysisResponse, AttemptCellAnalysis } from "@ieum/contracts";
+import type { AttemptAnalysisResponse, AttemptCellAnalysis, AttemptFeedbackStep } from "@ieum/contracts";
 import { describeCells } from "@/services/cellFeedback";
 
 /** 오답 화면에 나란히 그릴 정답 · 내 입력 점자 한 쌍 (기존 `GradeResult.firstDiff`와 같은 모양) */
@@ -14,9 +14,38 @@ export interface GradeCompareCell {
   label?: string | null;
 }
 
-/** 정답 칸 캡션: 요소 이름이 있으면 그것, 없으면 "첫 번째 칸" */
+/**
+ * 정답 칸 캡션. 요소 이름이 있으면 그것("약자 바", "빈칸"). 없는데 정답이 빈 칸이면 "빈칸" — 칸을 더 넣어
+ * 정답 길이를 넘어선 자리다(백엔드가 0으로 채운 칸). 둘 다 아니면 "첫 번째 칸".
+ */
 export function compareCaption(compare: GradeCompareCell, ordinal: (index: number) => string): string {
-  return compare.label ? compare.label : `${ordinal(compare.index)} 칸`;
+  if (compare.label) return compare.label;
+  if (compare.expected === 0) return "빈칸";
+  return `${ordinal(compare.index)} 칸`;
+}
+
+/**
+ * AI 채점기의 "틀린 곳"으로 단계를 만든다. 칸을 맞춘 뒤의 오류라 칸을 더 넣거나 빼도 뒤 칸이 밀리지 않고,
+ * 문장이 "왜" 틀렸는지(좌우 뒤집힘, 첫소리 이응을 적음, 모음 앞 약자)를 말한다.
+ */
+function stepsFromAi(steps: readonly AttemptFeedbackStep[]): GradeStep[] {
+  const headline = "오답이에요.";
+  return steps.map((step, i) => {
+    const lead = i === 0 && steps.length > 1 ? `틀린 곳이 ${steps.length}군데예요. ` : "";
+    const detail = `${lead}${step.tts}`;
+    return {
+      detail,
+      speech: i === 0 ? `${headline} ${detail}` : detail,
+      compare: {
+        expected: step.expectedPattern ?? 0,
+        actual: step.inputPattern ?? 0,
+        missingDots: toDots(step.missingDots),
+        extraDots: toDots(step.extraDots),
+        index: (step.expectedCellIndex ?? 1) - 1,
+        label: step.label,
+      },
+    };
+  });
 }
 
 /**
@@ -77,6 +106,10 @@ export function selectGradeFeedback(
   local: GradeResult | null,
 ): GradeFeedback | null {
   if (analysis) {
+    // 오답이고 AI가 틀린 곳을 줬으면 그 문장을 쓴다. 주지 않았으면(구버전 AI·분석 장애) 아래 칸 비교로 돌아간다
+    if (!analysis.correct && analysis.feedbackSteps.length > 0) {
+      return { correct: false, headline: "오답이에요.", steps: stepsFromAi(analysis.feedbackSteps) };
+    }
     const { headline, steps } = describeCells(analysis.cells, analysis.correct);
     // `describeCells`가 틀린 칸마다 단계를 만들고 그 칸 번호(`cellIndex`)를 달아 준다.
     // 그릴 칸은 그 번호로 되찾는다 — 두 곳에서 따로 "틀린 칸"을 고르면 어긋날 수 있다
@@ -96,7 +129,8 @@ export function selectGradeFeedback(
                 missingDots: toDots(wrong.missingDots),
                 extraDots: toDots(wrong.extraDots),
                 index: wrong.cellIndex - 1,
-                label: wrong.label ?? null,
+                // 라벨이 없으면 키 자체를 두지 않는다 — 캡션은 "N번째 칸"으로 돌아간다
+                ...(wrong.label ? { label: wrong.label } : {}),
               }
             : null,
         };

@@ -17,6 +17,7 @@ from app.application.backend_services import (
     ReviewAnalyzeService,
     UnsupportedTextError,
 )
+from app.application.braille_lookup import lookup_braille
 from app.application.session_services import Attempt, SessionService, SkillResult, SkillState
 from app.infrastructure.braille_core.estimate import BKTEstimator, default_estimator
 from app.infrastructure.rule_engine import get_skill_catalog
@@ -162,6 +163,20 @@ class CellSkillSchema(CamelModel):
     label: str
 
 
+class FeedbackStepSchema(CamelModel):
+    """오답의 '틀린 곳' 하나. 칸을 맞춘 뒤의 오류라 칸을 더 넣거나 빼도 뒤 칸이 밀리지 않는다.
+    expectedCellIndex·expectedPattern 이 null 이면 정답 칸이 없는 자리(없어야 할 칸을 넣음) — label 은 '빈칸'."""
+
+    expected_cell_index: int | None
+    expected_pattern: int | None
+    input_pattern: int | None
+    missing_dots: list[int]
+    extra_dots: list[int]
+    label: str
+    error_type: str
+    tts: str
+
+
 class AttemptAnalyzeResponse(CamelModel):
     """{ feedback, skillResults[], updatedSkillStates[], cellSkills[] }
     updatedSkillStates 는 이번 문항에 나온 요소만(변경분). cellSkills 는 정답 칸마다 요소 라벨("약자 바")."""
@@ -170,6 +185,9 @@ class AttemptAnalyzeResponse(CamelModel):
     skill_results: list[SkillResultSchema]
     updated_skill_states: list[SkillStateOutSchema]
     cell_skills: list[CellSkillSchema] = Field(default_factory=list)
+    feedback_steps: list[FeedbackStepSchema] = Field(
+        default_factory=list
+    )  # 오답일 때 틀린 곳마다 한 장
 
 
 class SessionSummaryRequest(CamelModel):
@@ -339,6 +357,19 @@ def attempt_analyze(
             )
             for c in result.cell_skills
         ],
+        feedback_steps=[
+            FeedbackStepSchema(
+                expected_cell_index=f.expected_cell_index,
+                expected_pattern=f.expected_pattern,
+                input_pattern=f.input_pattern,
+                missing_dots=f.missing_dots,
+                extra_dots=f.extra_dots,
+                label=f.label,
+                error_type=f.error_type,
+                tts=f.tts,
+            )
+            for f in result.feedback_steps
+        ],
     )
 
 
@@ -454,5 +485,51 @@ def session_summary(
                 explanation=w.explanation,
             )
             for w in result.weak_skills
+        ],
+    )
+
+
+# ── /braille-lookup — 점자 사전 ───────────────────────────────────────────────
+class BrailleLookupRequest(CamelModel):
+    """점자 사전 검색어. 한글 단어(띄어쓰기로 여러 단어 가능) 또는 낱자('ㄱ', 'ㅙ')."""
+
+    text: str = Field(min_length=1, max_length=40)
+
+
+class LookupCellSchema(CamelModel):
+    cell_index: int  # 1부터
+    pattern: int  # 0~63. 띄어쓰기는 0
+    learning_skill_id: int | None  # 띄어쓰기는 None
+    label: str  # "약자 바", "첫소리 ㅂ", "띄어쓰기"
+
+
+class BrailleLookupResponse(CamelModel):
+    """{ text, braille, cells[] } — braille 은 유니코드 점자(⠫⠘⠶), cells 는 칸마다 점형과 요소 이름."""
+
+    text: str
+    braille: str
+    cells: list[LookupCellSchema]
+
+
+@router.post("/braille-lookup", response_model=BrailleLookupResponse, response_model_by_alias=True)
+def braille_lookup(request: BrailleLookupRequest) -> BrailleLookupResponse:
+    """사전에 없는 단어를 점자로 변환한다. 상태·DB 를 건드리지 않는다(문제로 등록하지 않음)."""
+    try:
+        result = lookup_braille(request.text, get_skill_catalog())
+    except ValueError as e:
+        raise HTTPException(
+            status_code=422, detail=f"한글 단어나 낱자만 찾을 수 있어요: {e}"
+        ) from e
+    return BrailleLookupResponse(
+        text=result["text"],
+        braille=result["braille"],
+        cells=[
+            LookupCellSchema(
+                cell_index=c["cell_index"],
+                pattern=c["pattern"],
+                learning_skill_id=c["learning_skill_id"],
+                label=c["label"],
+            )
+            for c in result["cells"]
         ],
     )
