@@ -315,11 +315,9 @@ export function LiveLecturePage() {
       }
       try {
         const loaded = await lectureApi.listAnswers(lectureId, problemId)
-        if (seq === answersSeqRef.current) {
-          setAnswerSet(loaded)
-          // 답안 조회가 이번에 성공했으니, 이전에 남아 있던 조회 실패 안내는 걷어낸다
-          setError(null)
-        }
+        // 화면 전체 오류 배너는 다른 작업(발언 허용·마이크 등)의 실패도 보여 주므로,
+        // 답안 재조회 성공만으로 지우지 않는다
+        if (seq === answersSeqRef.current) setAnswerSet(loaded)
       } catch (e) {
         if (seq === answersSeqRef.current) setError(problemErrorMessage(e))
       }
