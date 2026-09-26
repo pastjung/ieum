@@ -120,12 +120,13 @@
 | 로그인 `/login` | `POST /auth-sessions`. access token은 `sessionStorage` | – |
 | 01a 수업 목록 `/lectures` | 목록, 상태 배지, 참여 코드 | 참여 인원·정답률 |
 | 02 수업 개설 `/lectures/new` | 이름, 시작 시각 → 생성 후 목록으로 | 문제 세트·참여 방식 단계는 비활성 표시 |
-| 03 실시간 수업 `/lectures/:id/live` | 시작(OPEN) → 토큰 → 방 접속·마이크 publish, 마이크 끄기, 종료(CLOSED) → 목록으로. 학생 그리드의 입장/미입장은 LiveKit 참가자 목록 | 답안 상태·문제 패널 |
+| 03 실시간 수업 `/lectures/:id/live` | 시작(OPEN) → 토큰 → 방 접속·마이크 publish, 마이크 끄기, 종료(CLOSED) → 목록으로 | 학생 진행 그리드(백엔드 최종 리뷰에서 학습자는 숨김 참가자로 접속하기로 결정했다)·답안 상태·문제 패널 |
 
 - 의존성: `livekit-client`.
 - 인증 가드: INSTRUCTOR가 아니거나 토큰이 없으면 `/login`. 토큰 만료 시 재로그인(Refresh 쿠키 회전은 이번 범위 밖).
 - 마이크 권한은 HTTPS 또는 localhost에서만 열린다. 로컬 개발은 `localhost` 로 확인한다.
 - 강사 계정: 가입은 항상 LEARNER이므로, 개발·시연용 INSTRUCTOR 계정은 시드 SQL로 만든다.
+- 학생 진행 그리드는 목이다 — 학습자가 숨김 참가자로 접속하므로 강사 화면은 MVP에서 학습자의 실제 입장 여부를 알 수 없다.
 
 ## 7. ④ 학습자 앱 (`feat/lecture-app`)
 

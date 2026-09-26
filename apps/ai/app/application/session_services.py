@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.domain.skills.models import SkillCatalog
+from app.infrastructure.braille_core.drill_items import build_drill_item
 from app.infrastructure.braille_core.estimate import BKTEstimator, label_of
 from app.infrastructure.braille_core.grader import grade, josa, speak_kc
 
@@ -118,7 +119,10 @@ class SessionService:
 
     # ── 공통 ────────────────────────────────────────────────────────────────
     def _grade(self, attempt: Attempt, warnings: list[str]) -> dict[str, Any]:
-        result = grade(attempt.target_text, attempt.input_patterns)
+        item = build_drill_item(
+            attempt.target_text, attempt.expected_patterns
+        )  # 'ㄱ'·'ㅙ'·'초성 ㄱ' 같은 낱자·드릴
+        result = grade(attempt.target_text, attempt.input_patterns, item=item)
         if attempt.expected_patterns and result["expected_cells"] != attempt.expected_patterns:
             warnings.append(
                 f"'{attempt.target_text}': expectedPatterns {attempt.expected_patterns} 가 규칙 변환값 "

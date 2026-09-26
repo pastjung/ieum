@@ -16,8 +16,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
  * com.itda.global.security.SecurityConfig}의 {@code OrRequestMatcher}에서 빠졌다는 뜻이다 — 요청이 permitAll
  * chain으로 떨어져 인증 필터를 거치지 않고 {@code @AuthenticationPrincipal}이 null인 채로 서비스까지 들어간다.
  *
- * <p>이 브랜치에서만 그 누락이 두 번 있었다({@code attempt-analysis}, {@code review-sessions}). 보호 여부는 코드를 읽어서가
- * 아니라 실제 HTTP 응답으로만 확인된다.
+ * <p>이 브랜치에서만 그 누락이 두 번 있었다({@code attempt-analysis}, {@code review-sessions}). 보호 여부는 코드를 읽어서가 아니라
+ * 실제 HTTP 응답으로만 확인된다.
  */
 @WebApiTest
 class UserLevelApiIntegrationTest {

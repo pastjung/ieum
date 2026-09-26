@@ -1,14 +1,13 @@
 package com.itda.problem.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -565,10 +564,8 @@ class ProblemServiceTest {
     givenReviewSkills(1L, 2L, 3L);
     List<Problem> shared =
         List.of(problem(1L, "하나"), problem(2L, "둘"), problem(3L, "셋"), problem(4L, "넷"));
-    given(problemRepository.findAssignableByLearningSkillId(1L, 12L))
-        .willReturn(shared);
-    given(problemRepository.findAssignableByLearningSkillId(2L, 12L))
-        .willReturn(shared);
+    given(problemRepository.findAssignableByLearningSkillId(1L, 12L)).willReturn(shared);
+    given(problemRepository.findAssignableByLearningSkillId(2L, 12L)).willReturn(shared);
 
     assertError(
         () -> problemService.reviewWithNewSession(learner), ErrorCode.LEARNING_CONTENT_NOT_READY);

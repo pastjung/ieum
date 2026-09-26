@@ -25,8 +25,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 /**
  * 진행 중인 학습 세션 조회.
  *
- * <p>홈 화면의 "이어서 학습"이 오랫동안 목 데이터("3단계 자음과 모음 · 7 / 10 문항")를 보여주고, 누르면 진행 중이던 세션이 아니라 새 자음 세션을
- * 만들었다. 앱이 이어받을 세션의 식별자를 알 방법이 없었기 때문이다.
+ * <p>홈 화면의 "이어서 학습"이 오랫동안 목 데이터("3단계 자음과 모음 · 7 / 10 문항")를 보여주고, 누르면 진행 중이던 세션이 아니라 새 자음 세션을 만들었다.
+ * 앱이 이어받을 세션의 식별자를 알 방법이 없었기 때문이다.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -70,7 +70,9 @@ class InProgressSessionQueryServiceTest {
     CurriculumStage stage = org.mockito.Mockito.mock(CurriculumStage.class);
     given(stage.getName()).willReturn("단어");
     LearningSession learningSession = session(7L, stage);
-    given(learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(user))
+    given(
+            learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
+                user))
         .willReturn(List.of(learningSession));
     given(learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user))
         .willReturn(List.of());
@@ -81,8 +83,7 @@ class InProgressSessionQueryServiceTest {
                 assigned(learningSession, 2L, true),
                 assigned(learningSession, 3L, false)));
 
-    InProgressSessionQueryService.InProgressSession result =
-        service.find(USER_ID).orElseThrow();
+    InProgressSessionQueryService.InProgressSession result = service.find(USER_ID).orElseThrow();
 
     assertThat(result.sessionId()).isEqualTo(7L);
     assertThat(result.stageName()).isEqualTo("단어");
@@ -98,15 +99,16 @@ class InProgressSessionQueryServiceTest {
   void 복습_세션은_단계가_없으므로_복습이라고_부른다() {
     // 복습은 createSession(userId, null)로 만들어 curriculum_stage가 비어 있다
     LearningSession learningSession = session(9L, null);
-    given(learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(user))
+    given(
+            learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
+                user))
         .willReturn(List.of());
     given(learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user))
         .willReturn(List.of(learningSession));
     given(problemSessionRepository.findAllBySession_IdOrderBySequence(9L))
         .willReturn(List.of(assigned(learningSession, 1L, false)));
 
-    InProgressSessionQueryService.InProgressSession result =
-        service.find(USER_ID).orElseThrow();
+    InProgressSessionQueryService.InProgressSession result = service.find(USER_ID).orElseThrow();
 
     assertThat(result.sessionId()).isEqualTo(9L);
     assertThat(result.stageName()).isEqualTo("복습");
@@ -115,7 +117,9 @@ class InProgressSessionQueryServiceTest {
 
   @Test
   void 진행_중인_세션이_없으면_비어_있다() {
-    given(learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(user))
+    given(
+            learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
+                user))
         .willReturn(List.of());
     given(learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user))
         .willReturn(List.of());
@@ -129,7 +133,9 @@ class InProgressSessionQueryServiceTest {
     // 눌러도 풀 것이 없다
     CurriculumStage stage = org.mockito.Mockito.mock(CurriculumStage.class);
     LearningSession learningSession = session(11L, stage);
-    given(learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(user))
+    given(
+            learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
+                user))
         .willReturn(List.of(learningSession));
     given(learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user))
         .willReturn(List.of());
@@ -144,7 +150,9 @@ class InProgressSessionQueryServiceTest {
     // 학습자가 푼 12문항이 영영 결과를 보지 못하고 갇힌다 — 실제로 그렇게 됐다
     CurriculumStage stage = org.mockito.Mockito.mock(CurriculumStage.class);
     LearningSession learningSession = session(13L, stage);
-    given(learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(user))
+    given(
+            learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
+                user))
         .willReturn(List.of(learningSession));
     given(learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user))
         .willReturn(List.of());

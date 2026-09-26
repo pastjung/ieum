@@ -7,8 +7,8 @@ import java.util.List;
 /**
  * "내 실력" 화면과 홈 복습 카드가 읽는 숙련 상태.
  *
- * <p>{@code skills}는 약한 것부터 정렬돼 있다 — 두 화면이 서로 다른 순서를 쓰지 않도록 FastAPI가 정한 순서를 그대로 지킨다.
- * FastAPI가 응답하지 않으면 비어 있고, 그때도 풀이 통계는 그대로 나간다.
+ * <p>{@code skills}는 약한 것부터 정렬돼 있다 — 두 화면이 서로 다른 순서를 쓰지 않도록 FastAPI가 정한 순서를 그대로 지킨다. FastAPI가 응답하지
+ * 않으면 비어 있고, 그때도 풀이 통계는 그대로 나간다.
  */
 public record SkillSummaryResponse(
     int totalAttemptCount, int correctAttemptCount, List<SkillMasteryResponse> skills) {

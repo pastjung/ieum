@@ -98,7 +98,8 @@ class AttemptErrorClassifierTest {
   @Test
   void 여러_풀이의_오류를_합친다() {
     Map<String, Long> first = AttemptErrorClassifier.classify(List.of(0b000101), List.of(0b000001));
-    Map<String, Long> second = AttemptErrorClassifier.classify(List.of(0b000101), List.of(0b000001));
+    Map<String, Long> second =
+        AttemptErrorClassifier.classify(List.of(0b000101), List.of(0b000001));
 
     assertThat(AttemptErrorClassifier.merge(List.of(first, second)))
         .isEqualTo(Map.of("dot_missing", 2L));

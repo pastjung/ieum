@@ -120,8 +120,7 @@ class LearningAttemptServiceTest {
         .willAnswer(invocation -> invocation.getArgument(0));
 
     LearningSkill skill =
-        LearningSkill.of(
-            SkillType.SKILL_03, "ㅇ", "받침 이응", "받침 ㅇ은 1, 2, 3, 5, 6점으로 나타낸다.");
+        LearningSkill.of(SkillType.SKILL_03, "ㅇ", "받침 이응", "받침 ㅇ은 1, 2, 3, 5, 6점으로 나타낸다.");
     ReflectionTestUtils.setField(skill, "id", SKILL_ID);
     given(learningSkillRepository.findAllById(org.mockito.ArgumentMatchers.anySet()))
         .willReturn(List.of(skill));
@@ -202,36 +201,38 @@ class LearningAttemptServiceTest {
   }
 
   @Test
-  void 낱자_문항은_FastAPI_분석을_부르지_않는다() {
-    // 자음·모음 단계 문항은 'ㄱ'·'ㅙ' 같은 낱자다. AI는 target_text를 자모로 분해해 규칙을
-    // 적용하므로 낱자를 받지 못하고 422로 거절한다 — 그대로 두면 커리큘럼 1·2단계는 한
-    // 문제도 풀 수 없다
+  void 낱자_문항도_FastAPI_분석을_부른다() {
+    // 자음·모음 단계 문항은 'ㄱ'·'ㅙ' 같은 낱자다. apps/ai 가 낱자를 직접 받게 되어(drill_items)
+    // 더 이상 백엔드가 자체 채점으로 우회하지 않는다 — 우회하면 오류 유형·피드백 문장이 사라진다
     ReflectionTestUtils.setField(problemSession.getProblem(), "targetText", "ㄱ");
-    given(analysisService.analyzeAttemptLocally(
-            org.mockito.ArgumentMatchers.anyLong(),
-            org.mockito.ArgumentMatchers.any(),
-            org.mockito.ArgumentMatchers.any()))
+    given(
+            analysisService.analyzeAttempt(
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()))
         .willReturn(
             new AttemptAnalysisResult(
-                new FeedbackResult("", ""),
-                List.of(new SkillResult(SKILL_ID, false, Map.of("dot_missing", 1L)))));
+                new FeedbackResult("첫 번째 칸이 좌우로 뒤집혔어요.", ""),
+                List.of(new SkillResult(SKILL_ID, false, Map.of("mirror", 1L)))));
 
     LearningAttemptService.AttemptResult result =
         service.analyze(USER_ID, SESSION_ID, new AttemptCommand(PROBLEM_SESSION_ID, List.of(32)));
 
     verify(analysisService)
-        .analyzeAttemptLocally(
+        .analyzeAttempt(
             org.mockito.ArgumentMatchers.anyLong(),
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any());
     verify(analysisService, never())
-        .analyzeAttempt(
+        .analyzeAttemptLocally(
             org.mockito.ArgumentMatchers.anyLong(),
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any());
     assertThat(result.correct()).isFalse();
     assertThat(problemSession.isCompleted()).isTrue();
-    assertThat(result.violatedSkills()).singleElement().satisfies(s -> assertThat(s.id()).isEqualTo(SKILL_ID));
+    assertThat(result.violatedSkills())
+        .singleElement()
+        .satisfies(s -> assertThat(s.id()).isEqualTo(SKILL_ID));
   }
 
   @Test
