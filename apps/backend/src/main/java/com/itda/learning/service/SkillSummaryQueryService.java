@@ -43,8 +43,7 @@ public class SkillSummaryQueryService {
   public SkillSummary find(long userId) {
     long total = problemAttemptRepository.countByUserId(userId);
     long correct = problemAttemptRepository.countByUserIdAndCorrectTrue(userId);
-    return new SkillSummary(
-        Math.toIntExact(total), Math.toIntExact(correct), masteryViews(userId));
+    return new SkillSummary(Math.toIntExact(total), Math.toIntExact(correct), masteryViews(userId));
   }
 
   /**

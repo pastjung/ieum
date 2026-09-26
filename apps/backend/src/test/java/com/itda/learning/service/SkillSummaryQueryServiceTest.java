@@ -5,14 +5,14 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
 import com.itda.global.FastApiClient;
+import com.itda.learning.domain.ProblemAttemptRepository;
+import com.itda.learning.domain.UserSkillMemory;
 import com.itda.learning.dto.LearningSkillSummaryFastApiResponse;
 import com.itda.learning.dto.LearningSkillSummaryFastApiResponse.SkillMastery;
 import com.itda.problem.domain.LearningSkill;
 import com.itda.problem.domain.SkillType;
 import com.itda.problem.repository.LearningSkillRepository;
-import com.itda.learning.domain.ProblemAttemptRepository;
 import com.itda.problem.repository.UserSkillMemoryRepository;
-import com.itda.learning.domain.UserSkillMemory;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -149,9 +149,7 @@ class SkillSummaryQueryServiceTest {
     given(fastApiClient.summarizeSkills(org.mockito.ArgumentMatchers.any()))
         .willReturn(
             new LearningSkillSummaryFastApiResponse(
-                List.of(
-                    new SkillMastery(2L, 0.2, "더 연습해요"),
-                    new SkillMastery(1L, 0.9, "익숙해요"))));
+                List.of(new SkillMastery(2L, 0.2, "더 연습해요"), new SkillMastery(1L, 0.9, "익숙해요"))));
     given(learningSkillRepository.findAllById(org.mockito.ArgumentMatchers.anySet()))
         .willReturn(List.of(skill(1L, "하나"), skill(2L, "둘")));
 

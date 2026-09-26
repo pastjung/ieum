@@ -75,12 +75,10 @@ public class LearningAttemptService {
             assigned.getProblem().getTargetText(),
             expectedCells.stream().map(ProblemCell::getExpectedPattern).toList(),
             command.inputPatterns());
-    // 낱자 문항(자음·모음 단계)은 AI가 받지 못한다 — 보내면 422로 거절당하고 학습자는
-    // "학습 결과를 분석할 수 없습니다"를 본다 (LearningSessionAnalysisService.isAiGradable)
+    // 낱자 문항('ㄱ'·'ㅙ')도 AI가 받는다 — apps/ai 의 drill_items 가 expectedPatterns 로
+    // 첫소리·받침을 가려 채점한다. 그래서 자음·모음 단계도 오류 유형·요소 귀속·피드백 문장을 받는다
     AttemptAnalysisResult analysis =
-        LearningSessionAnalysisService.isAiGradable(analysisAttempt.targetText())
-            ? analysisService.analyzeAttempt(userId, analysisAttempt, attemptedAt)
-            : analysisService.analyzeAttemptLocally(userId, analysisAttempt, attemptedAt);
+        analysisService.analyzeAttempt(userId, analysisAttempt, attemptedAt);
 
     boolean correct = isCorrect(expectedCells, command.inputPatterns());
     ProblemAttempt attempt =
@@ -132,10 +130,8 @@ public class LearningAttemptService {
   /**
    * 요소별 정오를 저장하고, **어긴 학습요소**를 돌려준다.
    *
-   * AI는 어긴 요소의 id만 알려준다. 사람이 읽을 규칙 문장("첫소리 ㄲ은 ㄱ 점자 앞에
-   * 된소리표를 붙여 나타낸다")은 learning_skills에 있고, 이 메서드가 저장을 위해
-   * 이미 그 엔티티를 조회한다 — 학습자가 "왜 틀렸는지"를 아는 경로를 여기서 잇는다.
-   * 추가 조회는 없다.
+   * <p>AI는 어긴 요소의 id만 알려준다. 사람이 읽을 규칙 문장("첫소리 ㄲ은 ㄱ 점자 앞에 된소리표를 붙여 나타낸다")은 learning_skills에 있고, 이
+   * 메서드가 저장을 위해 이미 그 엔티티를 조회한다 — 학습자가 "왜 틀렸는지"를 아는 경로를 여기서 잇는다. 추가 조회는 없다.
    */
   private List<ViolatedSkill> saveSkillResults(
       ProblemAttempt attempt, AttemptAnalysisResult analysis) {

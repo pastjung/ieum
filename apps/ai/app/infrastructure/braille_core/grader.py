@@ -211,7 +211,10 @@ def _sentence(
         return f"{name}, {exp}이 빠졌어요."
     if t == "silent_onset_written":
         n = len(syllables[d["syl"]]["cells"]) if syllables else 1
-        return f"첫소리 이응은 점자로 적지 않아요. '{syl}'은 {ORDINAL[n - 1] if n <= len(ORDINAL) else n} 칸이에요."
+        count = ORDINAL[n - 1] if n <= len(ORDINAL) else n
+        return (
+            f"첫소리 이응은 점자로 적지 않아요. '{syl}'{josa(syl, ('은', '는'))} {count} 칸이에요."
+        )
     return f"{pos} 칸이 달라요."
 
 

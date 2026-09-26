@@ -3,7 +3,6 @@ package com.itda.learning.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -82,7 +81,8 @@ class LearningSessionAnalysisServiceTest {
   }
 
   private LearningSkillStatePayload skillStatePayload() {
-    return new LearningSkillStatePayload(SKILL_ID, 1, 0, ATTEMPTED_AT, 0.3, Map.of("dot_missing", 1L));
+    return new LearningSkillStatePayload(
+        SKILL_ID, 1, 0, ATTEMPTED_AT, 0.3, Map.of("dot_missing", 1L));
   }
 
   @Test
