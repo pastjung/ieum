@@ -7,9 +7,10 @@ import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { BackHeader } from "@/components/BackHeader";
 import { AppButton } from "@/components/AppButton";
-import { learningService } from "@/services/learningService";
+import { learningService, type InProgressKind } from "@/services/learningService";
 import {
   beginLearningSession,
+  inProgressSessionQueryKey,
   learningSessionQueryKey,
   type SessionRequest,
 } from "@/services/learningSessionCache";
@@ -79,10 +80,17 @@ export default function SessionIntro() {
     그래서 **세션을 만들기 전에** 묻는다. 진행 중 세션 조회가 끝나기 전에는 시작할 수 없게
     막는다 — 그 전에 만들면 물어볼 기회가 없다.
   */
-  const { data: inProgress, isPending: inProgressPending } = useQuery({
-    queryKey: ["inProgressSession"],
-    queryFn: learningService.getInProgressSession,
+  // 시작하려는 종류의 진행 중 세션만 본다. 두 종류를 함께 조회하면 더 최근인 다른 종류에 가려져,
+  // 새 세션이 닫을 세션이 있는데도 묻지 못한다. 이어하기는 새 세션을 만들지 않아 물을 것이 없다
+  const conflictKind: InProgressKind = request.kind === "review" ? "review" : "learning";
+  const inProgressQuery = useQuery({
+    queryKey: inProgressSessionQueryKey(conflictKind),
+    queryFn: () => learningService.getInProgressSession(conflictKind),
+    enabled: !isResume,
   });
+  const inProgress = inProgressQuery.data;
+  // 조회하지 않는 쿼리도 값이 없으면 pending이라, 이어하기에서는 기다리지 않는다
+  const inProgressPending = !isResume && inProgressQuery.isPending;
   const [confirmed, setConfirmed] = useState(false);
   const conflict = describeSessionConflict(request, inProgressPending ? undefined : inProgress);
   const awaitingConfirm = conflict !== null && !confirmed;
