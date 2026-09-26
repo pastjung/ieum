@@ -1,7 +1,10 @@
 import {
   lectureVoiceControls,
   MIC_LOCKED_HINT,
+  setLecturePlayScreenActive,
+  speakingAllowedAnnouncement,
   SPEAKING_ALLOWED_MESSAGE,
+  SPEAKING_ALLOWED_MESSAGE_NEUTRAL,
   SPEAKING_REVOKED_MESSAGE,
   MIC_PERMISSION_DENIED_MESSAGE,
 } from "@/services/lectureVoiceControls";
@@ -40,5 +43,20 @@ describe("lectureVoiceControls", () => {
     expect(SPEAKING_REVOKED_MESSAGE).toBe("선생님이 발언을 마쳤어요.");
     expect(MIC_LOCKED_HINT).toBe("선생님이 허용하면 말할 수 있어요");
     expect(MIC_PERMISSION_DENIED_MESSAGE).toBe("설정에서 마이크 권한을 허용해 주세요");
+  });
+
+  describe("speakingAllowedAnnouncement (M5)", () => {
+    afterEach(() => {
+      setLecturePlayScreenActive(false); // 다음 테스트에 기본값(꺼짐)으로 되돌린다
+    });
+
+    it("풀이 화면이 아니면 마이크 버튼을 누르라고 하지 않는다", () => {
+      expect(speakingAllowedAnnouncement()).toBe(SPEAKING_ALLOWED_MESSAGE_NEUTRAL);
+    });
+
+    it("풀이 화면에서는 마이크 버튼을 누르라고 안내한다", () => {
+      setLecturePlayScreenActive(true);
+      expect(speakingAllowedAnnouncement()).toBe(SPEAKING_ALLOWED_MESSAGE);
+    });
   });
 });

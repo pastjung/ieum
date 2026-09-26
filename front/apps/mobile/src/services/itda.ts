@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { AppState } from "react-native";
 import {
   CapsuleSession,
   ItdaCapsule,
@@ -205,5 +206,8 @@ export function pauseItdaForLecture(paused: boolean): void {
   if (pausedForLecture === paused) return;
   pausedForLecture = paused;
   if (paused) stopItda();
-  else void startItda();
+  // 앱이 배경에 있는 동안 풀렸다면(네트워크 끊김·회수·수업 종료가 배경에서 일어난 경우) 여기서
+  // 시작하지 않는다 — `_layout`의 포그라운드 전환이 이미 pausedForLecture=false를 보고
+  // 자연히 startItda를 부른다. 배경에서 시작하면 인식이 무음이거나 오류 상태로 끝난다
+  else if (AppState.currentState === "active") void startItda();
 }

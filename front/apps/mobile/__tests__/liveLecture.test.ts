@@ -1,9 +1,12 @@
 import { AndroidAudioTypePresets, AudioSession } from "@livekit/react-native";
 import { ApiError } from "@ieum/api-client";
+import { Room } from "livekit-client";
 import { classService } from "@/services/classService";
 import { liveLecture } from "@/services/liveLecture";
 import { pauseItdaForLecture } from "@/services/itda";
 import { useLectureVoiceStore } from "@/stores/lectureVoiceStore";
+
+const mockedRoom = Room as unknown as jest.Mock;
 
 const mockedPauseItda = pauseItdaForLecture as unknown as jest.Mock;
 
@@ -156,6 +159,14 @@ describe("liveLecture", () => {
     expect(mockRooms[0].connect).toHaveBeenCalledWith("wss://s", "t");
     expect(h.onOpen).not.toHaveBeenCalled();
     expect(liveLecture.currentLectureId()).toBe("42");
+  });
+
+  it("stopMicTrackOnMute를 켜서 꺼진 마이크 트랙이 실제로 멈추게 한다 (I1)", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "SCHEDULED" });
+
+    await liveLecture.join("42", handlers());
+
+    expect(mockedRoom).toHaveBeenCalledWith({ publishDefaults: { stopMicTrackOnMute: true } });
   });
 
   it("오디오 세션을 열기 전에 듣기 전용 미디어 오디오로 설정한다", async () => {
@@ -588,6 +599,20 @@ describe("liveLecture 손들기·마이크", () => {
     expect(useLectureVoiceStore.getState().handUp).toBe(false);
   });
 
+  it("손들기 응답을 기다리는 사이 선생님이 허용하면 손을 내리고 거절한다 (M2)", async () => {
+    const { room } = await joinOpen();
+    const gate = deferred<void>();
+    room.localParticipant.setAttributes.mockImplementationOnce(() => gate.promise);
+
+    const raising = liveLecture.raiseHand(true);
+    allow(room); // 대기 중에 발언이 허용됐다 — 이 손들기는 이미 낡았다
+    gate.resolve(undefined);
+
+    await expect(raising).resolves.toBe(false);
+    expect(room.localParticipant.setAttributes).toHaveBeenLastCalledWith({ hand: "down" });
+    expect(useLectureVoiceStore.getState().handUp).toBe(false);
+  });
+
   it("허용 전에는 마이크를 켜지 않는다", async () => {
     const { room } = await joinOpen();
 
@@ -654,6 +679,24 @@ describe("liveLecture 손들기·마이크", () => {
 
     await expect(first).resolves.toBe(true);
     expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledTimes(1);
+  });
+
+  it("켜지는 사이 회수→재허용이 겹쳐도 켜진 순간 잇다를 다시 재운다 (M1)", async () => {
+    const { room } = await joinOpen();
+    allow(room);
+    const gate = deferred<undefined>();
+    room.localParticipant.setMicrophoneEnabled.mockImplementationOnce(() => gate.promise);
+
+    const turningOn = liveLecture.setMicrophone(true);
+    // pause(false)가 잇다를 깨웠다가, 곧바로 재허용된다
+    revoke(room);
+    allow(room);
+    mockedPauseItda.mockClear();
+    gate.resolve(undefined);
+
+    await expect(turningOn).resolves.toBe(true);
+    expect(mockedPauseItda).toHaveBeenLastCalledWith(true);
+    expect(useLectureVoiceStore.getState().micOn).toBe(true);
   });
 
   it("선생님이 거두면 마이크를 끄고 잇다를 돌려준다", async () => {

@@ -18,11 +18,15 @@ import {
   MIC_OFF_MESSAGE,
   MIC_ON_MESSAGE,
   MIC_PERMISSION_DENIED_MESSAGE,
+  setLecturePlayScreenActive,
 } from "@/services/lectureVoiceControls";
 import { useLectureVoiceStore } from "@/stores/lectureVoiceStore";
 import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticSuccess, speak, speakAsync } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
+
+/** TalkBack의 실제 낭독 속도가 추정보다 느릴 때를 대비한 여유 (M4) */
+const MIC_ON_ANNOUNCE_MARGIN_MS = 400;
 
 /** V23 수업 진행 · 풀이 */
 export default function ClassPlay() {
@@ -59,6 +63,12 @@ export default function ClassPlay() {
     if (problem) announce(`선생님 문제예요. ${problem.prompt}`);
   }, [problem]);
 
+  // 마이크 버튼이 있는 유일한 화면이다 — 떠 있는 동안만 onSpeakingChanged가 "버튼을 눌러 켜세요"라고 말한다 (M5)
+  useEffect(() => {
+    setLecturePlayScreenActive(true);
+    return () => setLecturePlayScreenActive(false);
+  }, []);
+
   if (!session || !problem) {
     return (
       <ScreenShell style={styles.center}>
@@ -90,11 +100,14 @@ export default function ClassPlay() {
     );
   };
 
-  const submitAnswer = () => {
+  const submitAnswer = async () => {
     if (cells.length === 0) {
       announce("아직 입력한 칸이 없어요.");
       return;
     }
+    // 채점 화면·이후 화면에는 마이크 버튼이 없다 — 켠 채로 넘어가면 끌 방법이 없어
+    // 채점 결과 낭독이 그대로 반 전체에 전해진다
+    if (micOn) await liveLecture.setMicrophone(false);
     submit(cells);
     router.replace("/session/grade");
   };
@@ -121,8 +134,11 @@ export default function ClassPlay() {
         announce(MIC_PERMISSION_DENIED_MESSAGE);
         return;
       }
-      // 켠 뒤에 읽으면 안내 음성이 수업에 그대로 전해진다 — 켜기 전에 말하고, 켜진 것은 진동으로 알린다
+      // 켠 뒤에 읽으면 안내 음성이 수업에 그대로 전해진다 — 켜기 전에 말하고, 켜진 것은 진동으로 알린다.
+      // TalkBack이 켜져 있으면 speakAsync는 글자 수로 낭독 시간을 어림잡을 뿐이라 TalkBack 자신의
+      // 말하기 속도가 느리면 추정보다 낭독이 늦게 끝난다 — 여유 400ms를 더 기다린 뒤에 연다
       await speakAsync(MIC_ON_MESSAGE);
+      await new Promise((resolve) => setTimeout(resolve, MIC_ON_ANNOUNCE_MARGIN_MS));
       const ok = await liveLecture.setMicrophone(true);
       if (ok) void hapticSuccess();
       // 그 사이 선생님이 거뒀다면 회수 안내가 이미 나갔다 — 실패 안내를 겹쳐 읽지 않는다
@@ -205,7 +221,7 @@ export default function ClassPlay() {
         {cells.length > 0 ? `${cellsToUnicode(cells)} · ${cells.length}칸` : "입력 전"}
       </Text>
       <DotPad onCommitCell={(cell) => setCells((prev) => [...prev, cell])} />
-      <AppButton label="길게 눌러 제출" requireLongPress onPress={submitAnswer} onShortPress={readInput} />
+      <AppButton label="길게 눌러 제출" requireLongPress onPress={() => void submitAnswer()} onShortPress={readInput} />
     </ScreenShell>
   );
 }

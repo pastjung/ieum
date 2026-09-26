@@ -190,7 +190,11 @@ export const liveLecture = {
     }
     audioOwner = generation;
 
-    const room = new Room();
+    // stopMicTrackOnMute: 꺼도 mute만 되던 마이크 트랙을 실제로 멈춘다 — 아니면 캡처가 계속
+    // 열려 있어 잇다가 같은 마이크로 되돌아가도 충돌·점유가 남는다 (unmute 시 재획득은 그대로 된다).
+    // RoomOptions에는 없고 publishDefaults(TrackPublishDefaults)에 있다 — 리뷰가 적은 최상위
+    // 자리는 설계 문서 작성 시점의 짐작이었다(설치된 livekit-client 2.22.3 타입으로 확인)
+    const room = new Room({ publishDefaults: { stopMicTrackOnMute: true } });
     const current: Session = {
       lectureId,
       room,
@@ -278,6 +282,11 @@ export const liveLecture = {
       return false;
     }
     if (!isLive(current)) return false;
+    // 대기하는 사이 선생님이 허용해 버렸다면 이 "손 듦"은 이미 낡았다 — 내려서 되돌린다
+    if (up && current.speakingAllowed) {
+      void current.room.localParticipant.setAttributes({ hand: "down" }).catch(() => undefined);
+      return false;
+    }
     current.handUp = up;
     syncVoice(current);
     return true;
@@ -314,6 +323,9 @@ export const liveLecture = {
     }
     if (!isLive(current)) return false;
 
+    // 켜지는 사이 회수→재허용이 겹치면 pause(false)가 잇다를 다시 깨웠을 수 있다 —
+    // 마이크가 켜진 채로 확정되기 직전에 한 번 더 재워 둔다 (멱등)
+    if (on) pauseItdaForLecture(true);
     current.micOn = on;
     if (!on) pauseItdaForLecture(false);
     syncVoice(current);

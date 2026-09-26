@@ -1,6 +1,8 @@
 /** 수업 발언 버튼의 라벨·힌트와 안내 문구 — 화면 밖에서 테스트하려고 순수 함수로 둔다 */
 
 export const SPEAKING_ALLOWED_MESSAGE = "선생님이 말할 수 있게 했어요. 마이크 버튼을 눌러 켜세요.";
+/** 마이크 버튼이 없는 화면(대기·채점·종료 등)에서 쓴다 — 없는 버튼을 누르라고 안내하지 않는다 */
+export const SPEAKING_ALLOWED_MESSAGE_NEUTRAL = "선생님이 말할 수 있게 했어요.";
 export const SPEAKING_REVOKED_MESSAGE = "선생님이 발언을 마쳤어요.";
 export const MIC_LOCKED_HINT = "선생님이 허용하면 말할 수 있어요";
 export const MIC_PERMISSION_DENIED_MESSAGE = "설정에서 마이크 권한을 허용해 주세요";
@@ -11,6 +13,21 @@ export const MIC_FAILED_MESSAGE = "마이크를 바꾸지 못했어요. 다시 �
 export const HAND_UP_MESSAGE = "손을 들었어요. 선생님이 허용하면 알려 드릴게요.";
 export const HAND_DOWN_MESSAGE = "손을 내렸어요.";
 export const HAND_FAILED_MESSAGE = "선생님께 전하지 못했어요. 다시 눌러 주세요.";
+
+// `class/play` 화면(마이크 버튼이 있는 유일한 화면)에 떠 있는 동안만 true.
+// onSpeakingChanged 핸들러는 이 화면이 사라진 뒤에도 계속 불릴 수 있는 전역 콜백이라
+// 훅이 아니라 이 모듈 값으로 "지금 마이크 버튼이 보이는 화면인가"를 확인한다.
+let onPlayScreen = false;
+
+/** `class/play`가 마운트·언마운트될 때 부른다 */
+export function setLecturePlayScreenActive(active: boolean): void {
+  onPlayScreen = active;
+}
+
+/** 발언 허용 안내 문구 — 마이크 버튼이 보이는 화면이면 누르라고 안내하고, 아니면 결과만 알린다 */
+export function speakingAllowedAnnouncement(): string {
+  return onPlayScreen ? SPEAKING_ALLOWED_MESSAGE : SPEAKING_ALLOWED_MESSAGE_NEUTRAL;
+}
 
 export interface LectureVoiceView {
   speakingAllowed: boolean;
