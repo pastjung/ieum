@@ -491,14 +491,38 @@ describe("liveLecture 발언 권한", () => {
 
   it("다시 입장하면 이전 방의 권한 이벤트는 누구에게도 알리지 않는다", async () => {
     const { h: first, room: oldRoom } = await joinOpen();
+    // discardSilently가 removeAllListeners()를 부르면 목 방에서도 리스너가 사라져 emit이 아무 데도
+    // 닿지 않는다 — 그 부수효과가 아니라 코드 안의 isLive 가드가 실제로 막는지 보려고, 해제되기
+    // 전에 리스너 자체를 붙잡아 뒀다가 낡은 세션이 된 뒤에 직접 호출한다
+    const staleListener = oldRoom.listeners.get("participantPermissionsChanged")![0]!;
     const second = handlers();
     await liveLecture.join("42", second);
 
-    allow(oldRoom);
+    const prevPermissions = oldRoom.localParticipant.permissions;
+    oldRoom.localParticipant.permissions = { canPublish: true, canPublishSources: [MIC] };
+    staleListener(prevPermissions, oldRoom.localParticipant);
 
     expect(first.onSpeakingChanged).not.toHaveBeenCalled();
     expect(second.onSpeakingChanged).not.toHaveBeenCalled();
     expect(useLectureVoiceStore.getState().speakingAllowed).toBe(false);
+  });
+
+  it("나가는 도중 낡은 세대에 늦게 닿은 권한 변경은 오디오 프로필을 바꾸지 않는다", async () => {
+    const { room } = await joinOpen();
+    allow(room); // 통화 프로필로 이미 전환돼 있다
+    // finish()가 removeAllListeners()를 부르면 목 방에서도 리스너가 사라진다 — 그 부수효과가
+    // 아니라 applySpeaking/applyAudioProfile 안의 가드가 실제로 막는지 보려고 해제되기 전에
+    // 리스너를 붙잡아 뒀다가 방을 나간 뒤에 직접 호출한다(늦게 도착한 이벤트를 흉내낸다)
+    const staleListener = room.listeners.get("participantPermissionsChanged")![0]!;
+
+    await liveLecture.leave();
+    mockedAudio.configureAudio.mockClear();
+
+    const prevPermissions = room.localParticipant.permissions;
+    room.localParticipant.permissions = { canPublish: false, canPublishSources: [] };
+    staleListener(prevPermissions, room.localParticipant);
+
+    expect(mockedAudio.configureAudio).not.toHaveBeenCalled();
   });
 
   it("방을 떠나면 발언 상태를 비운다", async () => {
