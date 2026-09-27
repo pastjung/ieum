@@ -86,6 +86,7 @@ public class ProblemService {
       AuthenticatedUser user, Long lectureId, RegisterProblemRequest registerProblemRequest) {
     Lecture lecture = validateInstructor(user, lectureId);
     Problem problem = resolveProblem(ProblemTextQuery.parse(registerProblemRequest.targetText()));
+    requireAssignable(problem);
     boolean created =
         lectureProblemRepository
             .findByLecture_IdAndProblem_Id(lecture.getId(), problem.getId())
@@ -109,6 +110,7 @@ public class ProblemService {
     Lecture lecture = validateInstructor(user, lectureId);
     Problem problem =
         resolveExistingProblem(ProblemTextQuery.parse(registerProblemRequest.targetText()));
+    requireAssignable(problem);
     lectureProblemRepository
         .findByLecture_IdAndProblem_Id(lecture.getId(), problem.getId())
         .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
@@ -200,6 +202,13 @@ public class ProblemService {
         .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
   }
 
+  /** 이미 존재하는 문제를 수업에 연결하기 전 셀 상한을 검사한다 (API 명세 8.2.1절, 사용자 결정). */
+  private void requireAssignable(Problem problem) {
+    if (problemCellRepository.countByProblem_Id(problem.getId()) > MAX_ASSIGNABLE_CELLS) {
+      throw new BusinessException(ErrorCode.PROBLEM_TOO_LONG);
+    }
+  }
+
   private Problem createProblem(String targetText) {
     ProblemAnalyzeResponse analyzeResponse =
         fastApiClient.analyze(new RegisterProblemRequest(targetText));
@@ -209,6 +218,11 @@ public class ProblemService {
     Level level = analyzeResponse.level();
     List<Integer> cellPatterns = analyzeResponse.cells();
     List<SkillSet> skillSets = analyzeResponse.skillSets();
+
+    // 저장 전에 셀 상한을 검사한다 — 넘으면 문제 자체를 만들지 않는다 (사용자 결정).
+    if (cellPatterns.size() > MAX_ASSIGNABLE_CELLS) {
+      throw new BusinessException(ErrorCode.PROBLEM_TOO_LONG);
+    }
 
     Problem problem = new Problem(level, targetText);
     problemRepository.save(problem);

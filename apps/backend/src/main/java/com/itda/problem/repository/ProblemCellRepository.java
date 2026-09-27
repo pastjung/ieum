@@ -15,4 +15,7 @@ public interface ProblemCellRepository extends JpaRepository<ProblemCell, Long> 
   List<ProblemCell> findAllByProblem_IdInOrderByProblem_IdAscCellIndexAsc(List<Long> problemIds);
 
   List<ProblemCell> findAllByProblemOrderByCellIndex(Problem p);
+
+  /** 문제 연결 전 셀 상한 검사에 쓴다 (API 명세 8.2.1절). */
+  long countByProblem_Id(Long problemId);
 }

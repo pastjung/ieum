@@ -1092,6 +1092,7 @@ LIVE 답안 body는 개인 답안과 같은 `cells`, `durationMs`만 받는다. 
 - 구분어가 붙은 입력에 맞는 문제가 없으면 404 `PROBLEM_NOT_FOUND` 다. 자모·약자는 고정 목록이므로 AI로 만들지 않는다.
 - 이 수업에 이미 연결된 문제면 저장하지 않고 200, 새로 연결하면 201이다. 동시 요청으로 UNIQUE가 겹치면 200이다.
 - `targetText` 누락·공백은 400 `INVALID_REQUEST_PARAMETER` 다.
+- 고른 문제(기존 문제든 AI가 새로 만든 문제든)의 셀 수가 12칸을 넘으면 422 `PROBLEM_TOO_LONG` 이며 연결하지 않는다. AI 생성 경로는 분석 결과의 셀 수를 저장 전에 검사해 문제 자체를 만들지 않는다.
 
 응답(LinkedProblem):
 
@@ -1180,6 +1181,7 @@ WebSocket은 서버→클라이언트 알림 전용이다. 클라이언트는 �
 | 409 | LECTURE_PROBLEM_ALREADY_ANSWERED | 같은 수업·학습자·문제에 다른 cells로 재제출 (같은 cells면 200과 기존 결과) |
 | 409 | IDEMPOTENCY_KEY_REUSED | 같은 키에 다른 정규화 답안 내용. LIVE 답안은 MVP에서 쓰지 않는다 — 키를 저장하지 않고 (lecture_id, user_id, problem_id) UNIQUE로 판정한다 |
 | 422 | INVALID_ANSWER_CELLS | cells가 없거나 비었음, 12칸 초과, 값이 0~63 밖 |
+| 422 | PROBLEM_TOO_LONG | 문제 연결 대상 문제(기존·AI 생성 모두)의 셀 수가 12칸을 넘음 — 연결하지 않는다 (8.2.1절) |
 | 503 | MEDIA_SERVER_UNAVAILABLE | OpenVidu 방 생성·metadata 설정·삭제·참가자 권한 변경 호출 실패 (상태 변경, 강사 음성 토큰 요청의 방 다시 열기, 발언 권한 변경, 문제 출제의 metadata 쓰기) |
 
 LIVE 답안의 `Idempotency-Key` 누락·UUID v4 형식 오류와 `durationMs` 누락·음수는 400 `INVALID_REQUEST_PARAMETER` 다. LIVE 답안 오류는 LEARNER_ACCESS_REQUIRED → LECTURE_NOT_FOUND(수업 없음·참여 이력 없음) → INVALID_LECTURE_STATE → LECTURE_PARTICIPATION_REQUIRED → LECTURE_PROBLEM_NOT_CURRENT → INVALID_ANSWER_CELLS → LECTURE_PROBLEM_ALREADY_ANSWERED 순서로 판정한다.

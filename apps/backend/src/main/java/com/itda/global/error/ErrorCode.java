@@ -109,7 +109,9 @@ public enum ErrorCode {
   PROBLEM_NOT_FOUND(HttpStatus.NOT_FOUND, "문제를 찾을 수 없습니다."),
   /** 구분어 없는 낱자에 후보가 둘 이상이다. body에 candidates를 더한다 — CandidatesBusinessException (8.2.1절). */
   PROBLEM_TEXT_AMBIGUOUS(HttpStatus.CONFLICT, "어떤 문제인지 골라 주세요."),
-  PROBLEM_VALIDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "문제 검증 서비스를 일시적으로 사용할 수 없습니다.");
+  PROBLEM_VALIDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "문제 검증 서비스를 일시적으로 사용할 수 없습니다."),
+  /** 문제 연결 대상 문제(기존·AI 생성 모두)의 셀 수가 12칸을 넘음 — 연결하지 않는다 (8.2.1절). */
+  PROBLEM_TOO_LONG(HttpStatus.UNPROCESSABLE_CONTENT, "12칸까지만 출제할 수 있어요.");
 
   private final HttpStatus status;
   private final String message;

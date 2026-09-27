@@ -249,6 +249,54 @@ class ProblemServiceTest {
     assertThat(lectureProblemCaptor.getValue().getProblem()).isSameAs(word);
   }
 
+  // ---------- 셀 상한 (API 명세 8.2.1절, 사용자 결정) ----------
+
+  @Test
+  void 기존_문제의_셀_수가_12를_넘으면_연결하지_않는다() {
+    givenLecture();
+    Problem tooLong = problem(Level.WORD, "그리고", 501L);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("그리고", BARE_LEVELS))
+        .willReturn(List.of(tooLong));
+    given(problemCellRepository.countByProblem_Id(501L)).willReturn(13L);
+
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("그리고")),
+        ErrorCode.PROBLEM_TOO_LONG);
+
+    verify(lectureProblemRepository, never()).save(any());
+  }
+
+  @Test
+  void AI가_13칸을_돌려주면_문제를_만들지_않는다() {
+    givenLecture();
+    givenAnalysis(
+        Level.WORD, List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13), List.of(skillSet("ㄱ")));
+
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.PROBLEM_TOO_LONG);
+
+    verify(problemRepository, never()).save(any());
+    verify(lectureProblemRepository, never()).save(any());
+  }
+
+  @Test
+  void AI가_12칸을_돌려주면_연결한다() {
+    givenLecture();
+    givenAnalysis(
+        Level.WORD, List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), List.of(skillSet("ㄱ")));
+    givenSkills(skill("ㄱ"));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방"));
+
+    verify(problemRepository).save(any());
+    verify(lectureProblemRepository).save(any());
+  }
+
   // ---------- 입력 해석 (API 명세 8.2.1절) ----------
 
   @Test
