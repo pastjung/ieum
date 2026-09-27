@@ -708,6 +708,16 @@ class LectureProblemApiIntegrationTest {
   }
 
   @Test
+  void 담당이_아닌_강사에게는_답안_목록_대상_수업을_숨긴다() {
+    Live live = deliveredWord(List.of(8));
+
+    assertError(
+        answers(live.lectureId(), live.problemId(), accountFor(UserRole.INSTRUCTOR)),
+        404,
+        "LECTURE_NOT_FOUND");
+  }
+
+  @Test
   void 종료_뒤에도_답안_목록을_본다() {
     Live live = deliveredWord(List.of(8));
     submit(live, this.learner, "[8]");
