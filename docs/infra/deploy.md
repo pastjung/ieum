@@ -4,9 +4,10 @@
 
 이 문서는 EC2 서버의 초기 세팅부터 HTTPS 적용, blue-green 수동 배포까지의 절차와 각 선택의 이유를 정의한다. 서버를 처음 만져보는 팀원도 이 문서만으로 구조를 이해하고 장애 시 대응할 수 있는 것을 목표로 한다.
 
-- 도메인: `j15b201.p.ssafy.io`
-- 운영 DB: AWS RDS(MySQL) — 별도 생성 (생성 전까지 backend는 배포 보류)
-- 서버 접속: `ssh -i <pem파일> ubuntu@j15b201.p.ssafy.io` (인증키는 저장소 밖에 보관, Git 커밋 금지)
+- 도메인: `i-eum.site`(+`www.i-eum.site`) — 옛 도메인 `j15b201.p.ssafy.io`는 nginx가 `https://i-eum.site`로 301 넘긴다. 실시간 음성은 `openvidu.i-eum.site`
+- 운영 DB: 외부 서버의 MariaDB — backend가 `DB_URL`로 연결 (첫 배포 전 스키마 확인: 6.3절)
+- 운영 Redis: 같은 compose의 `redis` 서비스(컨테이너 `itda-redis`, 볼륨 `itda-redis-data`)
+- 서버 접속: `ssh -i <pem파일> ubuntu@i-eum.site` (인증키는 저장소 밖에 보관, Git 커밋 금지)
 
 ### 1.1 서버 사양과 용량 계획
 
@@ -123,7 +124,7 @@ sudo tee /etc/nginx/sites-available/itda > /dev/null <<'EOF'
 server {
     listen 80;
     listen [::]:80;
-    server_name j15b201.p.ssafy.io;
+    server_name i-eum.site www.i-eum.site;
 
     location / {
         return 200 "certificate bootstrap\n";
@@ -136,10 +137,10 @@ sudo rm -f /etc/nginx/sites-enabled/default   # 기본 사이트가 도메인을
 sudo nginx -t && sudo systemctl reload nginx
 
 # 2) 사전 점검 (초인종)
-curl -I http://j15b201.p.ssafy.io    # HTTP 200 확인 후 진행
+curl -I http://i-eum.site    # HTTP 200 확인 후 진행
 
 # 3) 발급 — 이메일은 팀이 실제 확인하는 주소 (갱신 실패 경고가 오는 곳)
-sudo certbot --nginx -d j15b201.p.ssafy.io
+sudo certbot --nginx -d i-eum.site -d www.i-eum.site
 
 # 4) 자동 갱신 검증
 sudo certbot renew --dry-run
@@ -148,6 +149,8 @@ systemctl status certbot.timer --no-pager   # active (waiting) 확인
 
 인증서 유효기간은 90일이며 `certbot.timer`가 자동 갱신한다. 등록한 이메일로 만료 경고가 온다면 자동 갱신이 실패하고 있다는 뜻이므로 `sudo certbot renew` 로그를 확인한다.
 
+현재 서버에는 인증서가 셋 있다: `i-eum.site`(+www), `openvidu.i-eum.site`, `j15b201.p.ssafy.io`(옛 도메인 넘김 전용). 셋 다 `certbot.timer`가 갱신하며, 설정을 바꾼 첫 배포 뒤에는 `sudo certbot renew --dry-run`이 세 인증서 모두 성공하는지 확인한다(10절). 옛 도메인은 80에서도 301을 돌려주므로 갱신 방식이 `webroot`이면 실패할 수 있다 — `/etc/letsencrypt/renewal/j15b201.p.ssafy.io.conf`의 `authenticator = nginx`를 확인한다.
+
 ## 5. 배포 파일 배치
 
 EC2의 앱 디렉토리 구조. repo의 `deploy/`, `scripts/`가 원본이고, EC2에는 그 사본 + 운영 설정/상태 파일이 있다.
@@ -155,41 +158,45 @@ EC2의 앱 디렉토리 구조. repo의 `deploy/`, `scripts/`가 원본이고, E
 ```text
 /home/ubuntu/app/
 ├── docker-compose.prod.yml     # repo deploy/ 사본
-├── .env.config                 # 운영 설정 (원본: Jenkins Secret file 'itda-env-config' — Sync가 배포)
+├── .env.config                 # 운영 설정 (원본: Jenkins Secret file 'itda-env-config' — Sync가 배포, 키 목록 6.2.1)
 ├── .env.tags                   # 배포 태그 상태 (deploy.sh가 갱신 — 서버가 원본)
 ├── nginx/inc/                  # blue/green 활성 포트 (deploy.sh가 갱신)
 │   ├── web.inc  backend.inc  ai.inc
+├── downloads/                  # 학습자 앱 파일 (ieum.apk, latest.json, ieum-<직전>.apk — release-app.sh가 갱신, 9절)
 └── scripts/                    # repo scripts/ 사본 (deploy.sh, cleanup-images.sh)
 ```
 
-호스트 Nginx 쪽 파일 두 개는 root 영역에 배치한다.
+호스트 Nginx 쪽 파일 세 개는 root 영역에 배치한다.
 
 | repo 파일 | EC2 배치 위치 | 역할 |
 | --- | --- | --- |
-| `deploy/nginx/itda.conf` | `/etc/nginx/sites-available/itda` | 라우팅 + SSL + AI 내부 리스너(9100) |
+| `deploy/nginx/itda.conf` | `/etc/nginx/sites-available/itda` | `i-eum.site` 라우팅 + SSL + `/app/` 앱 파일 + 옛 도메인 301 + AI 내부 리스너(9100) |
+| `deploy/nginx/openvidu.conf` | `/etc/nginx/sites-available/openvidu.conf` | `openvidu.i-eum.site` → `127.0.0.1:7880`(OpenVidu) |
 | `deploy/nginx/connection-upgrade.conf` | `/etc/nginx/conf.d/` | WebSocket Upgrade 공통 변수(map) |
 
 초기 배치 절차 (최초 1회):
 
 ```bash
 # EC2에서 — 디렉토리 생성
-mkdir -p /home/ubuntu/app/nginx/inc /home/ubuntu/app/scripts
+mkdir -p /home/ubuntu/app/nginx/inc /home/ubuntu/app/scripts /home/ubuntu/app/downloads
 
 # 본인 PC의 repo 루트에서 — 파일 전송
-scp -i <pem> deploy/docker-compose.prod.yml ubuntu@j15b201.p.ssafy.io:/home/ubuntu/app/
-scp -i <pem> deploy/nginx/inc/*.inc ubuntu@j15b201.p.ssafy.io:/home/ubuntu/app/nginx/inc/
-scp -i <pem> scripts/deploy.sh scripts/cleanup-images.sh ubuntu@j15b201.p.ssafy.io:/home/ubuntu/app/scripts/
-scp -i <pem> deploy/nginx/itda.conf deploy/nginx/connection-upgrade.conf ubuntu@j15b201.p.ssafy.io:/home/ubuntu/
+scp -i <pem> deploy/docker-compose.prod.yml ubuntu@i-eum.site:/home/ubuntu/app/
+scp -i <pem> deploy/nginx/inc/*.inc ubuntu@i-eum.site:/home/ubuntu/app/nginx/inc/
+scp -i <pem> scripts/deploy.sh scripts/cleanup-images.sh ubuntu@i-eum.site:/home/ubuntu/app/scripts/
+scp -i <pem> deploy/nginx/itda.conf deploy/nginx/openvidu.conf deploy/nginx/connection-upgrade.conf ubuntu@i-eum.site:/home/ubuntu/
 
 # EC2에서 — Nginx 설정 배치 (certbot이 만든 임시 설정을 최종본으로 교체)
 sudo mv ~/connection-upgrade.conf /etc/nginx/conf.d/
 sudo cp ~/itda.conf /etc/nginx/sites-available/itda
+sudo cp ~/openvidu.conf /etc/nginx/sites-available/openvidu.conf
+sudo ln -sfn /etc/nginx/sites-available/openvidu.conf /etc/nginx/sites-enabled/openvidu.conf
 sudo nginx -t                    # 반드시 통과 확인 후
 sudo systemctl reload nginx
 chmod +x /home/ubuntu/app/scripts/*.sh
 ```
 
-이 시점에 `https://j15b201.p.ssafy.io`는 **502를 반환하는 것이 정상**이다 — 라우팅은 동작하지만 컨테이너가 아직 없는 상태이며, 6절의 첫 배포로 해소된다.
+이 시점에 `https://i-eum.site`는 **502를 반환하는 것이 정상**이다 — 라우팅은 동작하지만 컨테이너가 아직 없는 상태이며, 6절의 첫 배포로 해소된다.
 
 AI 내부 리스너(9100)는 backend 컨테이너가 `host.docker.internal:9100`으로 AI를 호출할 때 활성 슬롯(blue/green)으로 라우팅해주는 통로다. 외부(인터넷)의 9100 접근은 UFW 기본 거부가 차단하고, 컨테이너 대역(172.16.0.0/12)만 3.1절의 UFW 규칙으로 허용한다.
 
@@ -206,7 +213,7 @@ AI 내부 리스너(9100)는 backend 컨테이너가 `host.docker.internal:9100`
 
 ```bash
 # 본인 PC에서
-scp -i <pem> deploy/nginx/itda.conf ubuntu@j15b201.p.ssafy.io:/home/ubuntu/
+scp -i <pem> deploy/nginx/itda.conf ubuntu@i-eum.site:/home/ubuntu/
 
 # EC2에서
 sudo cp ~/itda.conf /etc/nginx/sites-available/itda
@@ -216,7 +223,7 @@ sudo systemctl reload nginx      # 무중단 반영
 
 `nginx -t`가 안전장치다. 새 설정이 잘못돼도 검증에서 걸리고 기존 설정으로 계속 동작하며, reload는 진행 중인 연결을 끊지 않는다.
 
-**자동화 완료 (4단계):** Jenkins 배포 파이프라인의 Sync 스테이지가 매 배포마다 위 반영 절차(복사 → `nginx -t` 검증 → reload, 실패 시 이전 설정 복원)를 자동 수행한다 — compose·scripts도 함께 동기화된다 (pipeline.md 5.1절). "repo 수정 → 병합 → release 배포 시 자동 반영"으로 닫혀 사람이 반영을 잊어 생기는 드리프트가 구조적으로 사라졌다. 설정을 무엇으로 바꿀지는 여전히 MR이 통제하며, 자동화된 것은 기계적인 반영 절차뿐이다. 이 절의 수동 절차는 최초 배치와 비상시(Jenkins 장애)용으로 유지한다.
+**자동화 완료 (4단계):** Jenkins 배포 파이프라인의 Sync 스테이지가 매 배포마다 위 반영 절차(사이트 파일 `itda`·`openvidu.conf`와 `connection-upgrade.conf`를 모두 백업 → 복사 → `nginx -t` 검증 → reload, 실패 시 셋 다 복원)를 자동 수행한다 — compose·scripts도 함께 동기화된다 (pipeline.md 5.1절). "repo 수정 → 병합 → release 배포 시 자동 반영"으로 닫혀 사람이 반영을 잊어 생기는 드리프트가 구조적으로 사라졌다. 설정을 무엇으로 바꿀지는 여전히 MR이 통제하며, 자동화된 것은 기계적인 반영 절차뿐이다. 이 절의 수동 절차는 최초 배치와 비상시(Jenkins 장애)용으로 유지한다.
 
 ## 6. 첫 수동 배포
 
@@ -238,22 +245,14 @@ git clone -b dev https://oauth2:<토큰>@lab.ssafy.com/s15-bigdata-recom-sub1/S1
 
 | 파일 | 내용 | 원본 |
 | --- | --- | --- |
-| `.env.config` | REGISTRY_PREFIX, BACKEND_PROFILE, DB_*, AI_BASE_URL | **Jenkins Secret file `itda-env-config`** — Sync 스테이지가 매 배포마다 서버로 반영. 서버에서 직접 수정하면 다음 배포 때 사라진다 (변경 절차: README 3.5절) |
+| `.env.config` | backend 설정 전체 + compose 치환값 (키 목록: 6.2.1절) | **Jenkins Secret file `itda-env-config`** — Sync 스테이지가 매 배포마다 서버로 반영. 서버에서 직접 수정하면 다음 배포 때 사라진다 (변경 절차: README 3.5절) |
 | `.env.tags` | WEB/BACKEND/AI_TAG (현재 배포 태그) | **서버** — deploy.sh가 배포마다 갱신. 사람이 편집하지 않는다 |
 
 최초 배치(파이프라인 구축 전 수동 배포) 시에만 둘 다 손으로 만든다:
 
-```bash
-# .env.config — deploy/.env.config.example을 참고해 실제 값으로 작성
-cat > /home/ubuntu/app/.env.config <<'EOF'
-REGISTRY_PREFIX=
-BACKEND_PROFILE=local
-DB_URL=pending
-DB_USERNAME=pending
-DB_PASSWORD=pending
-AI_BASE_URL=http://host.docker.internal:9100/api/v1
-EOF
+`.env.config`는 6.2.1절 키 목록대로 작성한다(값은 사람만 다룬다).
 
+```bash
 # .env.tags — 자리 채우기 값으로 시작 (deploy.sh가 실제 값으로 갱신)
 cat > /home/ubuntu/app/.env.tags <<'EOF'
 WEB_TAG=none
@@ -263,18 +262,124 @@ EOF
 chmod 600 /home/ubuntu/app/.env.config /home/ubuntu/app/.env.tags
 ```
 
-- `none`/`pending`은 자리 채우기 값이다. compose가 두 파일의 필수 변수를 파싱 시점에 검사하므로, 사용하지 않는 값도 존재는 해야 한다.
+- `none`은 자리 채우기 값이다. compose가 두 파일의 필수 변수를 파싱 시점에 검사하므로, 사용하지 않는 값도 존재는 해야 한다.
 - 점(.)으로 시작하는 숨김 파일이라 `ls -a`로만 보인다. 권한은 600(소유자만)을 유지한다.
 - 파이프라인 구축 후에는 같은 내용을 Jenkins Secret file `itda-env-config`로도 등록해야 한다 — 그때부터 Jenkins 쪽이 원본이 된다.
 
-### 6.3 backend의 임시 H2 운용 (RDS 연결 전)
+#### 6.2.1 운영 설정 키 목록 (`.env.config` = Jenkins Secret file `itda-env-config`)
 
-`BACKEND_PROFILE=local`은 backend를 H2 in-memory로 띄운다. **두 가지 한계를 알고 사용한다.**
+backend 컨테이너는 compose의 `env_file: .env.config`로 이 파일의 **모든 키**를 환경변수로 받는다. 필수 키가 빠지거나 형식이 틀리면 backend가 뜨지 않고 deploy.sh 헬스체크가 배포를 자동 취소한다(운영 트래픽은 직전 버전 유지). 값은 사람만 다루며 저장소에는 키 이름만(`deploy/.env.config.example`) 둔다.
 
-1. 인메모리라 재배포·재시작마다 데이터가 전부 사라진다.
-2. blue/green 두 슬롯이 각자 별도의 인메모리 DB를 가진다 — 전환 시 데이터가 이어지지 않는다.
+| 구분 | 키 | 값·형식 | 필수 |
+| --- | --- | --- | --- |
+| compose 치환 | `REGISTRY_PREFIX` | 빈 값(로컬 이미지 저장소) | 선택 |
+| backend 공통 | `SPRING_PROFILES_ACTIVE` | `prod` — **빠지면 local 프로필로 떠서 실패한다** (옛 `BACKEND_PROFILE`은 더 이상 읽지 않는다) | 필수 |
+| | `AI_BASE_URL` | `http://host.docker.internal:9100/api/v1` (현 값 유지) | 필수 |
+| DB | `DB_URL` | `jdbc:mariadb://<host>:<port>/<db>?connectionTimeZone=UTC` | 필수 |
+| | `DB_USERNAME`·`DB_PASSWORD` | 운영 계정 | 필수 |
+| Redis | `REDIS_HOST` | `redis` (compose 서비스 이름) | 필수 |
+| | `REDIS_PORT` | `6379` | 필수 |
+| | `AUTH_REDIS_KEY_PREFIX` | `prod` — 실행 프로필과 다르면 기동 실패 | 필수 |
+| 인증 토큰 | `AUTH_JWT_ISSUER` | `itda-backend-prod` — 프로필과 다르면 기동 실패 | 필수 |
+| | `AUTH_ACCESS_ACTIVE_KID`·`AUTH_ACCESS_ACTIVE_KEY` | kid(영문·숫자·`._~-` 1~64자)·Base64URL 256비트 이상 — **운영용으로 새로 생성** | 필수 |
+| | `AUTH_ACCESS_RETIRED_KEYS` | `kid:key,kid:key` 또는 빈 값 | 선택 |
+| | `AUTH_REFRESH_ACTIVE_KID`·`AUTH_REFRESH_ACTIVE_KEY`·`AUTH_REFRESH_RETIRED_KEYS` | 위와 같은 형식, 별도 key | 필수(retired는 선택) |
+| | `AUTH_ACTION_ACTIVE_KID`·`AUTH_ACTION_ACTIVE_KEY`·`AUTH_ACTION_RETIRED_KEYS` | 위와 같은 형식, 별도 key. kid는 세 ring 통틀어 유일 | 필수(retired는 선택) |
+| 메일 | `MAIL_DISPATCH_ENABLED` | `true`(발송) / `false` | 필수 |
+| | `MAIL_SMTP_HOST`·`MAIL_SMTP_PORT`·`MAIL_SMTP_SECURITY` | 제공자 값, 보안 방식 `SSL` 또는 `STARTTLS` | 필수 |
+| | `MAIL_SMTP_USERNAME`·`MAIL_SMTP_PASSWORD` | 제공자 계정 | `MAIL_SMTP_SECURITY`가 `SSL`·`STARTTLS`면 필수(MailProviderProperties가 검사) |
+| | `MAIL_FROM_ADDRESS` | 발신 주소 | 필수 |
+| | `MAIL_FROM_NAME` | 표시 이름. **줄을 아예 빼면 기본값 `이음(I:EUM)`을 쓰고, `MAIL_FROM_NAME=`처럼 값을 비워 두면 그 빈 값이 기본값을 덮어써 표시 이름 없이 나간다** — 기본값을 쓰려면 줄 자체를 지우거나 주석 처리한다 | 선택(줄을 생략하거나 값을 채운다) |
+| | `MAIL_REPLY_TO` | 회신 주소 | 선택 |
+| | `MAIL_LINK_EMAIL_VERIFICATION_URL` | `https://i-eum.site/auth/verify-email` | 필수 |
+| | `MAIL_LINK_PASSWORD_RESET_URL` | `https://i-eum.site/auth/reset-password` | 필수 |
+| 음성 | `LIVEKIT_URL` | `https://openvidu.i-eum.site` | 필수 |
+| | `LIVEKIT_API_KEY`·`LIVEKIT_API_SECRET` | `/opt/openvidu/config/openvidu.env`의 같은 이름 값 | 필수 |
+| 음성 합성 | `CARTESIA_API_KEY` | Cartesia 키. 비우면 목소리 API만 503 | 선택 |
 
-즉 API 동작 확인용이지 데이터를 쌓는 용도가 아니다. RDS 연결 시 전환 방법: Jenkins Secret file `itda-env-config`를 `BACKEND_PROFILE=prod` + 실제 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`로 교체하고 backend를 재배포한다(README 3.5절). 이때 프로필을 잘못 설정하면 기동 로그에 `Unable to determine Dialect without JDBC metadata` 에러가 나며 헬스체크에서 자동 취소된다.
+`deploy/.env.config.example`에 사람이 붙여 넣을 내용 (값 없이 키와 안내만):
+
+```dotenv
+# 운영 설정 — Jenkins Secret file 'itda-env-config'의 원본 구조 (docs/infra/deploy.md 6.2.1)
+# 값에 $가 들어가면 값 전체를 작은따옴표로 감싼다 (compose가 $를 치환한다)
+REGISTRY_PREFIX=
+SPRING_PROFILES_ACTIVE=prod
+AI_BASE_URL=http://host.docker.internal:9100/api/v1
+DB_URL=jdbc:mariadb://<host>:<port>/<db>?connectionTimeZone=UTC
+DB_USERNAME=
+DB_PASSWORD=
+REDIS_HOST=redis
+REDIS_PORT=6379
+AUTH_REDIS_KEY_PREFIX=prod
+AUTH_JWT_ISSUER=itda-backend-prod
+AUTH_ACCESS_ACTIVE_KID=
+AUTH_ACCESS_ACTIVE_KEY=
+AUTH_ACCESS_RETIRED_KEYS=
+AUTH_REFRESH_ACTIVE_KID=
+AUTH_REFRESH_ACTIVE_KEY=
+AUTH_REFRESH_RETIRED_KEYS=
+AUTH_ACTION_ACTIVE_KID=
+AUTH_ACTION_ACTIVE_KEY=
+AUTH_ACTION_RETIRED_KEYS=
+MAIL_DISPATCH_ENABLED=true
+MAIL_SMTP_HOST=
+MAIL_SMTP_PORT=
+MAIL_SMTP_USERNAME=
+MAIL_SMTP_PASSWORD=
+MAIL_SMTP_SECURITY=STARTTLS
+MAIL_FROM_ADDRESS=
+# MAIL_FROM_NAME=   # 생략하면 기본값 이음(I:EUM). 값을 비운 채(=만) 두면 표시 이름 없이 나간다
+MAIL_REPLY_TO=
+MAIL_LINK_EMAIL_VERIFICATION_URL=https://i-eum.site/auth/verify-email
+MAIL_LINK_PASSWORD_RESET_URL=https://i-eum.site/auth/reset-password
+LIVEKIT_URL=https://openvidu.i-eum.site
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
+CARTESIA_API_KEY=
+```
+
+운영용 서명 key 만들기 (ring마다 한 번씩, 로컬 key 재사용 금지):
+
+```bash
+openssl rand 32 | base64 | tr '+/' '-_' | tr -d '=\n'; echo   # Base64URL 256비트
+# kid 예: access-202609, refresh-202609, action-202609 (세 ring 사이에 겹치면 기동 실패)
+```
+
+작성 규칙: `KEY=값` 사이에 공백을 두지 않는다. 값에 `$`가 있으면 `'...'`로 감싼다 — 같은 파일을 deploy.sh가 compose `--env-file`로도 읽어 `$`를 변수로 치환하기 때문이다.
+
+### 6.3 외부 DB 스키마 확인 (첫 배포 전, 사람이 실행 — 읽기 전용)
+
+운영 프로필은 `ddl-auto: validate`라 외부 DB 스키마가 엔티티와 다르면 backend가 뜨지 않는다(헬스체크가 배포를 자동 취소). 첫 배포 전에 본인 PC에서 운영 DB를 대상으로 **검증만** 하는 기동을 한 번 해 본다. 계정은 **읽기 전용**을 쓴다 — 기동 중 쓰기가 일어나도 DB가 거부한다.
+
+```bash
+# 저장소 루트 — 로컬 Redis만 띄운다 (prod 프로필도 기동 시 Redis PING을 보낸다)
+docker compose up -d redis
+cd apps/backend
+k() { openssl rand 32 | base64 | tr '+/' '-_' | tr -d '=\n'; }   # 이 확인용 1회성 key
+SPRING_PROFILES_ACTIVE=prod SERVER_PORT=18080 \
+DB_URL='jdbc:mariadb://<host>:<port>/<db>?connectionTimeZone=UTC' DB_USERNAME='<읽기전용 계정>' DB_PASSWORD='<비밀번호>' \
+REDIS_HOST=localhost REDIS_PORT=6379 AUTH_REDIS_KEY_PREFIX=prod AUTH_JWT_ISSUER=itda-backend-prod \
+AUTH_ACCESS_ACTIVE_KID=check-access AUTH_ACCESS_ACTIVE_KEY="$(k)" \
+AUTH_REFRESH_ACTIVE_KID=check-refresh AUTH_REFRESH_ACTIVE_KEY="$(k)" \
+AUTH_ACTION_ACTIVE_KID=check-action AUTH_ACTION_ACTIVE_KEY="$(k)" \
+MAIL_DISPATCH_ENABLED=false MAIL_SMTP_HOST=localhost MAIL_SMTP_PORT=587 MAIL_SMTP_SECURITY=STARTTLS \
+MAIL_FROM_ADDRESS=check@i-eum.site \
+MAIL_LINK_EMAIL_VERIFICATION_URL=https://i-eum.site/auth/verify-email \
+MAIL_LINK_PASSWORD_RESET_URL=https://i-eum.site/auth/reset-password \
+LIVEKIT_URL=https://openvidu.i-eum.site LIVEKIT_API_KEY=check LIVEKIT_API_SECRET=check \
+./gradlew bootRun
+```
+
+- `MAIL_DISPATCH_ENABLED=false`를 반드시 준다 — 켜 두면 운영 DB의 메일 대기열을 PC가 발송할 수 있다.
+- 로그에 `Started ...Application`이 찍히면 스키마가 엔티티와 맞는다 → Ctrl+C.
+- `Schema-validation: missing table [...]`·`missing column [...]`·`wrong column type`이면 맞지 않는다 → 첫 배포를 멈추고 팀과 반영 방법을 정한다(스키마 변경 도구 도입은 범위 밖).
+
+`validate`는 UNIQUE 제약을 보지 않으므로 DB 클라이언트로 따로 확인한다:
+
+```sql
+SHOW CREATE TABLE lecture_problems;   -- UNIQUE KEY (lecture_id, problem_id)
+SHOW CREATE TABLE problem_attempts;   -- UNIQUE KEY (lecture_id, user_id, problem_id)
+```
 
 ### 6.4 빌드와 배포
 
@@ -286,6 +391,7 @@ docker build -t itda-backend:$TAG apps/backend    # 첫 빌드는 5~10분
 docker build -t itda-ai:$TAG apps/ai
 
 cd /home/ubuntu/app
+docker compose -f docker-compose.prod.yml --env-file .env.config --env-file .env.tags up -d redis   # 최초 1회 (Jenkins는 Redis 단계가 수행)
 ./scripts/deploy.sh web $TAG
 ./scripts/deploy.sh backend $TAG
 ./scripts/deploy.sh ai $TAG
@@ -294,9 +400,10 @@ cd /home/ubuntu/app
 확인:
 
 ```bash
-curl -I https://j15b201.p.ssafy.io                # 200 (web)
-curl https://j15b201.p.ssafy.io/api/v1/health     # backend JSON
+curl -I https://i-eum.site                        # 200 (web)
+curl https://i-eum.site/api/v1/health             # backend JSON
 curl http://127.0.0.1:9100/api/v1/health          # ai (내부 리스너 경유)
+docker exec itda-redis redis-cli ping              # PONG (운영 Redis)
 docker ps
 ```
 
@@ -356,21 +463,18 @@ docker images | grep itda-backend        # 보관된 태그 확인
 
 전제: 이미지 보존 정책(docker.md 5절). `docker image prune -a`를 운영 서버에서 실행하면 롤백 지점이 사라진다.
 
-**롤백이 못 되돌리는 것: 데이터베이스.** 롤백은 코드(이미지)만 되돌린다. 새 버전이 이미 DB 스키마를 바꿨거나(컬럼 추가·삭제) 데이터를 변형했다면, 코드를 되돌려도 DB는 그대로다. 그래서 스키마를 바꾸는 배포는 "이전 버전 코드도 새 스키마에서 동작하는가"(하위 호환)를 릴리스 전에 확인해야 한다. DB 자체를 되돌리는 건 RDS 스냅샷 복원이라는 별개의, 훨씬 무거운 작업이다(그 사이 쌓인 데이터 유실).
+**롤백이 못 되돌리는 것: 데이터베이스.** 롤백은 코드(이미지)만 되돌린다. 새 버전이 이미 DB 스키마를 바꿨거나(컬럼 추가·삭제) 데이터를 변형했다면, 코드를 되돌려도 DB는 그대로다. 그래서 스키마를 바꾸는 배포는 "이전 버전 코드도 새 스키마에서 동작하는가"(하위 호환)를 릴리스 전에 확인해야 한다. DB 자체를 되돌리는 건 외부 DB 백업 복원이라는 별개의, 훨씬 무거운 작업이다(그 사이 쌓인 데이터 유실).
 
 **롤백 후 할 일**: ① Mattermost/팀 채널에 롤백 사실과 현재 서비스 버전 공유 ② 실패한 버전의 컨테이너 로그 확보 (`docker logs`) ③ 원인 수정은 hotfix 절차(브랜치 전략 문서)로.
 
 ### 7.4 롤백 훈련
 
-장애 상황에서 처음 해보지 않도록, 배포 구조를 바꿀 때마다 한 번씩 즉시 롤백을 훈련한다. H2 임시 운용 중에는 두 슬롯의 DB가 분리된 점을 이용해 트래픽 이동을 눈으로 검증할 수 있다.
+장애 상황에서 처음 해보지 않도록, 배포 구조를 바꿀 때마다 한 번씩 즉시 롤백을 훈련한다. 두 슬롯이 같은 외부 DB·Redis를 쓰므로 데이터로는 트래픽 이동을 구분할 수 없다 — 슬롯을 바꾼 뒤 `docker logs --since 1m itda-backend-<색>-1`에 요청 로그가 찍히는 쪽으로 확인한다.
 
-1. 활성 슬롯에 테스트 계정 가입 → 성공 (활성 슬롯 DB에 기록됨)
-2. 같은 요청 반복 → 중복 에러 (기록 확인)
-3. 방법 1로 이전 슬롯으로 전환
-4. 같은 요청 반복 → **다시 성공하면 트래픽이 실제로 이전 슬롯(별도 DB)으로 이동한 것**
-5. 원래 슬롯으로 복귀 (같은 방법으로 포트 원복)
-
-RDS 연결 후에는 두 슬롯이 같은 DB를 공유하므로 이 방식은 쓸 수 없다 — 그때는 버전 응답(health의 버전 필드 등)으로 확인한다.
+1. 현재 활성 슬롯 확인: `cat /home/ubuntu/app/nginx/inc/backend.inc`
+2. 7.3절 방법 1로 이전 슬롯으로 전환 → `curl https://i-eum.site/api/v1/health` 200
+3. 이전 슬롯 컨테이너 로그에 방금 요청이 찍히는지 확인
+4. 같은 방법으로 원래 슬롯으로 복귀
 
 
 ## 8. 단계별 생성·변경 파일 요약
@@ -388,3 +492,86 @@ RDS 연결 후에는 두 슬롯이 같은 DB를 공유하므로 이 방식은 �
 | 6.2 환경 파일 | `/home/ubuntu/app/.env.config`, `.env.tags` | 최초만 사람 | config는 Jenkins(itda-env-config)가 원본·Sync가 반영, tags는 deploy.sh가 갱신 |
 | 6.4 빌드 | 로컬 Docker 이미지 (`itda-*:<태그>`) | docker build | 보존 정책(docker.md 5절)에 따라 정리 |
 | 배포·롤백 시마다 | `nginx/inc/*.inc` (한 줄 상태 파일) | deploy.sh 또는 사람(롤백) | 매 전환마다 덮어써짐 |
+| 5 초기 배치 / Sync | `/etc/nginx/sites-available/openvidu.conf` | 사람(최초) → Jenkins Sync | repo `deploy/nginx/openvidu.conf` 변경 시 재반영 |
+| Sync | `/home/ubuntu/app/downloads/` | Jenkins Sync(`mkdir -p`) | 내용은 `release-app.sh`만 바꾼다 (9절) |
+| Jenkins Redis 단계 | 컨테이너 `itda-redis`, 볼륨 `itda-redis-data` | `docker compose up -d redis` | 없음 (blue-green 대상 아님). 볼륨을 지우면 로그인 상태가 모두 사라진다 |
+
+## 9. 학습자 앱(APK) 배포
+
+APK는 PC에서 빌드해 두 곳에 올린다: **GitLab Releases**(기록·보관 — 프로젝트가 비공개라 학습자는 못 받음)와 **`https://i-eum.site/app`**(학습자 다운로드). 서버 배포 파이프라인은 `app-v*` 태그를 무시한다.
+
+| 위치 | 내용 |
+| --- | --- |
+| GitLab 일반 패키지 `ieum-android/<version>/` | `ieum-<version>.apk`, `ieum-<version>.apk.sha256` |
+| GitLab Release `app-v<version>` | 변경 내용 + versionCode + SHA-256, 위 두 파일 링크 |
+| 서버 `/home/ubuntu/app/downloads/` | `ieum.apk`(최신), `latest.json`, `ieum-<직전 버전>.apk`(하나만) |
+
+`latest.json` 형식 (앱의 새 버전 알림과 웹 다운로드 페이지가 읽는다):
+
+```json
+{ "version": "1.0.0", "versionCode": 1, "releasedAt": "2026-09-27T12:00:00Z", "sha256": "<hex>", "url": "https://i-eum.site/app/ieum.apk", "notes": "변경 내용 한두 줄" }
+```
+
+### 9.1 준비 (PC에서 한 번)
+
+- 릴리스 keystore를 만들어 **저장소 밖**에 두고 백업한다 — 잃으면 이미 설치된 앱을 업데이트할 수 없다.
+- `~/.gradle/gradle.properties`: `IEUM_UPLOAD_STORE_FILE`, `IEUM_UPLOAD_KEY_ALIAS`, `IEUM_UPLOAD_STORE_PASSWORD`, `IEUM_UPLOAD_KEY_PASSWORD` (없으면 release 빌드가 실패한다 — 디버그 키 서명 방지)
+- `ANDROID_SDK_ROOT`(또는 `ANDROID_HOME`) 환경변수가 Android SDK 설치 경로를 가리켜야 한다 — 스크립트가 그 아래 `build-tools/<버전>/apksigner`로 서명을 확인한다(디버그 키 서명 방지의 2차 확인)
+- `front/apps/mobile/.env.production` (git 제외): `EXPO_PUBLIC_API_URL=https://i-eum.site/api/v1`, `EXPO_PUBLIC_APP_RELEASE_URL=https://i-eum.site/app`. Cartesia 키는 넣지 않는다(backend가 대신 호출)
+- GitLab 개인 액세스 토큰(scope `api`)을 발급해 **만료일을 팀 일정에 기록**한다. 파일에 저장하지 않고 실행할 때 환경변수로만 준다
+- 서버 pem 파일 경로 (저장소 밖)
+
+### 9.2 절차
+
+1. `app.json`의 `expo.version`(예: `1.0.0`)과 `expo.android.versionCode`(릴리스마다 +1)를 함께 올리는 MR을 병합한다(브랜치 전략 7절의 `release/app-*` 흐름).
+2. 병합된 main 커밋에 **GitLab 웹 UI로** `app-v<version>` 태그를 만든다.
+3. PC에서 그 태그를 체크아웃하고 스크립트를 실행한다.
+
+```bash
+git fetch origin --tags && git checkout app-v1.0.0
+export GITLAB_TOKEN='<개인 액세스 토큰>'
+export IEUM_DEPLOY_KEY='C:/keys/<서버>.pem'
+scripts/release-app.sh "첫 배포: 실시간 수업 입장, 목소리 기능"
+```
+
+스크립트 순서: 확인(작업 트리·태그·versionCode·`.env.production`·토큰·서버 폴더) → `pnpm --filter @ieum/mobile test`·`typecheck` → `expo prebuild -p android --clean` + `gradlew assembleRelease` → **서명 확인(`apksigner verify --print-certs`로 디버그 키가 아닌지 확인 — `ANDROID_SDK_ROOT`/`ANDROID_HOME`에서 build-tools를 찾는다)** → SHA-256 → `latest.json` → GitLab 패키지·Release → 서버에 `*.tmp`로 올린 뒤 해시를 다시 확인하고 `mv`로 교체(이전 `ieum.apk`는 `ieum-<직전 버전>.apk`로 하나만 남김) → 공개 `latest.json` 확인. 실패하면 그 자리에서 멈추고 끝난 단계를 출력한다. 서버 교체가 마지막이라 그 전에 멈추면 학습자가 받는 파일은 그대로다.
+
+4. 확인: GitLab → Deploy → Releases에 `app-v<version>`, `https://i-eum.site/app`에 새 버전·배포일, 폰에서 설치 → 로그인 → 수업 입장.
+5. APK에 Cartesia 키가 없는지: `unzip -p ieum.apk assets/index.android.bundle | strings | grep -c sk_car` → `0`.
+
+다시 실행할 때: 서버 교체 단계 전(빌드·GitLab 업로드 도중)에 실패했다면 같은 명령을 그대로 다시 실행한다 — GitLab 패키지 파일과 Release가 이미 있으면 스크립트가 이를 감지해 다시 올리지 않고 건너뛴 뒤 서버 교체로 이어간다(같은 태그로 Release를 다시 만들려 해서 409로 거부되지 않는다). 새 버전으로 다시 릴리스하려면 versionCode를 올린다. 윈도우 빌드가 `Filename longer than 260 characters`로 죽으면 `docs/solutions/2026-09-24-windows-ninja-long-path.md`.
+
+### 9.3 되돌리기
+
+새 APK에 문제가 있으면 학습자에게 `https://i-eum.site/app/ieum-<직전 버전>.apk`를 안내한다. 같은 versionCode로 되돌려 설치할 수는 없으므로(안드로이드는 낮은 versionCode 설치를 거부) 기존 설치를 지우고 설치하거나, 고친 새 버전(versionCode +1)을 올린다.
+
+## 10. 서버에서 사람이 할 일 (에이전트는 서버 설정을 바꾸지 않는다)
+
+첫 배포(`release/0.1.0`) 전에 순서대로 한다. 서버 명령은 모두 사람이 실행한다.
+
+1. **읽기 전용 사전 확인** — 6.3절 스키마 확인, `sudo certbot renew --dry-run`(세 인증서 모두 성공), `ls -l /etc/nginx/sites-enabled/`에 `itda`와 `openvidu.conf`(또는 같은 파일을 가리키는 링크)가 하나씩만 있는지.
+2. **서버 사이트 파일과 저장소 비교** — Sync가 덮기 전에 차이가 없는지 본다. 본인 PC에서 `scp -i <pem> deploy/nginx/itda.conf deploy/nginx/openvidu.conf ubuntu@i-eum.site:/tmp/` 후 서버에서 `sudo diff /etc/nginx/sites-available/openvidu.conf /tmp/openvidu.conf`, `sudo diff /etc/nginx/sites-available/itda /tmp/itda.conf`. openvidu는 머리 주석 외에, itda는 주석·`/app/`·`11m`·옛 도메인 블록 외에 차이가 있으면 저장소를 먼저 고친다(MR). 끝나면 `rm /tmp/itda.conf /tmp/openvidu.conf`.
+3. **`itda-env-config` 갱신** — 6.2.1절 키를 모두 넣은 새 파일로 Jenkins credential 교체(README 3.5절). `deploy/.env.config.example`도 6.2.1절 내용으로 MR 갱신.
+4. **`downloads/` 권한** — nginx 작업 프로세스(`www-data`)가 파일을 읽을 수 있어야 한다. Ubuntu 24.04의 홈 디렉터리는 기본 `750`이라 막힐 수 있다.
+
+   ```bash
+   ls -ld /home/ubuntu /home/ubuntu/app /home/ubuntu/app/downloads
+   echo '{}' > /home/ubuntu/app/downloads/perm-check.json
+   sudo -u www-data cat /home/ubuntu/app/downloads/perm-check.json && echo READ-OK
+   rm /home/ubuntu/app/downloads/perm-check.json
+   ```
+
+   `READ-OK`가 안 나오면 경로 통과 권한만 준다: `chmod o+x /home/ubuntu /home/ubuntu/app` (목록 보기는 허용하지 않는다). `downloads/`는 첫 배포 Sync가 만들므로 이 확인은 첫 배포 직후, 앱 배포 전에 한다.
+5. **옛 도메인으로 된 주소 옮기기** — `j15b201.p.ssafy.io`는 301로 넘어가며, 301은 POST 본문을 잃을 수 있다. GitLab 웹훅 두 개(`pipeline.md` 7.5절)를 `https://i-eum.site/jenkins/project/...`로, Jenkins → System → Jenkins URL을 `https://i-eum.site/jenkins/`로 바꾼다. 바꾼 뒤 웹훅 Test → 200.
+6. **OpenVidu Meet 끄기(권장)·MinIO 확인** — `openvidu.md` 8절. 수업이 없는 시간에 한다(OpenVidu 재시작).
+7. **배포 후 확인** — spec §8 완료 기준: 헬스체크 200, 가입 메일 링크가 `i-eum.site`, 재로그인·토큰 갱신(Redis), 수업 음성, `curl -sI http://j15b201.p.ssafy.io/x` → `301` + `Location: https://i-eum.site/x`, `https://openvidu.i-eum.site` 유지.
+
+   **첫 배포에서 backend 헬스체크가 실패하면**: Jenkinsfile의 Deploy 단계는 `web backend ai` 순서로 진행하므로, backend에서 멈추면 web은 이미 새 빌드로 전환되어 있고 backend는 아직 이전 버전(또는 기동 실패 상태)이다 — web·backend 버전이 어긋난 채로 트래픽을 받지 않도록 web도 즉시 되돌린다.
+
+   ```bash
+   # 예: web을 blue(3001)로 되돌리기 (7.3절 방법 1과 같은 방식)
+   echo 'set $web_port 3001;' > /home/ubuntu/app/nginx/inc/web.inc
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+   또는 Jenkins에서 `itda-rollback` 잡을 `web` 서비스·직전 태그로 실행해 같은 결과를 얻는다(pipeline.md 6절). Jenkinsfile의 Deploy 단계 서비스 순서(`web backend ai`)는 이 문서·Jenkinsfile 양쪽에서 바꾸지 않는다 — 바꾸려면 별도 검토가 필요하다.

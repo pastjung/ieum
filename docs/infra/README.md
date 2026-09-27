@@ -5,8 +5,11 @@
 ## 1. 전체 그림
 
 ```
-[사용자] ── HTTPS ──> EC2 호스트 Nginx ──┬── /      → web (React+nginx)     blue/green
-                                         ├── /api/  → backend (Spring Boot) blue/green
+[사용자] ── HTTPS ──> EC2 호스트 Nginx ──┬── i-eum.site /      → web (React+nginx)     blue/green
+                                         ├── i-eum.site /api/  → backend (Spring Boot) blue/green ──> Redis(itda-redis) · 외부 MariaDB
+                                         ├── i-eum.site /app/  → 학습자 앱 파일 (APK · latest.json)
+                                         ├── openvidu.i-eum.site → OpenVidu 3.8 (실시간 음성)
+                                         ├── j15b201.p.ssafy.io → i-eum.site 로 301
                                          └── (내부)  → ai (FastAPI)          blue/green
                                                         ↑ backend만 호출 가능 (외부 차단)
 
@@ -25,9 +28,9 @@
 | --- | --- |
 | [architecture.md](./architecture.md) | 아키텍처 다이어그램 2장 — 사용자 요청 흐름, CI/CD 전체 흐름 |
 | [docker.md](./docker.md) | 단일 멀티스테이지 Dockerfile 전략, 로컬 개발(compose --watch), 이미지 보존 정책 |
-| [deploy.md](./deploy.md) | EC2 구축, HTTPS(Certbot), 3중 방어, 수동 배포·롤백 절차(비상용), blue-green 원리 |
+| [deploy.md](./deploy.md) | EC2 구축, HTTPS(Certbot), 3중 방어, 운영 설정 키 목록, 외부 DB 스키마 확인, 수동 배포·롤백 절차(비상용), blue-green 원리, **학습자 앱(APK) 배포**, 첫 배포 전 사람이 할 일 |
 | [jenkins.md](./jenkins.md) | Jenkins 설치 구성, docker.sock 보안 원칙, Credentials 계약 표, 백업 |
-| [openvidu.md](./openvidu.md) | 실시간 수업 음성(OpenVidu 3.8) — 구성, 포트·ufw, 공인 IP 고정, backend 연결 설정, 트러블슈팅 |
+| [openvidu.md](./openvidu.md) | 실시간 수업 음성(OpenVidu 3.8) — 구성, 포트·ufw, 공인 IP 고정, backend 연결 설정, 트러블슈팅, Meet 끄기 |
 | [pipeline.md](./pipeline.md) | MR 검증·AI 리뷰·배포·롤백 파이프라인, Mattermost 알림, **재현 체크리스트(7절)**, 트러블슈팅 사례집 |
 
 팀 노션에도 같은 주제의 개념 설명 문서가 있다 (초심자용 — 주요 로직 설계 페이지).
@@ -78,9 +81,13 @@ docker build -t itda-backend:<태그> apps/backend   # repo 클론 후
 
 1. Jenkins → Manage Jenkins → Credentials → `itda-env-config` → Update → 새 파일 업로드 (기존 내용에서 필요한 값만 바꾼 파일)
 2. 재배포로 반영 — 환경변수는 컨테이너 시작 시 읽히므로, `itda-rollback` 잡에 **현재 태그 그대로** 넣어 실행하면 코드는 그대로인 채 새 설정으로 무중단 재기동된다
-3. 항목(키)이 추가·삭제됐으면 repo `deploy/.env.config.example`도 MR로 갱신 (값 말고 구조의 원본은 repo)
+3. 항목(키)이 추가·삭제됐으면 repo `deploy/.env.config.example`도 MR로 갱신 (값 말고 구조의 원본은 repo). 현재 키 목록: [deploy.md 6.2.1절](./deploy.md)
 
 서버의 `.env.config`를 직접 고치면 **다음 배포 때 Jenkins 원본으로 덮여 사라진다.** `.env.tags`(배포 태그 상태)는 deploy.sh 전용이니 사람이 절대 건드리지 않는다.
+
+### 3.6 학습자 앱 배포 — APK
+
+앱은 서버 파이프라인과 따로, 릴리스 담당자가 PC에서 `scripts/release-app.sh`로 올린다 (GitLab Releases + `https://i-eum.site/app`). 준비물과 절차는 [deploy.md 9절](./deploy.md).
 
 ## 4. 하지 말 것 (사고 방지 규칙)
 
@@ -98,6 +105,6 @@ docker build -t itda-backend:<태그> apps/backend   # repo 클론 후
 | 3. Jenkins | 컨테이너 설치, Nginx 경유, Credentials 체계 | ✅ |
 | 4. CI/CD | MR 검증, AI 코드리뷰, 자동 배포(rc/v*), 롤백 잡, 인프라 동기화, 이미지 정리, Mattermost 알림 | ✅ (릴리스 사이클 3회 실전 검증) |
 | 5. 모니터링 | Prometheus + Grafana, 운영 대시보드 | 예정 |
-| - | RDS 연결 (현재 backend는 H2 임시 운용 — 재배포 시 데이터 소실) | 팀 일정 대기 |
+| 6. 운영 재구축 | i-eum.site 통일, 외부 MariaDB·운영 Redis, OpenVidu nginx 저장소 관리, 앱(APK) 배포 경로 | 진행 중 |
 
 운영 주의: GitLab 토큰(만료 4주)은 만료 전 재발급 필요 — 절차는 [pipeline.md 7.1절](./pipeline.md).

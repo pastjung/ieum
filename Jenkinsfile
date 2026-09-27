@@ -10,6 +10,8 @@
 //   deploy.sh(sudo nginx reload 포함)는 호스트에서만 돌 수 있으므로
 //   자기 호스트에 SSH(ec2-deploy-key)로 접속해 실행한다.
 //   → 사람이 수동 배포할 때와 100% 같은 스크립트, 같은 경로.
+//
+// 단계: Plan → Sync(compose·scripts·nginx 사이트 파일 2개 + connection-upgrade.conf(3개 파일)) → Build → Redis(itda-redis 보장) → Deploy → Cleanup
 // =========================================================================
 // Mattermost 알림 — 전송 실패는 로그만 남기고 빌드 결과에 영향을 주지 않는다
 def notifyMM(String text) {
@@ -139,6 +141,9 @@ pipeline {
 
         // ── 2. 인프라 파일 동기화 — 원본을 서버 사본에 매 배포마다 반영 ──
         //    .env.config는 Jenkins Secret file(itda-env-config)이 원본이다.
+        //    nginx는 사이트 파일 2개(itda, openvidu.conf)와 conf.d/connection-upgrade.conf를
+        //    모두 백업한 뒤 덮고, nginx -t가 실패하면 셋 다 되돌리고 배포를 멈춘다.
+        //    downloads/(앱 배포 파일)는 없으면 만들기만 하고 내용은 건드리지 않는다.
         //    제외: .env.tags(활성 태그 상태 — deploy.sh가 갱신, 서버가 원본),
         //          nginx/inc(활성 슬롯 상태, 서버가 원본),
         //          deploy/jenkins(배포 중 자기 재생성 불가 — 수동 반영)
@@ -157,24 +162,40 @@ pipeline {
                             "\$SSH_USER"@${DEPLOY_HOST}:/home/ubuntu/app/.env.config
                         scp -i "\$SSH_KEY" scripts/deploy.sh scripts/cleanup-images.sh \\
                             "\$SSH_USER"@${DEPLOY_HOST}:/home/ubuntu/app/scripts/
-                        scp -i "\$SSH_KEY" deploy/nginx/itda.conf deploy/nginx/connection-upgrade.conf \\
+                        scp -i "\$SSH_KEY" deploy/nginx/itda.conf deploy/nginx/openvidu.conf \\
+                            deploy/nginx/connection-upgrade.conf \\
                             "\$SSH_USER"@${DEPLOY_HOST}:/tmp/
                         ssh -i "\$SSH_KEY" "\$SSH_USER"@${DEPLOY_HOST} '
                             set -e
                             chmod +x /home/ubuntu/app/scripts/*.sh
                             chmod 600 /home/ubuntu/app/.env.config
+                            mkdir -p /home/ubuntu/app/downloads
                             sudo cp /etc/nginx/sites-available/itda /tmp/itda.rollback
-                            sudo cp /tmp/itda.conf /etc/nginx/sites-available/itda
-                            sudo cp /tmp/connection-upgrade.conf /etc/nginx/conf.d/connection-upgrade.conf
+                            sudo cp /etc/nginx/sites-available/openvidu.conf /tmp/openvidu.rollback
+                            sudo cp /etc/nginx/conf.d/connection-upgrade.conf /tmp/connection-upgrade.rollback
+                            if ! (
+                                set -e
+                                sudo cp /tmp/itda.conf /etc/nginx/sites-available/itda
+                                sudo cp /tmp/openvidu.conf /etc/nginx/sites-available/openvidu.conf
+                                sudo cp /tmp/connection-upgrade.conf /etc/nginx/conf.d/connection-upgrade.conf
+                            ); then
+                                echo "[sync] nginx 설정 파일 복사 실패 — 세 파일을 이전 설정으로 복원하고 배포를 중단한다"
+                                sudo cp /tmp/itda.rollback /etc/nginx/sites-available/itda
+                                sudo cp /tmp/openvidu.rollback /etc/nginx/sites-available/openvidu.conf
+                                sudo cp /tmp/connection-upgrade.rollback /etc/nginx/conf.d/connection-upgrade.conf
+                                exit 1
+                            fi
                             if sudo nginx -t; then
                                 sudo systemctl reload nginx
                             else
-                                echo "[sync] nginx 설정 오류 — 이전 설정으로 복원하고 배포를 중단한다"
+                                echo "[sync] nginx 설정 오류 — 세 파일을 이전 설정으로 복원하고 배포를 중단한다"
                                 sudo cp /tmp/itda.rollback /etc/nginx/sites-available/itda
+                                sudo cp /tmp/openvidu.rollback /etc/nginx/sites-available/openvidu.conf
+                                sudo cp /tmp/connection-upgrade.rollback /etc/nginx/conf.d/connection-upgrade.conf
                                 exit 1
                             fi
-                            rm -f /tmp/itda.conf /tmp/connection-upgrade.conf
-                            sudo rm -f /tmp/itda.rollback
+                            rm -f /tmp/itda.conf /tmp/openvidu.conf /tmp/connection-upgrade.conf
+                            sudo rm -f /tmp/itda.rollback /tmp/openvidu.rollback /tmp/connection-upgrade.rollback
                         '
                     """
                 }
@@ -193,6 +214,37 @@ pipeline {
                             sh "docker build -t itda-${svc}:${env.DEPLOY_TAG} apps/${svc}"
                         }
                     }
+                }
+            }
+        }
+
+        // ── 3-1. 운영 Redis 보장 — blue-green 대상이 아니다 ──────────────
+        //    이미 떠 있으면 up -d는 아무것도 하지 않는다. backend가 기동 시 PING을
+        //    보내므로 PONG까지 확인한 뒤 Deploy로 넘어간다.
+        stage('Redis') {
+            when { expression { env.DEPLOY_SERVICES } }
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-deploy-key',
+                                                   keyFileVariable: 'SSH_KEY',
+                                                   usernameVariable: 'SSH_USER')]) {
+                    sh """
+                        ssh -i "\$SSH_KEY" -o StrictHostKeyChecking=accept-new \\
+                            "\$SSH_USER"@${DEPLOY_HOST} '
+                            set -e
+                            cd /home/ubuntu/app
+                            docker compose -f docker-compose.prod.yml --env-file .env.config --env-file .env.tags up -d redis
+                            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+                                if docker exec itda-redis redis-cli ping 2>/dev/null | grep -q PONG; then
+                                    echo "[redis] itda-redis PONG"
+                                    exit 0
+                                fi
+                                sleep 2
+                            done
+                            echo "[redis] itda-redis가 30초 안에 응답하지 않아 배포를 중단한다" >&2
+                            docker logs --tail 30 itda-redis >&2 || true
+                            exit 1
+                        '
+                    """
                 }
             }
         }
