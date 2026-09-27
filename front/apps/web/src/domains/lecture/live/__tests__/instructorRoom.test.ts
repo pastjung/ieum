@@ -229,6 +229,13 @@ describe('instructorRoom', () => {
     expect(rosters[rosters.length - 1]).toEqual([])
   })
 
+  it('내 마이크 소리 크기를 0~1로 알려 준다', async () => {
+    const room = await connectInstructorRoom(token, () => {})
+    expect(room.micLevel()).toBe(0)
+    ;(rooms[0].localParticipant as { audioLevel?: number }).audioLevel = 0.4
+    expect(room.micLevel()).toBe(0.4)
+  })
+
   it('마이크를 켠 뒤 소리 재생을 풀어 보고, 막혔으면 다시 시도할 수 있다', async () => {
     const { Room } = await import('livekit-client')
     vi.mocked(Room).mockImplementationOnce(() => {

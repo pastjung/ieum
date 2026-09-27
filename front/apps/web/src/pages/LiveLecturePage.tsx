@@ -29,10 +29,11 @@ import type {
   ProblemAnswers,
   StudentAnswer,
 } from '../domains/lecture/model/types'
+import { meterHeights } from '../domains/lecture/live/micMeter'
 import { AnswerDetailPopover } from '../domains/lecture/ui/AnswerDetailPopover'
 import { ProblemSetPanel } from '../domains/lecture/ui/ProblemSetPanel'
 import { errorMessage } from '../shared/ui/errorMessage'
-import { buttonStyle, cardStyle, dimmed, inactive } from '../shared/ui/styles'
+import { buttonStyle, cardStyle, dimmed } from '../shared/ui/styles'
 import { theme } from '../shared/ui/theme'
 
 const c = theme.color
@@ -83,9 +84,6 @@ function problemErrorMessage(e: unknown): string {
     ? PROBLEM_UNLINKED_MESSAGE
     : errorMessage(e)
 }
-
-/** 목: 장식용 음량 막대 높이(%) */
-const LEVEL_BARS = [40, 75, 55, 90, 35, 65, 50]
 
 /** 2열 그리드는 왼쪽→오른쪽, 위→아래로 채워지므로 점 번호를 1·4 / 2·5 / 3·6 순서로 놓는다 */
 const DOT_ORDER = [1, 4, 2, 5, 3, 6]
@@ -357,6 +355,8 @@ export function LiveLecturePage() {
   const [pendingUserId, setPendingUserId] = useState<string | null>(null)
   /** 답안 상세 보기를 펼친 학생. 한 번에 한 명만 연다 */
   const [detailUserId, setDetailUserId] = useState<string | null>(null)
+  /** 내 마이크 소리 크기(0~1) — 음량 막대용 */
+  const [micLevel, setMicLevel] = useState(0)
   /** 마지막으로 받은 답안 목록. problemId가 지금 문제와 같을 때만 화면에 쓴다 */
   const [answerSet, setAnswerSet] = useState<ProblemAnswers | null>(null)
   /** 이번 세션에 한 번이라도 지금 문제였던 problemId (새로고침하면 지금 문제만 남는다) */
@@ -499,6 +499,16 @@ export function LiveLecturePage() {
     // 문제가 바뀌면 이전 문제의 상세는 의미가 없다
     setDetailUserId(null)
   }, [currentProblemId])
+
+  // 송출 중일 때만 마이크 소리 크기를 읽어 음량 막대를 움직인다
+  useEffect(() => {
+    if (!mic || roomState !== 'connected') {
+      setMicLevel(0)
+      return
+    }
+    const timer = window.setInterval(() => setMicLevel(roomRef.current?.micLevel() ?? 0), 100)
+    return () => window.clearInterval(timer)
+  }, [mic, roomState])
 
   async function run(action: () => Promise<void>, mapError: (e: unknown) => string = errorMessage) {
     setBusy(true)
@@ -644,7 +654,6 @@ export function LiveLecturePage() {
   const elapsed = lecture.startedAt
     ? formatElapsed(elapsedEnd - Date.parse(lecture.startedAt))
     : '--:--'
-  const barButton: CSSProperties = { ...buttonStyle('darkOutline', 'sm'), fontSize: 13.5 }
   const micButton: CSSProperties = {
     ...buttonStyle('darkOutline', 'sm'),
     flex: 1,
@@ -744,10 +753,6 @@ export function LiveLecturePage() {
               {elapsed}
             </span>
           </div>
-          {/* 목: 일시 정지는 MVP 범위 밖 */}
-          <button type="button" disabled title="준비 중" style={{ ...barButton, ...inactive }}>
-            일시 정지
-          </button>
           {lecture.status === 'SCHEDULED' ? (
             <button
               type="button"
@@ -845,24 +850,6 @@ export function LiveLecturePage() {
                   오른쪽에서 문제를 골라 출제하세요
                 </p>
               )}
-              <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
-                <button
-                  type="button"
-                  disabled
-                  title="준비 중"
-                  style={{ ...buttonStyle('outline'), ...inactive }}
-                >
-                  한 번 더 읽어주기
-                </button>
-                <button
-                  type="button"
-                  disabled
-                  title="준비 중"
-                  style={{ ...buttonStyle('mintOutline'), fontWeight: 800, ...inactive }}
-                >
-                  오른쪽에서 다음 문제 선택 ▸
-                </button>
-              </div>
             </div>
             {currentProblem && (
               <div
@@ -1117,18 +1104,19 @@ export function LiveLecturePage() {
                 {indicator.label}
               </span>
             </div>
-            {/* 목: 장식용 음량 막대 — 송출 중일 때만 민트 */}
+            {/* 실제: 강사 마이크 소리 크기 — 송출 중일 때만 움직이고 민트 */}
             <div
               aria-hidden="true"
               style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 30 }}
             >
-              {LEVEL_BARS.map((height, i) => (
+              {meterHeights(micLevel, indicator.live).map((height, i) => (
                 <span
                   key={i}
                   style={{
                     width: 6,
                     height: `${height}%`,
                     borderRadius: 2,
+                    transition: 'height 90ms linear',
                     background: indicator.live ? c.primary : c.darkLine,
                   }}
                 />
@@ -1163,10 +1151,6 @@ export function LiveLecturePage() {
                   마이크 끄기
                 </button>
               )}
-              {/* 목: 장치 선택은 MVP 범위 밖 */}
-              <button type="button" disabled title="준비 중" style={{ ...micButton, ...inactive }}>
-                장치 선택
-              </button>
             </div>
             <div style={{ fontSize: 11.5, color: c.darkTextSub }}>
               발언을 허용한 학생만 말할 수 있어요 · 녹음·저장 없음

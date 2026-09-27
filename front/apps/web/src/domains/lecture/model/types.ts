@@ -17,8 +17,20 @@ export interface InstructorLecture {
   linkedProblems: LinkedProblem[]
 }
 
+/** 수업 목록 한 줄 — 목록 API에만 붙는 집계 값 (API 명세 8.2절) */
+export interface LectureListItem extends InstructorLecture {
+  /** 연결된 문제 수 */
+  problemCount: number
+  /** 지금 입장해 있는 학생 수 (퇴장하지 않은 참여자) */
+  joinedCount: number
+  /** 한 번이라도 입장한 학생 수 */
+  participantCount: number
+  /** 이 수업 LIVE 답안의 정답률(0~100, 반올림). 제출이 없으면 null */
+  correctRate: number | null
+}
+
 export interface LecturePage {
-  items: InstructorLecture[]
+  items: LectureListItem[]
   page: number
   size: number
   totalElements: number
