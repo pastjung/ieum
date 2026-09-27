@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@ieum/api-client'
 import { lectureApi } from '../domains/lecture/api/lectureApi'
@@ -9,13 +9,19 @@ import {
 } from '../domains/lecture/live/instructorRoom'
 import type { RosterStudent } from '../domains/lecture/live/roster'
 import {
+  compareCells,
+  type CellCompare,
   progressCounts,
   studentAnswerView,
   type AnswerState,
   type StudentAnswerView,
 } from '../domains/lecture/model/answerView'
 import { dotLabel, dotsOf } from '../domains/lecture/model/braille'
-import { mergeLinkedProblem, reconcileLinkedProblems } from '../domains/lecture/model/problemSet'
+import {
+  mergeLinkedProblem,
+  problemTitleSize,
+  reconcileLinkedProblems,
+} from '../domains/lecture/model/problemSet'
 import type {
   InstructorLecture,
   LectureStatus,
@@ -23,9 +29,11 @@ import type {
   ProblemAnswers,
   StudentAnswer,
 } from '../domains/lecture/model/types'
+import { meterHeights } from '../domains/lecture/live/micMeter'
+import { AnswerDetailPopover } from '../domains/lecture/ui/AnswerDetailPopover'
 import { ProblemSetPanel } from '../domains/lecture/ui/ProblemSetPanel'
 import { errorMessage } from '../shared/ui/errorMessage'
-import { buttonStyle, cardStyle, dimmed, inactive } from '../shared/ui/styles'
+import { buttonStyle, cardStyle, dimmed } from '../shared/ui/styles'
 import { theme } from '../shared/ui/theme'
 
 const c = theme.color
@@ -76,9 +84,6 @@ function problemErrorMessage(e: unknown): string {
     ? PROBLEM_UNLINKED_MESSAGE
     : errorMessage(e)
 }
-
-/** 목: 장식용 음량 막대 높이(%) */
-const LEVEL_BARS = [40, 75, 55, 90, 35, 65, 50]
 
 /** 2열 그리드는 왼쪽→오른쪽, 위→아래로 채워지므로 점 번호를 1·4 / 2·5 / 3·6 순서로 놓는다 */
 const DOT_ORDER = [1, 4, 2, 5, 3, 6]
@@ -143,6 +148,10 @@ interface StudentCardProps {
   student: RosterStudent
   /** 지금 문제에 대한 답안 칸. 지금 문제가 없으면 null(칸을 그리지 않는다) */
   answer: StudentAnswerView | null
+  /** 칸별 비교(상세 보기). 제출하지 않았으면 null */
+  compare: CellCompare[] | null
+  detailOpen: boolean
+  onToggleDetail: () => void
   /** 수업 중이고 음성 방에 연결돼 있을 때만 발언을 바꿀 수 있다 */
   canControl: boolean
   /** 이 학생의 발언 요청이 진행 중 */
@@ -154,14 +163,25 @@ interface StudentCardProps {
 function StudentCard({
   student,
   answer,
+  compare,
+  detailOpen,
+  onToggleDetail,
   canControl,
   pending,
   disabled,
   onToggleSpeaking,
 }: StudentCardProps) {
   const action = student.speakingAllowed ? '발언 끄기' : '발언 허용'
+  const cardRef = useRef<HTMLLIElement>(null)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  const detailId = useId()
+  const closeDetail = useCallback(() => {
+    onToggleDetail()
+    toggleRef.current?.focus()
+  }, [onToggleDetail])
   return (
     <li
+      ref={cardRef}
       style={{
         borderRadius: theme.radius.control,
         padding: 12,
@@ -225,31 +245,79 @@ function StudentCard({
         </span>
         {student.isSpeaking && <span style={{ color: c.primaryDark }}>말하는 중</span>}
       </div>
-      {/* 실제: 지금 문제에 제출한 점자와 결과 (걸린 시간은 저장하지 않으므로 표시하지 않는다) */}
+      {/* 실제: 지금 문제에 제출한 점자. 정오는 칸 색으로만 보이고, 어디가 틀렸는지는 상세 보기에서 본다 */}
       {answer && (
         <div
+          aria-label={
+            answer.glyph
+              ? `${answer.state === 'correct' ? '정답' : '오답'}, 제출 ${answer.glyph}`
+              : answer.detail
+          }
           style={{
             ...ANSWER_LOOK[answer.state].box,
             borderRadius: theme.radius.small,
-            padding: '6px 8px',
-            minHeight: 32,
+            padding: '8px 10px',
+            minHeight: 44,
             boxSizing: 'border-box',
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            minWidth: 0,
           }}
         >
-          {answer.glyph && (
-            <span style={{ fontSize: 18, lineHeight: 1, color: ANSWER_LOOK[answer.state].accent }}>
+          {answer.glyph ? (
+            <span
+              aria-hidden="true"
+              style={{
+                fontSize: 28,
+                lineHeight: 1.1,
+                letterSpacing: '.04em',
+                color: ANSWER_LOOK[answer.state].accent,
+                overflowWrap: 'anywhere',
+              }}
+            >
               {answer.glyph}
             </span>
+          ) : (
+            <span
+              style={{ fontSize: 13, fontWeight: 800, color: ANSWER_LOOK[answer.state].accent }}
+            >
+              {answer.detail}
+            </span>
           )}
-          <span
-            style={{ fontSize: 11.5, fontWeight: 700, color: ANSWER_LOOK[answer.state].accent }}
-          >
-            {answer.detail}
-          </span>
         </div>
+      )}
+      {answer && answer.state !== 'idle' && compare && (
+        <>
+          <button
+            ref={toggleRef}
+            type="button"
+            onClick={onToggleDetail}
+            aria-expanded={detailOpen}
+            aria-controls={detailOpen ? detailId : undefined}
+            style={{
+              alignSelf: 'flex-start',
+              border: 'none',
+              background: 'transparent',
+              padding: '2px 0',
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: c.textSub,
+              cursor: 'pointer',
+            }}
+          >
+            {detailOpen ? '상세 닫기 ▴' : '상세 보기 ▾'}
+          </button>
+          {detailOpen && (
+            <AnswerDetailPopover
+              id={detailId}
+              anchor={cardRef.current}
+              studentName={student.name}
+              correct={answer.state === 'correct'}
+              rows={compare}
+              onClose={closeDetail}
+            />
+          )}
+        </>
       )}
       {canControl && (
         <button
@@ -285,6 +353,10 @@ export function LiveLecturePage() {
   const [students, setStudents] = useState<RosterStudent[]>([])
   const [audioBlocked, setAudioBlocked] = useState(false)
   const [pendingUserId, setPendingUserId] = useState<string | null>(null)
+  /** 답안 상세 보기를 펼친 학생. 한 번에 한 명만 연다 */
+  const [detailUserId, setDetailUserId] = useState<string | null>(null)
+  /** 내 마이크 소리 크기(0~1) — 음량 막대용 */
+  const [micLevel, setMicLevel] = useState(0)
   /** 마지막으로 받은 답안 목록. problemId가 지금 문제와 같을 때만 화면에 쓴다 */
   const [answerSet, setAnswerSet] = useState<ProblemAnswers | null>(null)
   /** 이번 세션에 한 번이라도 지금 문제였던 problemId (새로고침하면 지금 문제만 남는다) */
@@ -424,7 +496,19 @@ export function LiveLecturePage() {
   const currentProblemId = lecture?.currentProblem?.problemId ?? null
   useEffect(() => {
     currentProblemIdRef.current = currentProblemId
+    // 문제가 바뀌면 이전 문제의 상세는 의미가 없다
+    setDetailUserId(null)
   }, [currentProblemId])
+
+  // 송출 중일 때만 마이크 소리 크기를 읽어 음량 막대를 움직인다
+  useEffect(() => {
+    if (!mic || roomState !== 'connected') {
+      setMicLevel(0)
+      return
+    }
+    const timer = window.setInterval(() => setMicLevel(roomRef.current?.micLevel() ?? 0), 100)
+    return () => window.clearInterval(timer)
+  }, [mic, roomState])
 
   async function run(action: () => Promise<void>, mapError: (e: unknown) => string = errorMessage) {
     setBusy(true)
@@ -570,7 +654,6 @@ export function LiveLecturePage() {
   const elapsed = lecture.startedAt
     ? formatElapsed(elapsedEnd - Date.parse(lecture.startedAt))
     : '--:--'
-  const barButton: CSSProperties = { ...buttonStyle('darkOutline', 'sm'), fontSize: 13.5 }
   const micButton: CSSProperties = {
     ...buttonStyle('darkOutline', 'sm'),
     flex: 1,
@@ -670,10 +753,6 @@ export function LiveLecturePage() {
               {elapsed}
             </span>
           </div>
-          {/* 목: 일시 정지는 MVP 범위 밖 */}
-          <button type="button" disabled title="준비 중" style={{ ...barButton, ...inactive }}>
-            일시 정지
-          </button>
           {lecture.status === 'SCHEDULED' ? (
             <button
               type="button"
@@ -733,18 +812,20 @@ export function LiveLecturePage() {
             </p>
           )}
 
-          {/* 실제: 지금 문제 (강사 Snapshot currentProblem) */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 32,
-            }}
-          >
-            {currentProblem ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-                <div>
+          {/* 실제: 지금 문제 (강사 Snapshot currentProblem) — 윗줄 제목·버튼, 아랫줄 칸별 정답 점형 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
+                gap: 16,
+              }}
+            >
+              {currentProblem ? (
+                // 좁으면 버튼이 먼저 다음 줄로 내려간다 — 제목이 낱말 안에서 꺾이지 않게 최소 폭을 둔다
+                <div style={{ minWidth: 0, flex: '1 1 320px' }}>
                   <div style={{ fontSize: 13, color: c.textSub }}>
                     지금 문제
                     {currentIndex >= 0
@@ -753,61 +834,67 @@ export function LiveLecturePage() {
                   </div>
                   <div
                     style={{
-                      fontSize: 42,
+                      fontSize: problemTitleSize(currentProblem.displayText),
                       fontWeight: 900,
                       letterSpacing: '-.02em',
-                      lineHeight: 1.1,
+                      lineHeight: 1.2,
+                      wordBreak: 'keep-all',
+                      overflowWrap: 'anywhere',
                     }}
                   >
                     {currentProblem.displayText}
                   </div>
                 </div>
-                <div
+              ) : (
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: c.textSub }}>
+                  오른쪽에서 문제를 골라 출제하세요
+                </p>
+              )}
+            </div>
+            {currentProblem && (
+              <div
+                style={{
+                  ...cardStyle,
+                  borderRadius: theme.radius.panel,
+                  padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                <span style={{ fontSize: 12, color: c.textSub }}>
+                  정답 점형 · {currentProblem.cellCount}칸
+                </span>
+                <ol
+                  aria-label={`정답 점형 ${dotLabel(currentProblem.expectedPattern)}`}
                   style={{
-                    ...cardStyle,
-                    borderRadius: theme.radius.panel,
-                    padding: '12px 16px',
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: 16,
+                    flexWrap: 'wrap',
+                    gap: 12,
                   }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={{ fontSize: 12, color: c.textSub }}>정답 점형</span>
-                    <span style={{ fontFamily: mono, fontSize: 14, fontWeight: 700 }}>
-                      {dotLabel(currentProblem.expectedPattern)}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxWidth: 420 }}>
-                    {currentProblem.expectedPattern.map((pattern, i) => (
-                      <BrailleCell key={i} dots={dotsOf(pattern)} />
-                    ))}
-                  </div>
-                </div>
+                  {currentProblem.expectedPattern.map((pattern, i) => (
+                    <li
+                      key={i}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <BrailleCell dots={dotsOf(pattern)} />
+                      <span style={{ fontFamily: mono, fontSize: 12, fontWeight: 700 }}>
+                        {dotLabel([pattern])}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               </div>
-            ) : (
-              <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: c.textSub }}>
-                오른쪽에서 문제를 골라 출제하세요
-              </p>
             )}
-            <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
-              <button
-                type="button"
-                disabled
-                title="준비 중"
-                style={{ ...buttonStyle('outline'), ...inactive }}
-              >
-                한 번 더 읽어주기
-              </button>
-              <button
-                type="button"
-                disabled
-                title="준비 중"
-                style={{ ...buttonStyle('mintOutline'), fontWeight: 800, ...inactive }}
-              >
-                오른쪽에서 다음 문제 선택 ▸
-              </button>
-            </div>
           </div>
 
           {/* 실제: 제출 현황 — 답안 목록과 LiveKit 접속자로 계산 (접속 학생 기준) */}
@@ -942,7 +1029,7 @@ export function LiveLecturePage() {
                   minHeight: 0,
                   overflowY: 'auto',
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
                   alignContent: 'start',
                   gap: 10,
                 }}
@@ -953,6 +1040,16 @@ export function LiveLecturePage() {
                     student={student}
                     answer={
                       currentProblem ? studentAnswerView(answersByUser.get(student.userId)) : null
+                    }
+                    compare={(() => {
+                      const submitted = currentProblem
+                        ? answersByUser.get(student.userId)
+                        : undefined
+                      return submitted ? compareCells(submitted.cells) : null
+                    })()}
+                    detailOpen={detailUserId === student.userId}
+                    onToggleDetail={() =>
+                      setDetailUserId((open) => (open === student.userId ? null : student.userId))
                     }
                     canControl={canControl}
                     pending={pendingUserId === student.userId}
@@ -1007,18 +1104,19 @@ export function LiveLecturePage() {
                 {indicator.label}
               </span>
             </div>
-            {/* 목: 장식용 음량 막대 — 송출 중일 때만 민트 */}
+            {/* 실제: 강사 마이크 소리 크기 — 송출 중일 때만 움직이고 민트 */}
             <div
               aria-hidden="true"
               style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 30 }}
             >
-              {LEVEL_BARS.map((height, i) => (
+              {meterHeights(micLevel, indicator.live).map((height, i) => (
                 <span
                   key={i}
                   style={{
                     width: 6,
                     height: `${height}%`,
                     borderRadius: 2,
+                    transition: 'height 90ms linear',
                     background: indicator.live ? c.primary : c.darkLine,
                   }}
                 />
@@ -1053,10 +1151,6 @@ export function LiveLecturePage() {
                   마이크 끄기
                 </button>
               )}
-              {/* 목: 장치 선택은 MVP 범위 밖 */}
-              <button type="button" disabled title="준비 중" style={{ ...micButton, ...inactive }}>
-                장치 선택
-              </button>
             </div>
             <div style={{ fontSize: 11.5, color: c.darkTextSub }}>
               발언을 허용한 학생만 말할 수 있어요 · 녹음·저장 없음

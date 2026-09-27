@@ -40,3 +40,14 @@ export function reconcileLinkedProblems(
 ): LinkedProblem[] {
   return localProblems.reduce(mergeLinkedProblem, serverProblems)
 }
+
+/**
+ * 지금 문제 제목 글자 크기(px). 긴 낱말·문장이 한 글자씩 세로로 꺾이지 않도록 길이에 따라 줄인다.
+ * 공백은 세지 않는다 — 줄바꿈은 낱말 사이에서만 일어난다(word-break: keep-all).
+ */
+export function problemTitleSize(text: string): number {
+  const length = text.replace(/\s/g, '').length
+  if (length <= 6) return 42
+  if (length <= 12) return 32
+  return 26
+}

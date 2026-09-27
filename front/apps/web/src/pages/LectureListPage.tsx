@@ -1,11 +1,12 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { lectureApi } from '../domains/lecture/api/lectureApi'
-import type { InstructorLecture, LectureStatus } from '../domains/lecture/model/types'
+import { closedSummary, openSummary } from '../domains/lecture/model/lectureSummary'
+import type { LectureListItem, LectureStatus } from '../domains/lecture/model/types'
 import { errorMessage } from '../shared/ui/errorMessage'
 import { PageHeader } from '../shared/ui/PageHeader'
 import { SidebarLayout } from '../shared/ui/SidebarLayout'
-import { buttonStyle, inactive } from '../shared/ui/styles'
+import { buttonStyle } from '../shared/ui/styles'
 import { theme } from '../shared/ui/theme'
 
 const c = theme.color
@@ -69,7 +70,7 @@ function Code({ value }: { value: string }) {
   return <span style={{ fontFamily: theme.font.mono, fontWeight: 700 }}>{value}</span>
 }
 
-function LectureRow({ lecture }: { lecture: InstructorLecture }) {
+function LectureRow({ lecture }: { lecture: LectureListItem }) {
   const liveUrl = `/lectures/${lecture.lectureId}/live`
 
   if (lecture.status === 'OPEN') {
@@ -81,8 +82,8 @@ function LectureRow({ lecture }: { lecture: InstructorLecture }) {
             <span style={{ fontSize: 16, fontWeight: 800 }}>{lecture.title}</span>
           </div>
           <div style={{ fontSize: 13, color: c.primaryDark }}>
-            {clock(lecture.startedAt ?? lecture.createdAt)} 시작 · {'14문항' /* 목 */} · 코드 <Code value={lecture.participationCode} /> ·{' '}
-            {'입장 18/24' /* 목 */}
+            {clock(lecture.startedAt ?? lecture.createdAt)} 시작 · 코드 <Code value={lecture.participationCode} /> ·{' '}
+            {openSummary(lecture)}
           </div>
         </div>
         <Link to={liveUrl} style={{ ...buttonStyle('primary'), padding: '10px 18px' }}>
@@ -120,19 +121,15 @@ function LectureRow({ lecture }: { lecture: InstructorLecture }) {
           <span style={{ fontSize: 15, fontWeight: 700, color: c.textSub }}>{lecture.title}</span>
         </div>
         <div style={{ fontSize: 13, color: c.textSub }}>
-          {day(lecture.endedAt ?? lecture.startedAt ?? lecture.createdAt)} · {'참여 22명 · 정답률 76%' /* 목 */}
+          {day(lecture.endedAt ?? lecture.startedAt ?? lecture.createdAt)} · {closedSummary(lecture)}
         </div>
       </div>
-      {/* 목: 회차 리포트(06)는 MVP 범위 밖 */}
-      <button type="button" disabled title="준비 중" style={{ ...buttonStyle('muted', 'sm'), ...inactive }}>
-        회차 리포트
-      </button>
     </li>
   )
 }
 
 export function LectureListPage() {
-  const [lectures, setLectures] = useState<InstructorLecture[] | null>(null)
+  const [lectures, setLectures] = useState<LectureListItem[] | null>(null)
   const [total, setTotal] = useState(0)
   const [filter, setFilter] = useState<Filter>('ALL')
   const [error, setError] = useState<string | null>(null)

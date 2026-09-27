@@ -27,6 +27,8 @@ export interface InstructorRoom {
   roster(): RosterStudent[]
   /** false면 브라우저 자동 재생 제한으로 학생 소리가 나지 않는다 */
   canPlaybackAudio(): boolean
+  /** 내 마이크 소리 크기(0~1). 송출 중이 아니면 0 */
+  micLevel(): number
   /** 막힌 소리 재생을 푼다. 사용자 클릭 안에서 부른다. throw하지 않고, 풀렸으면 true */
   startAudio(): Promise<boolean>
   disconnect(): Promise<void>
@@ -160,6 +162,7 @@ export async function connectInstructorRoom(
     micEnabled: () => mic,
     roster: snapshot,
     canPlaybackAudio: () => room.canPlaybackAudio,
+    micLevel: () => room.localParticipant.audioLevel ?? 0,
     startAudio,
     async disconnect() {
       detachAll()

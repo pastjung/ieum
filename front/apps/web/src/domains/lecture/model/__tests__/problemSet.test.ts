@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { mergeLinkedProblem, problemSetItems, reconcileLinkedProblems } from '../problemSet'
+import {
+  mergeLinkedProblem,
+  problemSetItems,
+  problemTitleSize,
+  reconcileLinkedProblems,
+} from '../problemSet'
 import type { LinkedProblem } from '../types'
 
 function problem(problemId: string, displayText: string): LinkedProblem {
@@ -75,5 +80,17 @@ describe('reconcileLinkedProblems', () => {
     const server = [problem('1', '그래서'), problem('2', '그리고'), problem('3', '초성 ㄱ')]
     const local = [problem('1', '그래서')]
     expect(reconcileLinkedProblems(server, local)).toBe(server)
+  })
+})
+
+describe('problemTitleSize', () => {
+  it('짧은 글자는 크게 보인다', () => {
+    expect(problemTitleSize('그리고')).toBe(42)
+    expect(problemTitleSize('초성 ㄱ')).toBe(42)
+  })
+
+  it('길어질수록 글자를 줄인다', () => {
+    expect(problemTitleSize('반갑습니다 여러분')).toBe(32)
+    expect(problemTitleSize('안녕하세요 오늘도 반갑습니다')).toBe(26)
   })
 })
