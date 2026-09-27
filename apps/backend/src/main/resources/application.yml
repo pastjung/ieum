@@ -169,7 +169,7 @@ spring:
         show_sql: true
   data:
     # 컨테이너에서 실행하면 REDIS_HOST=redis, 호스트에서 bootRun하면 기본값 localhost:6379를 쓴다.
-    # 운영 Redis 연결은 배포 작업에서 prod 프로필에 별도로 추가한다.
+    # 운영은 prod 프로필이 같은 키로 운영 compose의 redis 서비스(itda-redis)에 붙는다.
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
@@ -211,3 +211,9 @@ spring:
     hibernate:
       # 운영에서는 스키마를 자동 변경하지 않고 엔티티와 일치하는지만 검증한다.
       ddl-auto: validate
+  data:
+    # 운영 compose의 redis 서비스(itda-redis, 설계 2026-09-27-deploy-rebuild §3.1). host에 기본값을 두지 않는다 —
+    # 값이 빠진 채 localhost로 조용히 붙으면 인증 갱신·음성 사용량이 모두 연결 실패로 끝나 원인을 찾기 어렵다.
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
