@@ -2,7 +2,20 @@ import { brailleGlyph, dotsOf } from './braille'
 import type { AnswerCell, StudentAnswer } from './types'
 
 /** 서버는 한 문제에 최대 12칸까지 받는다 */
-const ORDINALS = ['첫', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째', '열한째', '열두째']
+const ORDINALS = [
+  '첫',
+  '둘째',
+  '셋째',
+  '넷째',
+  '다섯째',
+  '여섯째',
+  '일곱째',
+  '여덟째',
+  '아홉째',
+  '열째',
+  '열한째',
+  '열두째',
+]
 
 function ordinal(cellIndex: number): string {
   return ORDINALS[cellIndex - 1] ?? `${cellIndex}번째`
@@ -45,6 +58,71 @@ export function wrongReason(cells: readonly AnswerCell[]): string {
   return `${ordinal(first.cellIndex)} 칸 ${parts.join(', ')}`
 }
 
+/** 상세 보기 한 칸: 학생 답과 정답을 나란히 놓고 빠진 점·더 찍은 점을 표시한다 */
+export interface CellCompare {
+  cellIndex: number
+  /** 학생이 이 칸을 내지 않았으면(정답보다 짧게 냄) null */
+  input: number | null
+  /** 정답에 이 칸이 없으면(정답보다 길게 냄) null */
+  expected: number | null
+  /** 정답에는 있는데 학생이 찍지 않은 점 */
+  missing: number[]
+  /** 학생이 정답에 없는 점을 더 찍음 */
+  extra: number[]
+  ok: boolean
+  note: string
+}
+
+/** 칸별 비교. 답안 칸은 max(입력, 정답) 길이이고 없는 쪽이 0으로 채워져 있으므로 원래 칸 수로 되돌려 비교한다 */
+export function compareCells(cells: readonly AnswerCell[]): CellCompare[] {
+  const sorted = ordered(cells)
+  const inputLength = lengthOf(sorted.map((c) => c.inputPattern))
+  const expectedLength = lengthOf(sorted.map((c) => c.expectedPattern))
+  return sorted
+    .filter((c) => c.cellIndex <= Math.max(inputLength, expectedLength))
+    .map((c) => {
+      const input = c.cellIndex <= inputLength ? c.inputPattern : null
+      const expected = c.cellIndex <= expectedLength ? c.expectedPattern : null
+      if (input === null) {
+        return {
+          cellIndex: c.cellIndex,
+          input,
+          expected,
+          missing: dotsOf(c.expectedPattern),
+          extra: [],
+          ok: false,
+          note: '입력 없음',
+        }
+      }
+      if (expected === null) {
+        return {
+          cellIndex: c.cellIndex,
+          input,
+          expected,
+          missing: [],
+          extra: dotsOf(c.inputPattern),
+          ok: false,
+          note: '남는 칸',
+        }
+      }
+      const missing = dotsOf(expected & ~input)
+      const extra = dotsOf(input & ~expected)
+      const parts: string[] = []
+      if (missing.length > 0) parts.push(`${missing.join('·')}점 누락`)
+      if (extra.length > 0) parts.push(`${extra.join('·')}점 추가`)
+      const ok = parts.length === 0
+      return {
+        cellIndex: c.cellIndex,
+        input,
+        expected,
+        missing,
+        extra,
+        ok,
+        note: ok ? '맞음' : parts.join(', '),
+      }
+    })
+}
+
 export type AnswerState = 'correct' | 'wrong' | 'idle'
 
 export interface StudentAnswerView {
@@ -73,7 +151,10 @@ export interface ProgressCounts {
 }
 
 /** 제출 현황. 학생 카드와 같은 명단(지금 접속한 학생)으로 센다 */
-export function progressCounts(connectedUserIds: readonly string[], answers: readonly StudentAnswer[]): ProgressCounts {
+export function progressCounts(
+  connectedUserIds: readonly string[],
+  answers: readonly StudentAnswer[],
+): ProgressCounts {
   const byUser = new Map(answers.map((a) => [a.userId, a]))
   const connected = new Set(connectedUserIds)
   let correct = 0
@@ -84,5 +165,11 @@ export function progressCounts(connectedUserIds: readonly string[], answers: rea
     if (found.isCorrect) correct += 1
     else wrong += 1
   }
-  return { connected: connected.size, submitted: correct + wrong, correct, wrong, notStarted: connected.size - correct - wrong }
+  return {
+    connected: connected.size,
+    submitted: correct + wrong,
+    correct,
+    wrong,
+    notStarted: connected.size - correct - wrong,
+  }
 }

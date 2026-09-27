@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@ieum/api-client'
 import { lectureApi } from '../domains/lecture/api/lectureApi'
@@ -9,6 +9,8 @@ import {
 } from '../domains/lecture/live/instructorRoom'
 import type { RosterStudent } from '../domains/lecture/live/roster'
 import {
+  compareCells,
+  type CellCompare,
   progressCounts,
   studentAnswerView,
   type AnswerState,
@@ -27,6 +29,7 @@ import type {
   ProblemAnswers,
   StudentAnswer,
 } from '../domains/lecture/model/types'
+import { AnswerDetailPopover } from '../domains/lecture/ui/AnswerDetailPopover'
 import { ProblemSetPanel } from '../domains/lecture/ui/ProblemSetPanel'
 import { errorMessage } from '../shared/ui/errorMessage'
 import { buttonStyle, cardStyle, dimmed, inactive } from '../shared/ui/styles'
@@ -147,6 +150,10 @@ interface StudentCardProps {
   student: RosterStudent
   /** 지금 문제에 대한 답안 칸. 지금 문제가 없으면 null(칸을 그리지 않는다) */
   answer: StudentAnswerView | null
+  /** 칸별 비교(상세 보기). 제출하지 않았으면 null */
+  compare: CellCompare[] | null
+  detailOpen: boolean
+  onToggleDetail: () => void
   /** 수업 중이고 음성 방에 연결돼 있을 때만 발언을 바꿀 수 있다 */
   canControl: boolean
   /** 이 학생의 발언 요청이 진행 중 */
@@ -158,14 +165,25 @@ interface StudentCardProps {
 function StudentCard({
   student,
   answer,
+  compare,
+  detailOpen,
+  onToggleDetail,
   canControl,
   pending,
   disabled,
   onToggleSpeaking,
 }: StudentCardProps) {
   const action = student.speakingAllowed ? '발언 끄기' : '발언 허용'
+  const cardRef = useRef<HTMLLIElement>(null)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  const detailId = useId()
+  const closeDetail = useCallback(() => {
+    onToggleDetail()
+    toggleRef.current?.focus()
+  }, [onToggleDetail])
   return (
     <li
+      ref={cardRef}
       style={{
         borderRadius: theme.radius.control,
         padding: 12,
@@ -229,9 +247,14 @@ function StudentCard({
         </span>
         {student.isSpeaking && <span style={{ color: c.primaryDark }}>말하는 중</span>}
       </div>
-      {/* 실제: 지금 문제에 제출한 점자와 결과 (걸린 시간은 저장하지 않으므로 표시하지 않는다) */}
+      {/* 실제: 지금 문제에 제출한 점자. 정오는 칸 색으로만 보이고, 어디가 틀렸는지는 상세 보기에서 본다 */}
       {answer && (
         <div
+          aria-label={
+            answer.glyph
+              ? `${answer.state === 'correct' ? '정답' : '오답'}, 제출 ${answer.glyph}`
+              : answer.detail
+          }
           style={{
             ...ANSWER_LOOK[answer.state].box,
             borderRadius: theme.radius.small,
@@ -239,14 +262,13 @@ function StudentCard({
             minHeight: 44,
             boxSizing: 'border-box',
             display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            gap: 6,
+            alignItems: 'center',
             minWidth: 0,
           }}
         >
-          {answer.glyph && (
+          {answer.glyph ? (
             <span
+              aria-hidden="true"
               style={{
                 fontSize: 28,
                 lineHeight: 1.1,
@@ -257,11 +279,47 @@ function StudentCard({
             >
               {answer.glyph}
             </span>
+          ) : (
+            <span
+              style={{ fontSize: 13, fontWeight: 800, color: ANSWER_LOOK[answer.state].accent }}
+            >
+              {answer.detail}
+            </span>
           )}
-          <span style={{ fontSize: 13, fontWeight: 800, color: ANSWER_LOOK[answer.state].accent }}>
-            {answer.detail}
-          </span>
         </div>
+      )}
+      {answer && answer.state !== 'idle' && compare && (
+        <>
+          <button
+            ref={toggleRef}
+            type="button"
+            onClick={onToggleDetail}
+            aria-expanded={detailOpen}
+            aria-controls={detailOpen ? detailId : undefined}
+            style={{
+              alignSelf: 'flex-start',
+              border: 'none',
+              background: 'transparent',
+              padding: '2px 0',
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: c.textSub,
+              cursor: 'pointer',
+            }}
+          >
+            {detailOpen ? '상세 닫기 ▴' : '상세 보기 ▾'}
+          </button>
+          {detailOpen && (
+            <AnswerDetailPopover
+              id={detailId}
+              anchor={cardRef.current}
+              studentName={student.name}
+              correct={answer.state === 'correct'}
+              rows={compare}
+              onClose={closeDetail}
+            />
+          )}
+        </>
       )}
       {canControl && (
         <button
@@ -297,6 +355,8 @@ export function LiveLecturePage() {
   const [students, setStudents] = useState<RosterStudent[]>([])
   const [audioBlocked, setAudioBlocked] = useState(false)
   const [pendingUserId, setPendingUserId] = useState<string | null>(null)
+  /** 답안 상세 보기를 펼친 학생. 한 번에 한 명만 연다 */
+  const [detailUserId, setDetailUserId] = useState<string | null>(null)
   /** 마지막으로 받은 답안 목록. problemId가 지금 문제와 같을 때만 화면에 쓴다 */
   const [answerSet, setAnswerSet] = useState<ProblemAnswers | null>(null)
   /** 이번 세션에 한 번이라도 지금 문제였던 problemId (새로고침하면 지금 문제만 남는다) */
@@ -436,6 +496,8 @@ export function LiveLecturePage() {
   const currentProblemId = lecture?.currentProblem?.problemId ?? null
   useEffect(() => {
     currentProblemIdRef.current = currentProblemId
+    // 문제가 바뀌면 이전 문제의 상세는 의미가 없다
+    setDetailUserId(null)
   }, [currentProblemId])
 
   async function run(action: () => Promise<void>, mapError: (e: unknown) => string = errorMessage) {
@@ -991,6 +1053,16 @@ export function LiveLecturePage() {
                     student={student}
                     answer={
                       currentProblem ? studentAnswerView(answersByUser.get(student.userId)) : null
+                    }
+                    compare={(() => {
+                      const submitted = currentProblem
+                        ? answersByUser.get(student.userId)
+                        : undefined
+                      return submitted ? compareCells(submitted.cells) : null
+                    })()}
+                    detailOpen={detailUserId === student.userId}
+                    onToggleDetail={() =>
+                      setDetailUserId((open) => (open === student.userId ? null : student.userId))
                     }
                     canControl={canControl}
                     pending={pendingUserId === student.userId}
