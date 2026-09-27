@@ -9,16 +9,13 @@
 #   backend blue 8081 / green 8082
 #   ai      blue 8101 / green 8102  (외부 미노출 — Backend가 호스트 Nginx 내부
 #                                    리스너 127.0.0.1:9100을 거쳐 활성 색으로 호출)
+#   redis   바인딩 없음 (compose 기본 네트워크 안에서 backend만 redis:6379로 접근)
+#
+# 설정: backend는 같은 폴더의 .env.config(원본: Jenkins Secret file itda-env-config)를
+#   env_file로 통째로 받는다 — 키 목록은 docs/infra/deploy.md 6.2.1절.
+#   이미지 태그(WEB/BACKEND/AI_TAG)는 deploy.sh가 갱신하는 .env.tags에서 치환된다.
 # ==========================================================================
 name: itda
-
-x-backend-env: &backend-env
-  # RDS 연결 전까지 local(H2)로 운용. RDS 연결 시 .env에서 BACKEND_PROFILE=prod로 전환
-  SPRING_PROFILES_ACTIVE: ${BACKEND_PROFILE:-prod}
-  DB_URL: ${DB_URL:?DB_URL is required}
-  DB_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
-  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-  AI_BASE_URL: ${AI_BASE_URL:-http://host.docker.internal:9100/api/v1}
 
 services:
   web-blue:
@@ -33,10 +30,12 @@ services:
     ports:
       - "127.0.0.1:3002:80"
 
+  # depends_on을 두지 않는다 — blue-green은 서비스 단위(--no-deps)로 기동하고,
+  # redis는 Jenkins의 Redis 단계가 배포 전에 따로 보장한다.
   backend-blue:
     image: ${REGISTRY_PREFIX:-}itda-backend:${BACKEND_TAG:?BACKEND_TAG is required}
     restart: unless-stopped
-    environment: *backend-env
+    env_file: .env.config
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -45,7 +44,7 @@ services:
   backend-green:
     image: ${REGISTRY_PREFIX:-}itda-backend:${BACKEND_TAG:?BACKEND_TAG is required}
     restart: unless-stopped
-    environment: *backend-env
+    env_file: .env.config
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -66,3 +65,18 @@ services:
       ITDA_DEBUG: "false"
     ports:
       - "127.0.0.1:8102:8000"
+
+  # 인증 토큰 상태·음성 합성 사용량 저장소. blue-green 대상이 아니다.
+  # 컨테이너 이름을 고정해 OpenVidu의 `redis` 컨테이너와 겹치지 않게 한다.
+  # 버전은 로컬 compose와 같다 (digest: sha256:30abb90e62f14b737010746def3ba99cc79fe19dcdb3d37b41f21fc62e7da19d)
+  redis:
+    image: redis:8.2.9-alpine
+    container_name: itda-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - itda-redis-data:/data
+
+volumes:
+  itda-redis-data:
+    name: itda-redis-data
