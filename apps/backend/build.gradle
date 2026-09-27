@@ -91,6 +91,8 @@ ext.mariadbTestTag = 'mariadb'
 // Access·Refresh·action 서명 key를 테스트 실행마다 새로 만든다. 저장소에 key 문자열을 남기지 않기 위해서다.
 // doFirst에 두어 task 입력에 포함시키지 않는다 (매번 값이 바뀌어 up-to-date 판정이 무의미해지는 것을 피한다).
 def applyTestSecrets = { Test task ->
+    // 운영과 같은 시간대로 돈다 — ItdaApplication.main 이 JVM 을 UTC 로 고정하지만 테스트는 main 을 거치지 않는다
+    task.systemProperty 'user.timezone', 'UTC'
     task.doFirst {
         def randomKey = {
             byte[] keyBytes = new byte[32]

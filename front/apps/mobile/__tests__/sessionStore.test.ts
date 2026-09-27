@@ -43,7 +43,7 @@ describe("세션 스토어의 완료 페이로드", () => {
     const store = useSessionStore.getState();
     store.start(session, "free", meta);
     useSessionStore.getState().submit([1]);
-    useSessionStore.getState().next();
+    useSessionStore.getState().next(0);
     useSessionStore.getState().submit([3]);
 
     const attempts = useSessionStore.getState().buildAttempts();
@@ -165,7 +165,7 @@ describe("문항별 분석 결과 보관", () => {
     useSessionStore.getState().setLastAnalysis(analysis);
     expect(useSessionStore.getState().lastAnalysis).toEqual(analysis);
 
-    useSessionStore.getState().next();
+    useSessionStore.getState().next(0);
     expect(useSessionStore.getState().lastAnalysis).toBeNull();
   });
 
@@ -227,9 +227,31 @@ describe("서버 설명이 없는 문항의 안내", () => {
     useSessionStore.getState().start(session, "free", meta);
     useSessionStore.getState().setLastAttemptNotice("이미 확인한 문제예요.");
 
-    useSessionStore.getState().next();
+    useSessionStore.getState().next(0);
 
     expect(useSessionStore.getState().lastAttemptNotice).toBeNull();
+  });
+
+  it("같은 문항에서 두 번 넘겨도 한 문항만 넘어간다", () => {
+    // QA: 채점 화면의 다음 버튼을 연타하면 문항이 1~2개씩 건너뛰어졌다
+    const three = {
+      ...session,
+      problems: [...session.problems, { id: "9", prompt: "'다'를 점자로 입력하세요", target: "다", expectedCells: [2] }],
+    };
+    useSessionStore.getState().start(three, "free", { serverSessionId: 12, problemSessionIds: [101, 102, 103] });
+
+    expect(useSessionStore.getState().next(0)).toBe(true);
+    expect(useSessionStore.getState().next(0)).toBe(false);
+
+    expect(useSessionStore.getState().index).toBe(1);
+  });
+
+  it("마지막 문항에서는 넘어가지 않는다", () => {
+    useSessionStore.getState().start(session, "free", meta);
+    useSessionStore.getState().next(0);
+
+    expect(useSessionStore.getState().next(1)).toBe(false);
+    expect(useSessionStore.getState().index).toBe(1);
   });
 
   it("새로 제출하면 안내를 비운다", () => {

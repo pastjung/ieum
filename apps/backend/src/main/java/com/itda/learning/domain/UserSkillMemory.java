@@ -51,6 +51,10 @@ public class UserSkillMemory {
   @Column(name = "mastery_probability", nullable = false)
   private Double masteryProbability;
 
+  /** 최근 5회 정오('0'/'1', 오래된 것부터). AI 응답(updatedSkillStates.recentResults)을 그대로 저장한다 */
+  @Column(name = "recent_results", length = 5)
+  private String recentResults = "";
+
   public UserSkillMemory(
       User user,
       LearningSkill skill,
@@ -61,6 +65,16 @@ public class UserSkillMemory {
     this.user = user;
     this.skill = skill;
     applyAnalysisSnapshot(totalSeen, totalCorrect, lastPracticedAt, masteryProbability);
+  }
+
+  public void applyAnalysisSnapshot(
+      int totalSeen,
+      int totalCorrect,
+      LocalDateTime lastPracticedAt,
+      Double masteryProbability,
+      String recentResults) {
+    applyAnalysisSnapshot(totalSeen, totalCorrect, lastPracticedAt, masteryProbability);
+    this.recentResults = recentResults == null ? "" : recentResults;
   }
 
   public void applyAnalysisSnapshot(

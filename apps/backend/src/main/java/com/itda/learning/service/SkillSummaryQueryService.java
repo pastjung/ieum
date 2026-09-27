@@ -108,7 +108,8 @@ public class SkillSummaryQueryService {
         memory.getTotalCorrect(),
         memory.getLastPracticedAt(),
         memory.getMasteryProbability(),
-        Map.of());
+        Map.of(),
+        memory.getRecentResults());
   }
 
   public record SkillSummary(

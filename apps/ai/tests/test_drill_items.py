@@ -89,3 +89,114 @@ def test_session_summary_accepts_mixed_drill_and_word_items():
 
 def test_non_hangul_still_rejected():
     assert _attempt("abc", [], [1]).status_code == 422
+
+
+def test_double_final_consonants_by_article_4():
+    """제4항 쌍받침: ㅆ = 3·4점 한 칸, ㄲ = 받침 ㄱ 두 번. 낱자로 오면 expectedPatterns 로 첫소리(된소리)와 가른다."""
+    assert _item("ㅆ", [12])["kc"] == ["종성:ㅆ"] and _item("ㅆ", [12])["cells"] == [[3, 4]]
+    assert _item("ㄲ", [1, 1])["kc"] == ["종성:ㄲ", "종성:ㄲ"]
+    assert _item("ㅆ", [32, 32])["kc"] == [
+        "규칙:된소리표",
+        "초성:ㅅ",
+    ]  # 정답이 된소리 첫소리면 그쪽
+    assert _item("받침 ㅆ")["cells"] == [[3, 4]] and _item("받침 ㄲ")["cells"] == [[1], [1]]
+    ok = _attempt("ㅆ", [12], [12]).json()
+    assert ok["skillResults"] == [{"learningSkillId": 31, "correct": True, "errorCounts": {}}]
+    wrong = _attempt("ㅆ", [12], [32]).json()  # 6점 하나 (된소리표 모양)
+    assert (
+        wrong["skillResults"][0]["learningSkillId"] == 31
+        and wrong["skillResults"][0]["correct"] is False
+    )
+    assert "받침 쌍시옷" in wrong["feedback"]["tts"]
+
+
+def test_every_seeded_drill_in_db_is_graded_with_matching_skills():
+    """DB 시드의 드릴 78개(자음·모음·약자·음절) 전부: 200 + 요소 id 가 problem_skills 와 같음 + 정답 입력은 전부 맞음."""
+    import json
+    from pathlib import Path
+
+    drills = json.loads(
+        (Path(__file__).parent / "fixtures_seed_drills.json").read_text(encoding="utf-8")
+    )
+    assert len(drills) >= 70
+    for d in drills:
+        res = _attempt(d["text"], d["expectedPatterns"], d["expectedPatterns"])
+        assert res.status_code == 200, (d["text"], res.text)
+        body = res.json()
+        assert sorted(s["learningSkillId"] for s in body["skillResults"]) == d["skillIds"], d[
+            "text"
+        ]
+        assert all(s["correct"] for s in body["skillResults"]), d["text"]
+
+
+def test_cell_skills_label_each_expected_cell_by_element():
+    """오답 화면 캡션: '정답 · 첫 번째 칸' 대신 칸이 나타내는 요소. 두 칸 요소는 (1/2)(2/2)."""
+
+    def labels(text, expected):
+        body = _attempt(text, expected, expected).json()
+        return [(c["cellIndex"], c["label"]) for c in body["cellSkills"]]
+
+    # 바보 = 약자 바(4·5) + 첫소리 ㅂ(4·5) + 모음 ㅗ — 같은 점형이 요소 이름으로 구분된다
+    assert labels("바보", [24, 24, 37]) == [(1, "약자 바"), (2, "첫소리 ㅂ"), (3, "모음 ㅗ")]
+    assert labels("ㅙ", [39, 23]) == [(1, "모음 ㅙ (1/2)"), (2, "모음 ㅙ (2/2)")]
+    assert labels("그래서", [1, 14]) == [(1, "약어 그래서 (1/2)"), (2, "약어 그래서 (2/2)")]
+    assert labels("가가", [43, 43]) == [(1, "약자 가"), (2, "약자 가")]  # 다른 음절이면 따로
+    assert labels("ㄲ", [32, 8]) == [(1, "된소리표"), (2, "첫소리 ㄱ")]
+    assert labels("받침 ㅆ", [12]) == [(1, "받침 ㅆ")]
+
+
+def test_cell_skills_ids_match_skill_results():
+    body = _attempt("가방", [43, 24, 54], [43, 24, 32]).json()
+    assert [c["learningSkillId"] for c in body["cellSkills"]] == [66, 70, 23]
+    assert {c["learningSkillId"] for c in body["cellSkills"]} <= {
+        r["learningSkillId"] for r in body["skillResults"]
+    }
+
+
+def test_feedback_steps_follow_aligned_errors_not_shifted_cells():
+    """'우유'를 ㅇㅜㅇㅠ 네 칸으로 쓰면 틀린 곳은 두 군데(첫소리 ㅇ 두 번) — 정답 칸은 빈칸."""
+    body = _attempt("우유", [13, 41], [54, 13, 54, 41]).json()
+    steps = body["feedbackSteps"]
+    assert [s["errorType"] for s in steps] == ["silent_onset_written", "silent_onset_written"]
+    assert all(
+        s["expectedPattern"] is None and s["label"] == "빈칸" and s["inputPattern"] == 54
+        for s in steps
+    )
+    assert "'우'는 한 칸이에요" in steps[0]["tts"] and "'유'는 한 칸이에요" in steps[1]["tts"]
+
+
+def test_feedback_steps_for_dot_error_omission_and_correct():
+    body = _attempt("가방", [43, 24, 54], [43, 24, 32]).json()
+    assert body["feedbackSteps"] == [
+        {
+            "expectedCellIndex": 3,
+            "expectedPattern": 54,
+            "inputPattern": 32,
+            "missingDots": [2, 3, 5],
+            "extraDots": [],
+            "label": "받침 ㅇ",
+            "errorType": "dot_missing",
+            "tts": "세 번째 칸에서 2, 3, 5점이 빠졌어요. 받침 이응은 2, 3, 5, 6점이에요.",
+        }
+    ]
+    omitted = _attempt("사과", [7, 8, 39], [7, 8]).json()["feedbackSteps"]
+    assert omitted[0]["inputPattern"] is None and omitted[0]["label"] == "모음 ㅘ"
+    assert _attempt("가방", [43, 24, 54], [43, 24, 54]).json()["feedbackSteps"] == []
+
+
+def test_braille_lookup_words_spaces_jamo_and_rejects_non_hangul():
+    res = client.post(f"{P}/braille-lookup", json={"text": "바보"}).json()
+    assert res["braille"] == "⠘⠘⠥"
+    assert [c["label"] for c in res["cells"]] == ["약자 바", "첫소리 ㅂ", "모음 ㅗ"]
+    two = client.post(f"{P}/braille-lookup", json={"text": "학교  가방"}).json()
+    assert two["text"] == "학교 가방" and two["cells"][4] == {
+        "cellIndex": 5,
+        "pattern": 0,
+        "learningSkillId": None,
+        "label": "띄어쓰기",
+    }
+    assert (
+        client.post(f"{P}/braille-lookup", json={"text": "ㄱ"}).json()["cells"][0]["label"]
+        == "첫소리 ㄱ"
+    )
+    assert client.post(f"{P}/braille-lookup", json={"text": "abc"}).status_code == 422

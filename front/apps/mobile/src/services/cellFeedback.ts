@@ -44,9 +44,7 @@ export interface CellStep {
 /**
  * 서버의 셀 진단(`AttemptCellAnalysis[]`)을 사용자가 한 칸씩 듣고 볼 단계로 옮긴다.
  *
- * 점 수준을 먼저, 규칙 설명을 뒤에 둔다 — 방금 틀린 것을 바로 고칠 수 있게 하고 이유는
- * 그 뒤에 설명하는 순서다 (설계 4.2절). 서버는 "첫소리 이응은 점자로 적지 않아요" 같은
- * 규칙 수준 설명(`ruleText`)만 주므로, 몇 번째 칸의 몇 번 점이 틀렸는지는 이 함수가 채운다.
+ * 몇 번째 칸의 몇 번 점이 틀렸는지는 서버가 준 점 패턴으로 이 함수가 문장을 만든다.
  *
  * **왜 한 문장이 아니라 단계인가.** 예전에는 틀린 칸 전부를 한 문장으로 이어 읽고 화면에는
  * 첫 칸 하나만 그렸다. 단어·문장처럼 칸이 여럿인 문항에서 이 둘이 갈렸다 — 귀로는 세 칸을
@@ -56,35 +54,32 @@ export interface CellStep {
  * 각 단계의 `speech`는 그 단계의 `detail`과 같다 — 첫 단계만 헤드라인을 앞에 붙인다.
  * 화면과 낭독이 갈라지지 않도록 한 곳에서 만든다.
  *
- * 개요("모두 3칸이 틀렸어요")는 첫 단계에서만, 규칙 설명은 마지막 단계에서만 붙는다.
- * 칸을 넘길 때마다 다시 읽으면 매번 새로 틀린 것처럼 들린다.
+ * 개요("모두 3칸이 틀렸어요")는 첫 단계에서만 붙는다. 칸을 넘길 때마다 다시 읽으면 매번
+ * 새로 틀린 것처럼 들린다.
+ *
+ * **규칙 문장은 붙이지 않는다.** 예전에는 첫 단계 끝에 어긴 학습요소의 "이름. 설명"을
+ * 붙였는데, `learning_skills.description`이 이름과 같은 행이 많아 "초성 ㅎ. 초성 ㅎ"처럼
+ * 같은 말이 되풀이됐다. 무엇을 고칠지는 칸 설명이 이미 말해 준다.
  */
 export function describeCells(
   cells: AttemptCellAnalysis[],
   correct: boolean,
-  ruleText: string,
 ): { headline: string; steps: CellStep[] } {
   if (correct) {
-    // **정답에는 `ruleText`를 붙이지 않는다.** 두 값이 서로 다른 채점에서 오기 때문이다:
-    // `correct`는 백엔드가 DB 시드 셀과 비교한 결과이고(`LearningAttemptService`),
-    // `ruleText`(= `feedback.detail`)는 AI가 `target_text`를 규칙 변환해 다시 채점한 뒤
-    // 고른 설명이다 (`apps/ai` 의 `_detail`). 둘이 갈리면 "정답이에요! 3번 점이 빠졌어요"가 나온다 —
-    // 정답 화면에 오답 설명이 붙는 것보다 설명이 없는 편이 낫다.
+    // 정답에는 설명을 붙이지 않는다. `correct`는 백엔드가 DB 시드 셀과 비교한 결과인데
+    // (`LearningAttemptService`), 서버가 함께 주는 설명은 AI가 따로 채점해 고른 것이라
+    // 둘이 갈리면 "정답이에요! 3번 점이 빠졌어요"가 나온다.
     const headline = "정답이에요!";
     return { headline, steps: [{ cellIndex: null, detail: "", speech: headline }] };
   }
 
   const headline = "오답이에요.";
-  const rule = ruleText.trim();
   const wrongCells = cells.filter((c) => c.diffMask !== 0);
 
   // 정상 서버 응답이라면 correct === false일 때 틀린 칸이 최소 하나 있어야 하지만, 방어적으로
   // 처리한다 — 그렇지 않으면 "모두 0칸이 틀렸어요" 같은 자기모순 문장이 나온다.
   if (wrongCells.length === 0) {
-    return {
-      headline,
-      steps: [{ cellIndex: null, detail: rule, speech: `${headline} ${rule}`.trim() }],
-    };
+    return { headline, steps: [{ cellIndex: null, detail: "", speech: headline }] };
   }
 
   // 한 칸만 틀렸을 때 "모두 1칸이 틀렸어요"는 어색하므로 "모두"를 뺀다.
@@ -93,16 +88,11 @@ export function describeCells(
 
   const steps = wrongCells.map((c, i): CellStep => {
     const sentence = `${ordinalKo(c.cellIndex - 1)} 칸의 정답은 ${expectedDescription(c.expectedPattern)}. ${cellDiffPhrase(c)}.`;
-    const opening = i === 0 ? `${countMsg} ` : "";
-    // 규칙은 칸이 아니라 문항 전체에 대한 설명이라 첫 단계에만 붙인다. 마지막 단계에 두면
-    // 여러 칸을 틀렸을 때 끝까지 넘겨야 들을 수 있어 사실상 안 들린다.
-    // 점 수준 설명 뒤에 두는 순서는 그대로다 — 무엇을 고칠지 먼저, 왜인지는 그 뒤 (설계 4.2절)
-    const closing = i === 0 && rule ? ` ${rule}` : "";
-    const detail = `${opening}${sentence}${closing}`;
+    const detail = i === 0 ? `${countMsg} ${sentence}` : sentence;
     return {
       cellIndex: c.cellIndex,
       detail,
-      speech: i === 0 ? `${headline} ${detail}`.trim() : detail,
+      speech: i === 0 ? `${headline} ${detail}` : detail,
     };
   });
 

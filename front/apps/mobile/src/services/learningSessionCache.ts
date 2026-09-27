@@ -1,6 +1,15 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { LearningSession } from "@ieum/contracts";
 import type { ServerSessionMeta, SessionKind } from "@/stores/sessionStore";
+import type { InProgressKind } from "@/services/learningService";
+
+/**
+ * 진행 중 세션 조회의 쿼리 키. 홈과 세션 안내 화면이 같은 키를 써야 한 쪽이 받아 둔 값을 다른
+ * 쪽이 그대로 쓴다. 종류마다 키가 다르다 — 하나로 묶으면 학습 세션 자리에 복습이 들어간다.
+ */
+export function inProgressSessionQueryKey(kind: InProgressKind) {
+  return ["inProgressSession", kind] as const;
+}
 
 /**
  * `intro.tsx`의 세션 조회 쿼리 키. 조회 쪽과 캐시 제거 쪽이 같은 키를 쓰도록 여기 한 곳에

@@ -56,9 +56,12 @@ def _onset(jamo: str) -> dict[str, Any] | None:
 
 
 def _coda(jamo: str) -> dict[str, Any] | None:
+    if jamo == "ㅆ":  # 제4항: 받침 ㅆ 은 3·4점 한 칸 (kbraille._jong 의 특수 처리와 동일)
+        return _item([[3, 4]], ["종성:ㅆ"], ["제4항"], "받침 ㅆ")
+    if jamo == "ㄲ":  # 제4항: 받침 ㄲ 은 받침 ㄱ(1점)을 두 번
+        return _item([[1], [1]], ["종성:ㄲ", "종성:ㄲ"], ["제4항", "제4항"], "받침 ㄲ")
     if jamo in kb.JONG_DOTS:
-        rule = "제4항" if jamo in ("ㄲ", "ㅆ") else "제3항"
-        return _item([str_to_dots(kb.JONG_DOTS[jamo])], [f"종성:{jamo}"], [rule], f"받침 {jamo}")
+        return _item([str_to_dots(kb.JONG_DOTS[jamo])], [f"종성:{jamo}"], ["제3항"], f"받침 {jamo}")
     if jamo in kb.DOUBLE_JONG:  # 겹받침: 두 받침을 이어 씀
         parts = kb.DOUBLE_JONG[jamo]
         return _item(
@@ -83,7 +86,14 @@ def _vowel(jamo: str) -> dict[str, Any] | None:
     )
 
 
+def _compose(cho: str, jung: str) -> str:
+    return chr(0xAC00 + kb.CHO.index(cho) * 588 + kb.JUNG.index(jung) * 28)
+
+
 def _abbr(text: str) -> dict[str, Any] | None:
+    # 시드의 약자 드릴 이름은 'ㄱㅏ' 처럼 자모 쌍이다 → 음절 '가' 로 합쳐서 처리
+    if len(text) == 2 and text[0] in kb.CHO and text[1] in kb.JUNG:
+        text = _compose(text[0], text[1])
     if text in kb.ABBR_WORDS:  # 약어 (두 칸)
         an = kb.analyze(text)
         return _item(

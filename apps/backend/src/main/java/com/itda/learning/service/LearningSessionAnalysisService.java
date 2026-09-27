@@ -255,7 +255,8 @@ public class LearningSessionAnalysisService {
         memory.getTotalCorrect(),
         memory.getLastPracticedAt(),
         memory.getMasteryProbability(),
-        errorCountsByMemoryId.getOrDefault(memory.getId(), Map.of()));
+        errorCountsByMemoryId.getOrDefault(memory.getId(), Map.of()),
+        memory.getRecentResults());
   }
 
   private LearningAttemptAnalysisFastApiResponse requestAttemptAnalysis(
@@ -333,10 +334,20 @@ public class LearningSessionAnalysisService {
                 state.nCorrect(),
                 attemptedAt,
                 state.masteryProb());
+        memory.applyAnalysisSnapshot(
+            state.nAttempts(),
+            state.nCorrect(),
+            attemptedAt,
+            state.masteryProb(),
+            state.recentResults());
         memoriesBySkillId.put(state.learningSkillId(), memory);
       } else {
         memory.applyAnalysisSnapshot(
-            state.nAttempts(), state.nCorrect(), attemptedAt, state.masteryProb());
+            state.nAttempts(),
+            state.nCorrect(),
+            attemptedAt,
+            state.masteryProb(),
+            state.recentResults());
       }
       updatedMemories.add(memory);
     }
@@ -424,7 +435,10 @@ public class LearningSessionAnalysisService {
                         result.learningSkillId(), result.correct(), result.errorCounts()))
             .toList();
     return new AttemptAnalysisResult(
-        new FeedbackResult(response.feedback().tts(), response.feedback().detail()), skillResults);
+        new FeedbackResult(response.feedback().tts(), response.feedback().detail()),
+        skillResults,
+        response.cellSkills(),
+        response.feedbackSteps());
   }
 
   private static SessionSummaryResult toSessionSummaryResult(
@@ -455,9 +469,26 @@ public class LearningSessionAnalysisService {
     }
   }
 
-  public record AttemptAnalysisResult(FeedbackResult feedback, List<SkillResult> skillResults) {
+  public record AttemptAnalysisResult(
+      FeedbackResult feedback,
+      List<SkillResult> skillResults,
+      List<LearningAttemptAnalysisFastApiResponse.CellSkill> cellSkills,
+      List<LearningAttemptAnalysisFastApiResponse.FeedbackStep> feedbackSteps) {
     public AttemptAnalysisResult {
       skillResults = List.copyOf(skillResults);
+      cellSkills = cellSkills == null ? List.of() : List.copyOf(cellSkills);
+      feedbackSteps = feedbackSteps == null ? List.of() : List.copyOf(feedbackSteps);
+    }
+
+    public AttemptAnalysisResult(FeedbackResult feedback, List<SkillResult> skillResults) {
+      this(feedback, skillResults, List.of(), List.of());
+    }
+
+    public AttemptAnalysisResult(
+        FeedbackResult feedback,
+        List<SkillResult> skillResults,
+        List<LearningAttemptAnalysisFastApiResponse.CellSkill> cellSkills) {
+      this(feedback, skillResults, cellSkills, List.of());
     }
   }
 

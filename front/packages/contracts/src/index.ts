@@ -236,8 +236,35 @@ export const attemptAnalysisRequestSchema = z.object({
 export type AttemptAnalysisRequest = z.infer<typeof attemptAnalysisRequestSchema>;
 
 /** 셀 하나의 진단. 완료 응답의 셀과 같은 모양이라 스키마를 공유한다 */
-export const attemptCellAnalysisSchema = cellCompletionSchema;
+/**
+ * 문항 채점 응답의 칸. 완료 응답의 칸에 **이 칸이 어떤 학습 요소인지**가 더해진다
+ * (AI 가 채점할 때 칸마다 붙이는 요소 — "약자 바", "첫소리 ㅂ", "모음 ㅙ (1/2)").
+ * 둘 다 없을 수 있다(초과 입력 칸, AI 가 주지 않은 경우) → 화면은 "N번째 칸"으로 되돌아간다.
+ */
+export const attemptCellAnalysisSchema = cellCompletionSchema.extend({
+  learningSkillId: z.number().int().nullable().optional(),
+  label: z.string().nullable().optional(),
+});
 export type AttemptCellAnalysis = z.infer<typeof attemptCellAnalysisSchema>;
+
+/**
+ * 오답의 "틀린 곳" 하나 (AI 채점기가 칸을 맞춘 뒤 고른 것). 오답 화면이 한 장씩 넘겨 보여준다.
+ *
+ * 백엔드의 `cells`는 같은 번호끼리 맞대서, 칸을 하나 더 넣으면 뒤가 전부 밀려 "모두 N칸이 틀렸어요"가 된다. 이쪽은
+ * 정렬 뒤의 오류라 '음식'을 ㅇ까지 6칸으로 써도 한 장("첫소리 이응은 점자로 적지 않아요")이다.
+ * 정답 칸이 없는 자리(없어야 할 칸을 넣음)는 `expectedPattern`이 null, `label`이 "빈칸"이다.
+ */
+export const attemptFeedbackStepSchema = z.object({
+  expectedCellIndex: z.number().int().nullable(),
+  expectedPattern: z.number().int().nullable(),
+  inputPattern: z.number().int().nullable(),
+  missingDots: z.array(z.number().int()),
+  extraDots: z.array(z.number().int()),
+  label: z.string(),
+  errorType: z.string(),
+  tts: z.string(),
+});
+export type AttemptFeedbackStep = z.infer<typeof attemptFeedbackStepSchema>;
 
 export const attemptAnalysisResponseSchema = z.object({
   problemSessionId: identifierSchema,
@@ -271,6 +298,8 @@ export const attemptAnalysisResponseSchema = z.object({
       }),
     )
     .default([]),
+  /** 오답일 때 틀린 곳마다 한 장. 서버가 주지 않으면 빈 목록 → 앱은 `cells` 기반 설명으로 돌아간다 */
+  feedbackSteps: z.array(attemptFeedbackStepSchema).default([]),
 });
 export type AttemptAnalysisResponse = z.infer<typeof attemptAnalysisResponseSchema>;
 
@@ -356,6 +385,26 @@ export type StageStat = z.infer<typeof stageStatSchema>;
 export const stageStatsSchema = z.object({ stages: z.array(stageStatSchema) });
 export type StageStats = z.infer<typeof stageStatsSchema>;
 
+/** 문제 단계(Level) 하나의 풀이 통계 */
+export const levelStatSchema = z.object({
+  level: levelSchema,
+  solvedCount: z.number().int().nonnegative(),
+  correctCount: z.number().int().nonnegative(),
+});
+export type LevelStat = z.infer<typeof levelStatSchema>;
+
+/**
+ * "내 실력" 화면이 읽는다. 풀이 기록(`problem_attempts`)을 문제 자신의 단계(`problems.level`)로
+ * 묶은 것이라 복습 세션 풀이까지 담는다 — 세션의 커리큘럼 단계로 묶는 `stageStats`는 복습
+ * 세션의 단계가 NULL이라 그 풀이를 통째로 뺀다.
+ *
+ * **기록이 있는 단계만 온다.** 여섯 단계 전부와 그 표시 순서·이름은 앱이 들고 있다
+ * (`levelLabels.ts`의 `LEVEL_ORDER`·`LEVEL_LABEL`). 서버가 빈 줄을 채워 보내도 앱이 다시
+ * 채우는 일이 겹칠 뿐이라 채우지 않는다. 같은 이유로 **순서를 약속하지 않는다.**
+ */
+export const levelStatsSchema = z.object({ levels: z.array(levelStatSchema) });
+export type LevelStats = z.infer<typeof levelStatsSchema>;
+
 export const completionResponseSchema = z.object({
   sessionId: identifierSchema,
   completedAt: z.string(),
@@ -384,6 +433,24 @@ export const completionResponseSchema = z.object({
   weakSkills: z.array(weakSkillSchema).catch([]),
 });
 export type CompletionResponse = z.infer<typeof completionResponseSchema>;
+
+/**
+ * 점자 사전 (`GET /braille-dictionary?word=`). 등록된 문제면 정답 칸을(`PROBLEM`), 아니면 AI 규칙 점역기로 바꾼 칸을
+ * (`CONVERTED`) 준다. 등록된 문제에서 온 칸은 요소 이름이 없다(`label` null).
+ */
+export const brailleDictionaryCellSchema = z.object({
+  cellIndex: z.number().int(),
+  pattern: cellSchema,
+  learningSkillId: z.number().int().nullable(),
+  label: z.string().nullable(),
+});
+export const brailleDictionarySchema = z.object({
+  word: z.string(),
+  source: z.enum(["PROBLEM", "CONVERTED"]),
+  braille: z.string(),
+  cells: z.array(brailleDictionaryCellSchema).min(1),
+});
+export type BrailleDictionary = z.infer<typeof brailleDictionarySchema>;
 
 /* ─── 실시간 수업 (API 명세 8.2·8.5절) ─── */
 

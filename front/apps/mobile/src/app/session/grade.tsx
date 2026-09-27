@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ordinalKo } from "@ieum/domain";
@@ -7,9 +7,17 @@ import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { BrailleCellView } from "@/components/BrailleCellView";
 import { useSessionStore } from "@/stores/sessionStore";
-import { selectGradeFeedback } from "@/services/gradeFeedback";
+import { describeCell, playCells, stopPlayback } from "@/services/tactilePlayer";
+import { selectGradeFeedback, compareCaption } from "@/services/gradeFeedback";
 import { announce, hapticError, hapticSuccess, hapticTap } from "@/a11y";
 import { radius, useFontScale, useTheme } from "@/theme";
+
+/**
+ * 화면이 바뀐 직후(문항 도착, 칸 넘김) 탭을 받지 않는 시간. 연타가 새 화면에 그대로
+ * 떨어지면 방금 뜬 칸 설명을 듣지도 못하고 넘어간다. TalkBack의 두 번 탭은 한 번 누른
+ * 것으로 들어와 영향이 없다.
+ */
+const INPUT_COOLDOWN_MS = 400;
 
 /** V15 채점 정답 · V16 채점 오답+차이 · V17 서버 분석(문항별 칸 진단) */
 export default function Grade() {
@@ -41,6 +49,25 @@ export default function Grade() {
     setStep(0);
   }, [index]);
 
+  /*
+    연타 방지. 두 번째 탭은 화면이 다시 그려지기 전에 들어와 같은 핸들러를 한 번 더 부른다.
+    - 이동이 시작되면 이후 탭은 전부 버린다(`leavingRef`). 스토어의 `next(from)`도 같은
+      문항에서 두 번 넘기지 않지만, 화면에서 먼저 막는다.
+    - 이동 중에는 버튼 없는 화면을 그린다(`leaving`). `next`가 이번 채점을 비우는 순간
+      아래 진입 가드가 "홈으로" 버튼을 그리는데, 연타가 거기 닿으면 세션을 빠져나간다.
+    - 문항에 도착하거나 칸을 넘긴 직후에는 잠깐 탭을 받지 않는다(`readyAtRef`).
+  */
+  const [leaving, setLeaving] = useState(false);
+  const leavingRef = useRef(false);
+  const readyAtRef = useRef(0);
+  useEffect(() => {
+    readyAtRef.current = Date.now() + INPUT_COOLDOWN_MS;
+  }, [index, step]);
+  const whenReady = (action: () => void) => () => {
+    if (leavingRef.current || Date.now() < readyAtRef.current) return;
+    action();
+  };
+
   const steps = feedback?.steps ?? [];
   // step이 범위를 벗어나는 순간(위 초기화가 도는 렌더 사이)에도 무언가는 그려야 한다
   const current = steps[step] ?? steps[0];
@@ -69,6 +96,15 @@ export default function Grade() {
     announce(current.speech);
   }, [current, feedback, notice, step]);
 
+  // 화면을 떠나면(다음 문제·나가기) 진행 중인 촉지를 멈추고 점을 내린다.
+  // 훅이므로 아래 조기 반환보다 앞에 있어야 한다 — 뒤에 두면 "다음 문제"에서 current가 비는 순간
+  // 훅 수가 줄어 React가 던지고, 릴리스 빌드는 그대로 죽는다.
+  useEffect(() => stopPlayback, []);
+
+  if (leaving) {
+    return <ScreenShell />;
+  }
+
   if (!session || !local || !feedback || !current) {
     return (
       <ScreenShell style={styles.center}>
@@ -79,13 +115,43 @@ export default function Grade() {
 
   const progress = `${index + 1} / ${session.problems.length}`;
 
-  const goNext = () => {
-    if (next()) {
-      router.replace(kind === "class" ? "/class/play" : "/session/play");
-    } else {
-      router.replace(kind === "class" ? "/class/end" : "/session/analyzing");
+  /**
+   * 정답을 모듈에 올려 손끝으로 읽게 한다.
+   * 틀린 칸을 보고 있으면 그 칸의 정답만, 아니면 정답 전체를 한 칸씩.
+   */
+  const feelAnswer = async () => {
+    const compare = current.compare;
+    const cells = compare ? [compare.expected] : (problem?.expectedCells ?? []);
+    if (cells.length === 0) return;
+    try {
+      // 칸 이름으로 부른다 — "정답, 받침 ㅇ" / 칸을 더 넣은 자리는 "정답, 빈칸"(점이 하나도 올라가지 않는다)
+      announce(compare ? `정답, ${compareCaption(compare, ordinalKo)}. 장치로 보여 드릴게요.` : "정답을 장치로 보여 드릴게요.");
+      await playCells(cells, {
+        onCell: (index, cell) => announce(describeCell(compare ? compare.index : index, cell)),
+      });
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "장치에 보내지 못했어요.");
     }
   };
+
+  const goNext = whenReady(() => {
+    leavingRef.current = true;
+    setLeaving(true);
+    if (index + 1 >= session.problems.length) {
+      router.replace(kind === "class" ? "/class/end" : "/session/analyzing");
+      return;
+    }
+    // 스토어가 이미 다른 문항에 있으면 넘기지 않는다. 빈 화면에 갇히지 않도록 잠금을 푼다
+    if (!next(index)) {
+      leavingRef.current = false;
+      setLeaving(false);
+      return;
+    }
+    router.replace(kind === "class" ? "/class/play" : "/session/play");
+  });
+
+  // 마지막 칸을 넘어가지 않는다. 넘어가면 `current`가 첫 칸으로 되돌아가 보인다
+  const nextStep = whenReady(() => setStep((s) => Math.min(s + 1, steps.length - 1)));
 
   // 서버가 이미 끝낸 문항(LEARNING_PROBLEM_ALREADY_ANALYZED). 이 경로는 lastAnalysis가
   // null이라 feedback이 로컬 분기로 떨어지는데, 그 정오 판정을 헤드라인으로 쓰면 서버가
@@ -153,8 +219,12 @@ export default function Grade() {
             <View style={[styles.compare, { backgroundColor: theme.color.surface, borderColor: theme.color.border, borderRadius: radius.card }]}>
               <BrailleCellView
                 cell={current.compare.expected}
-                caption={`정답 · ${ordinalKo(current.compare.index)} 칸`}
-                accessibilityLabel={`정답 점자, ${ordinalKo(current.compare.index)} 칸`}
+                caption={`정답 · ${compareCaption(current.compare, ordinalKo)}`}
+                accessibilityLabel={
+                  current.compare.label
+                    ? `정답 점자, ${ordinalKo(current.compare.index)} 칸, ${current.compare.label}`
+                    : `정답 점자, ${ordinalKo(current.compare.index)} 칸`
+                }
               />
               <BrailleCellView
                 cell={current.compare.actual}
@@ -171,7 +241,12 @@ export default function Grade() {
           )}
           <View style={{ flexDirection: "row", gap: 10 }}>
             <View style={{ flex: 1 }}>
-              <AppButton label="촉각으로 확인" variant="secondary" onPress={() => announce("점자 장치 연결 후에 쓸 수 있어요.")} />
+              <AppButton
+                label="촉각으로 확인"
+                variant="secondary"
+                accessibilityHint="정답 점자를 장치에 올려 손끝으로 읽어요"
+                onPress={() => void feelAnswer()}
+              />
             </View>
             <View style={{ flex: 1 }}>
               <AppButton label="따라 하기" variant="secondary" onPress={() => announce("따라 하기는 준비 중이에요.")} />
@@ -192,7 +267,7 @@ export default function Grade() {
                 : "다음 문항"
               : "다음 점자"
           }
-          onPress={isLastStep ? goNext : () => setStep((s) => s + 1)}
+          onPress={isLastStep ? goNext : nextStep}
         />
       </View>
     </ScreenShell>

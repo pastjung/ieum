@@ -7,15 +7,24 @@
 학습자 상태(skillStates)는 Spring 이 저장·전달하고, 이 서비스는 상태를 갖지 않는다.
 """
 
+import json
+import logging
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from app.domain.skills.models import SkillCatalog
+from app.infrastructure.braille_core.braille_utils import dots_to_int
 from app.infrastructure.braille_core.drill_items import build_drill_item
 from app.infrastructure.braille_core.estimate import BKTEstimator, label_of
 from app.infrastructure.braille_core.grader import grade, josa, speak_kc
+from app.infrastructure.braille_core.shadow_model import (
+    JsonTreeModel,
+    ShadowPredictor,
+    features_for,
+)
 
 MAX_WEAK = 5  # weakSkills 최대 개수
 EXPLAIN = {
@@ -38,6 +47,25 @@ EXPLAIN = {
 }
 
 
+RECENT_RESULTS_LEN = 5  # recentResults 에 남기는 최근 관측 수
+SHADOW_MODEL_PATH = (
+    Path(__file__).resolve().parents[1] / "infrastructure" / "data" / "lgbm_shadow_v1.json"
+)
+shadow_log = logging.getLogger("itda.shadow")
+_shadow_cache: dict[str, ShadowPredictor | None] = {}
+
+
+def load_shadow_predictor() -> ShadowPredictor | None:
+    """그림자 모델. 파일이 없거나 깨져도 서비스는 그대로 돈다 (None)."""
+    if "p" not in _shadow_cache:
+        try:
+            _shadow_cache["p"] = ShadowPredictor(JsonTreeModel.load(SHADOW_MODEL_PATH))
+        except Exception as e:  # noqa: BLE001 — 그림자 모델 문제는 응답에 영향을 주면 안 된다
+            shadow_log.warning("shadow model unavailable: %s", e)
+            _shadow_cache["p"] = None
+    return _shadow_cache["p"]
+
+
 @dataclass
 class SkillState:
     """Spring 의 SkillState 와 1:1 (내부 표현)."""
@@ -48,6 +76,7 @@ class SkillState:
     last_practiced_at: datetime | None = None
     mastery_prob: float | None = None
     error_counts: dict[str, int] = field(default_factory=dict)
+    recent_results: str = ""  # 최근 5회 정오, 오래된 것부터 ('0'=틀림 '1'=맞음). 학습 모델 특징용
 
     def to_estimate(self, kc: str) -> dict[str, Any]:
         return {
@@ -82,6 +111,66 @@ class AttemptAnalysis:
     skill_results: list[SkillResult]
     updated_skill_states: list[SkillState]
     warnings: list[str]
+    cell_skills: list["CellSkill"] = field(default_factory=list)
+    feedback_steps: list["FeedbackStep"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class FeedbackStep:
+    """오답의 '틀린 곳' 하나 — 화면 한 장. 정답 칸이 없으면(없어야 할 칸을 넣음) expected_* 가 None 이고 label='빈칸'."""
+
+    expected_cell_index: int | None  # 1부터. 정답 칸이 없으면 None
+    expected_pattern: int | None
+    input_pattern: int | None  # 학습자가 그 자리에 쓴 칸. 빠뜨렸으면 None
+    missing_dots: list[int]
+    extra_dots: list[int]
+    label: str  # 정답 칸의 요소 이름("받침 이응") 또는 "빈칸"
+    error_type: str
+    tts: str  # 이 틀린 곳을 설명하는 한 문장 (AI 채점기 문장)
+
+
+def _is_dots(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(d, int) for d in value)
+
+
+def label_cells(
+    kcs: list[str], cell_syllables: list[int | None] | None, catalog: SkillCatalog
+) -> list["CellSkill"]:
+    """정답 칸마다 요소 라벨. 한 요소가 이어진 여러 칸을 차지하면(ㅙ, ㄳ, 약어, 받침 ㄲ) '(1/2)'를 붙인다.
+    같은 요소라도 다른 음절이면('가가') 따로 센다."""
+    syls: list[int | None] = list(cell_syllables or [None] * len(kcs))
+    groups: list[list[int]] = []
+    for i, kc in enumerate(kcs):
+        if groups and kcs[groups[-1][-1]] == kc and syls[groups[-1][-1]] == syls[i]:
+            groups[-1].append(i)
+        else:
+            groups.append([i])
+    out: list[CellSkill] = []
+    for g in groups:
+        skill = catalog.by_kc(kcs[g[0]])
+        base = skill_label(skill.display_name)
+        for k, i in enumerate(g, 1):
+            label = f"{base} ({k}/{len(g)})" if len(g) > 1 else base
+            out.append(CellSkill(i + 1, skill.id, label))
+    return out
+
+
+@dataclass(frozen=True)
+class CellSkill:
+    """정답 칸 하나가 어떤 학습 요소인지. 화면의 '정답 · 약자 바' 캡션용."""
+
+    cell_index: int  # 1부터 (백엔드 attempt_cells.cell_index 와 같음)
+    learning_skill_id: int
+    label: str  # "약자 바", "첫소리 ㅂ", "모음 ㅙ (1/2)"
+
+
+def skill_label(display_name: str) -> str:
+    """화면용 짧은 이름. 카탈로그 이름('초성 ㅂ', '구분표(모음+예)')을 학습자가 읽기 쉽게 다듬는다."""
+    if display_name.startswith("초성 "):
+        return "첫소리 " + display_name[len("초성 ") :]
+    if display_name.startswith("구분표"):
+        return "구분표"
+    return display_name
 
 
 @dataclass(frozen=True)
@@ -245,9 +334,89 @@ class SessionService:
                     last_practiced_at=now,
                     mastery_prob=round(p, 4),
                     error_counts=counts,
+                    recent_results=(s.recent_results + ("1" if r.correct else "0"))[
+                        -RECENT_RESULTS_LEN:
+                    ],
                 )
             )
         return updated
+
+    # ── 그림자 모델: 응답에는 쓰지 않고 로그에만 남긴다 ─────────────────────
+    def _log_shadow(
+        self,
+        attempt: Attempt,
+        graded: dict[str, Any],
+        results: list[SkillResult],
+        skill_states: list[SkillState],
+        now: datetime,
+    ) -> None:
+        """이 문항을 풀기 전 상태로 '확률 갱신식(BKT)'과 '학습 모델(LightGBM)'이 각각 예측한 P(맞힘)과
+        실제 결과를 한 줄 JSON 으로 남긴다. 파일럿 로그를 모아 실제 학습자에게서 누가 더 맞는지 비교한다."""
+        predictor = load_shadow_predictor()
+        if predictor is None or not results:
+            return
+        try:
+            by_id = {s.learning_skill_id: s for s in skill_states}
+            st_dicts = [
+                {
+                    "learning_skill_id": s.learning_skill_id,
+                    "n_attempts": s.n_attempts,
+                    "n_correct": s.n_correct,
+                    "last_practiced_at": s.last_practiced_at,
+                    "mastery_prob": s.mastery_prob,
+                    "error_counts": s.error_counts,
+                    "recent_results": s.recent_results,
+                }
+                for s in skill_states
+            ]
+            item_ids = [r.learning_skill_id for r in results]
+            is_drill = build_drill_item(attempt.target_text, attempt.expected_patterns) is not None
+            rows: list[dict[str, Any]] = []
+            for r in results:
+                skill = self.catalog.by_id(r.learning_skill_id)
+                if skill is None:
+                    continue
+                st = by_id.get(r.learning_skill_id)
+                p_bkt = self.estimator.prior()
+                if st is not None and st.mastery_prob is not None:
+                    p_bkt = st.mastery_prob
+                    if st.last_practiced_at is not None:
+                        p_bkt = self.estimator._decay(p_bkt, st.to_estimate(skill.kc), now)
+                x = features_for(
+                    r.learning_skill_id,
+                    skill.level,
+                    next(
+                        (d for d in st_dicts if d["learning_skill_id"] == r.learning_skill_id), None
+                    ),
+                    st_dicts,
+                    item_ids,
+                    len(graded["expected_cells"]),
+                    is_drill,
+                    now,
+                )
+                rows.append(
+                    {
+                        "skill": r.learning_skill_id,
+                        "p_bkt": round(p_bkt, 4),
+                        "p_lgbm": round(predictor.predict(x), 4),
+                        "correct": r.correct,
+                    }
+                )
+            shadow_log.info(
+                json.dumps(
+                    {
+                        "event": "shadow_prediction",
+                        "model": predictor.version,
+                        "ts": now.isoformat(),
+                        "text": attempt.target_text,
+                        "n_cells": len(graded["expected_cells"]),
+                        "skills": rows,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        except Exception as e:  # noqa: BLE001
+            shadow_log.warning("shadow prediction skipped: %s", e)
 
     # ── ① 문항 하나 ────────────────────────────────────────────────────────
     def analyze_attempt(
@@ -257,6 +426,7 @@ class SessionService:
         warnings: list[str] = []
         graded = self._grade(attempt, warnings)
         results = self._skill_results(graded)
+        self._log_shadow(attempt, graded, results, skill_states, now)
 
         updated = self.apply_results(results, skill_states, now)
         fb = graded["feedback"]
@@ -268,7 +438,67 @@ class SessionService:
             skill_results=results,
             updated_skill_states=updated,
             warnings=warnings,
+            cell_skills=(cells := self._cell_skills(graded)),
+            feedback_steps=self._feedback_steps(graded, cells),
         )
+
+    def _cell_skills(self, graded: dict[str, Any]) -> list[CellSkill]:
+        return label_cells(list(graded["kc"]), graded.get("cell_syllables"), self.catalog)
+
+    def _feedback_steps(
+        self, graded: dict[str, Any], cell_skills: list[CellSkill]
+    ) -> list["FeedbackStep"]:
+        """오답 화면이 하나씩 넘겨 보여줄 '틀린 곳'. 오류 하나 = 단계 하나, 앞 칸부터.
+
+        백엔드의 칸 비교는 같은 번호끼리 맞대므로 칸을 하나 더 넣으면 뒤가 전부 밀려 '모두 N칸이 틀렸어요'가 된다.
+        여기서는 정렬(칸 맞추기) 뒤의 오류만 단계로 만든다 — '음식'을 ㅇ까지 6칸으로 쓰면 단계는 하나,
+        '첫소리 이응은 점자로 적지 않아요'이고 정답 칸은 빈칸이다."""
+        if graded["correct"]:
+            return []
+        exp: list[list[int]] = graded["expected_dots"]
+        labels = {c.cell_index - 1: c.label for c in cell_skills}
+        steps: list[FeedbackStep] = []
+        for e in sorted(
+            graded["errors"], key=lambda x: (x.get("cell") if x.get("cell") is not None else 1_000)
+        ):
+            etype: str = e["type"]
+            i = e.get("cell")
+            act = e.get("actual")
+            if etype in (
+                "silent_onset_written",
+                "cell_inserted",
+            ):  # 없어야 할 칸을 넣음 → 정답은 빈칸
+                exp_dots, act_dots, exp_idx = None, act if _is_dots(act) else None, None
+            else:
+                exp_dots = exp[i] if isinstance(i, int) and 0 <= i < len(exp) else None
+                if etype in (
+                    "cell_omitted",
+                    "abbr_overused",
+                ):  # 있어야 할 칸을 빠뜨림 → 내 입력은 없음
+                    act_dots = None
+                elif (
+                    isinstance(act, list) and act and isinstance(act[0], list)
+                ):  # 순서 바뀜·약자 풀어 씀: 첫 칸
+                    act_dots = act[0]
+                else:
+                    act_dots = act if _is_dots(act) else None
+                exp_idx = i + 1 if exp_dots is not None and isinstance(i, int) else None
+            e_set, a_set = set(exp_dots or []), set(act_dots or [])
+            steps.append(
+                FeedbackStep(
+                    expected_cell_index=exp_idx,
+                    expected_pattern=dots_to_int(exp_dots) if exp_dots is not None else None,
+                    input_pattern=dots_to_int(act_dots) if act_dots is not None else None,
+                    missing_dots=sorted(e_set - a_set),
+                    extra_dots=sorted(a_set - e_set),
+                    label=labels.get(i, "빈칸")
+                    if exp_idx is not None and isinstance(i, int)
+                    else "빈칸",
+                    error_type=etype,
+                    tts=str(e.get("sentence") or ""),
+                )
+            )
+        return steps
 
     def _detail(self, graded: dict[str, Any], results: list[SkillResult]) -> str:
         wrong = [r for r in results if not r.correct]

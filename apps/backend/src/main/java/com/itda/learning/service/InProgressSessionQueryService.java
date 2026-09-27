@@ -22,8 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>홈 화면의 "이어서 학습"이 오랫동안 목 데이터("3단계 자음과 모음 · 7 / 10 문항")를 보여주고, 누르면 진행 중이던 세션이 아니라 새 자음 세션을 만들었다.
  * 앱이 이어받을 세션의 식별자를 알 방법이 없었기 때문이다.
  *
- * <p>진행 중 세션은 사실상 하나뿐이다. {@code ProblemService.createSession}이 새 세션을 만들 때 같은 종류의 미완료 세션을 모두 완료 처리하기
- * 때문이다. 그래도 방어적으로 최신 것을 고른다.
+ * <p>진행 중 세션은 <b>종류마다</b> 사실상 하나뿐이다. {@code ProblemService.createSession}이 새 세션을 만들 때 같은 종류의 미완료
+ * 세션만 완료 처리하기 때문이다 — 단계 학습 하나와 복습 하나가 함께 남을 수 있다. 종류 안에서는 방어적으로 최신 것을 고른다.
  */
 @Service
 @RequiredArgsConstructor
@@ -36,19 +36,32 @@ public class InProgressSessionQueryService {
   /** 커리큘럼 단계가 없는 세션은 복습이다 (`createSession(userId, null)`) */
   private static final String REVIEW_STAGE_NAME = "복습";
 
+  /**
+   * 진행 중 세션을 종류별로 고른다.
+   *
+   * <p>종류를 가리지 않으면 최근 것 하나만 보여, 단계 학습과 복습이 함께 남았을 때 더 오래된 쪽을 이어받을 방법이 없다. 앱은 새 세션을 만들기 전에 "진행 중인 것이
+   * 닫힌다"를 물어야 하는데, 가려진 쪽은 묻지도 못한 채 닫혔다.
+   *
+   * @param review {@code true}면 복습, {@code false}면 단계 학습만. {@code null}이면 두 종류 중 최신 것
+   */
   @Transactional(readOnly = true)
-  public Optional<InProgressSession> find(long userId) {
+  public Optional<InProgressSession> find(long userId, Boolean review) {
     User user =
         userJpaRepository
             .findById(userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
     List<LearningSession> candidates = new ArrayList<>();
-    candidates.addAll(
-        learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
-            user));
-    candidates.addAll(
-        learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user));
+    if (!Boolean.TRUE.equals(review)) {
+      candidates.addAll(
+          learningSessionRepository.findAllByUserAndCurriculumStageIsNotNullAndCompletedAtIsNull(
+              user));
+    }
+    if (!Boolean.FALSE.equals(review)) {
+      candidates.addAll(
+          learningSessionRepository.findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(
+              user));
+    }
 
     return candidates.stream()
         .max(Comparator.comparing(LearningSession::getCreatedAt))

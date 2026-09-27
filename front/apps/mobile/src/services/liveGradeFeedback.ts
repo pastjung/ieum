@@ -28,7 +28,7 @@ function toCellAnalysis(cell: AnswerCell): AttemptCellAnalysis {
  */
 export function liveGradeFeedback(result: LiveAnswer): GradeFeedback {
   const cells = result.cells.map(toCellAnalysis);
-  const { headline, steps } = describeCells(cells, result.isCorrect, "");
+  const { headline, steps } = describeCells(cells, result.isCorrect);
   const byIndex = new Map(cells.map((c) => [c.cellIndex, c]));
   return {
     correct: result.isCorrect,

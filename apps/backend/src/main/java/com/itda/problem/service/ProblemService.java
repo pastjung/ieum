@@ -23,6 +23,7 @@ import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
 import com.itda.user.repository.UserJpaRepository;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
@@ -291,7 +292,7 @@ public class ProblemService {
     // 제외될 뿐 따로 배정되므로, 여기서 거르지 않으면 13칸 이상 문제가 상한 검사를 통째로 비껴간다.
     List<UserWrongProblem> wrongProblems =
         assignableOnly(
-            userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedIsNull(
+            userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedFalse(
                 user.userId(), level));
     int wrongCnt = Math.min(wrongProblems.size(), 4);
     Collections.shuffle(wrongProblems);
@@ -607,7 +608,7 @@ public class ProblemService {
         userJpaRepository
             .findById(userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-    LocalDateTime completedAt = LocalDateTime.now();
+    LocalDateTime completedAt = LocalDateTime.now(ZoneOffset.UTC);
     if (curriculum == null) {
       learningSessionRepository
           .findAllByUserAndCurriculumStageIsNullAndCompletedAtIsNull(user)

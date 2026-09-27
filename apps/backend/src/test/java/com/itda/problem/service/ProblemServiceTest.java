@@ -681,7 +681,7 @@ class ProblemServiceTest {
         .willReturn(List.of());
 
     given(
-            userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedIsNull(
+            userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedFalse(
                 learnerId, Level.WORD))
         .willReturn(List.of());
 
@@ -807,7 +807,7 @@ class ProblemServiceTest {
     Problem shortWrong = problem(101L, "짧은오답");
     Problem longWrong = problem(102L, "긴오답");
     given(
-            userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedIsNull(
+            userWrongProblemRepository.findAllByUser_IdAndLevelAndIsCompletedFalse(
                 learnerId, Level.WORD))
         .willReturn(
             new ArrayList<>(

@@ -150,6 +150,9 @@ SEVERITY = {
 }
 
 
+COUNT_WORD = ["한", "두", "세", "네", "다섯", "여섯", "일곱", "여덟"]
+
+
 def _sentence(
     e: dict[str, Any],
     cells: list[list[int]],
@@ -211,7 +214,7 @@ def _sentence(
         return f"{name}, {exp}이 빠졌어요."
     if t == "silent_onset_written":
         n = len(syllables[d["syl"]]["cells"]) if syllables else 1
-        count = ORDINAL[n - 1] if n <= len(ORDINAL) else n
+        count = COUNT_WORD[n - 1] if n <= len(COUNT_WORD) else n  # 개수: 한 칸·두 칸 (첫 칸이 아님)
         return (
             f"첫소리 이응은 점자로 적지 않아요. '{syl}'{josa(syl, ('은', '는'))} {count} 칸이에요."
         )
@@ -236,6 +239,16 @@ def _info_when_correct(kcs: list[str], kc_rules: list[dict[str, Any]]) -> str:
 
 
 # ── 채점 ──────────────────────────────────────────────────────────────────
+def _cell_syllables(n_cells: int, syllables: list[dict[str, Any]]) -> list[int | None]:
+    """칸마다 몇 번째 음절에 속하는지. 드릴(음절 정보 없음)은 전부 None."""
+    out: list[int | None] = [None] * n_cells
+    for syl in syllables:
+        for c in syl.get("cells", []):
+            if 0 <= c < n_cells:
+                out[c] = syl["idx"]
+    return out
+
+
 def _to_dots(x: int | list[int]) -> list[int]:
     return int_to_dots(x) if isinstance(x, int) else list(x)
 
@@ -298,8 +311,10 @@ def grade(
         kc_outcomes.append({"kc": r["kc"], "syl": r["syl"], "correct": not failed})
 
     # 피드백
+    for e in errors:  # 오류마다 한 문장 — 오답 화면이 틀린 곳을 하나씩 넘겨 보여줄 때 쓴다
+        e["sentence"] = _sentence(e, cells, kcs, syllables, text)
     errors_sorted = sorted(errors, key=lambda e: -SEVERITY.get(e["type"], 0))
-    lines = [_sentence(e, cells, kcs, syllables, text) for e in errors_sorted]
+    lines = [e["sentence"] for e in errors_sorted]
     if correct:
         tts = "정답이에요."
         info = _info_when_correct(kcs, kc_rules)
@@ -322,6 +337,8 @@ def grade(
         "actual": cells_to_unicode(actual_dots),
         "cell_results": cell_ok,
         "kc": kcs,
+        "expected_dots": cells,
+        "cell_syllables": _cell_syllables(len(cells), syllables),
         "kc_rules": [r["kc"] for r in kc_rules],
         "errors": errors,
         "kc_outcomes": kc_outcomes,

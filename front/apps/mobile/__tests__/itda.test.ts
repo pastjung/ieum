@@ -177,9 +177,14 @@ describe("캡슐 실행", () => {
     expect(result.navigation).toEqual({ kind: "to", route: "/(tabs)/settings", title: "설정" });
   });
 
-  it("학습 시작은 세션 화면으로 데려간다", async () => {
+  it("복습 시작은 복습 세션 안내로 데려간다", async () => {
+    // 파라미터 없이 안내 화면으로 가면 단계 학습으로 읽혀 curriculumId 없이 세션을 만들려다 실패했다
     const result = (await capsule().execute(parse("복습 시작해줘"))) as Extract<CapsuleResult, { kind: "done" }>;
-    expect(result.navigation).toEqual({ kind: "to", route: "/session/intro", title: "문제 풀기" });
+    expect(result.navigation).toEqual({
+      kind: "to",
+      route: "/session/intro?mode=review",
+      title: "문제 풀기",
+    });
   });
 
   it("점 올리기는 모듈에 ON 명령을 보낸다", async () => {

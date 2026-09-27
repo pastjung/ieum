@@ -111,8 +111,11 @@ public enum ErrorCode {
   PROBLEM_TEXT_AMBIGUOUS(HttpStatus.CONFLICT, "어떤 문제인지 골라 주세요."),
   PROBLEM_VALIDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "문제 검증 서비스를 일시적으로 사용할 수 없습니다."),
   /** 문제 연결 대상 문제(기존·AI 생성 모두)의 셀 수가 12칸을 넘음 — 연결하지 않는다 (8.2.1절). */
-  PROBLEM_TOO_LONG(HttpStatus.UNPROCESSABLE_CONTENT, "12칸까지만 출제할 수 있어요.");
+  PROBLEM_TOO_LONG(HttpStatus.UNPROCESSABLE_CONTENT, "12칸까지만 출제할 수 있어요."),
 
+  // braille dictionary
+  BRAILLE_TEXT_UNSUPPORTED(HttpStatus.UNPROCESSABLE_CONTENT, "한글 단어나 낱자만 찾을 수 있어요."),
+  BRAILLE_CONVERSION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "점자로 바꿀 수 없어요. 잠시 후 다시 시도해 주세요.");
   private final HttpStatus status;
   private final String message;
 

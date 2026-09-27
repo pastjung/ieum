@@ -98,3 +98,6 @@ google-services.json
 
 # AI 작업 스크래치 (repo 무관)
 Claude outputs/
+
+# 개인 로컬 compose 오버라이드 (포트 충돌 우회 등, PC마다 다름)
+docker-compose.local.yml
