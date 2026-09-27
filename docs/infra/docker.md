@@ -16,7 +16,8 @@ S15P21B201/
 │  └─ ai/Dockerfile
 ├─ deploy/                       # EC2에서 사용하는 것만 둔다
 │  ├─ docker-compose.prod.yml    # blue/green 서비스 정의 (이미지 참조만, 빌드 없음)
-│  └─ .env.example               # 운영 환경변수 목록 (실제 값은 EC2의 deploy/.env)
+│  ├─ .env.config.example        # 운영 설정 키 목록 (실제 값은 Jenkins itda-env-config)
+│  └─ .env.tags.example          # 배포 태그 상태 키
 └─ scripts/                      # 빌드·배포 스크립트 (2단계에서 추가)
 ```
 
@@ -77,18 +78,19 @@ docker compose up --build --watch
 
 ## 5. 운영 Compose
 
-`deploy/docker-compose.prod.yml`은 이미지 태그만 참조하며, 값은 같은 폴더의 `.env`에서 주입된다.
+`deploy/docker-compose.prod.yml`은 이미지 태그만 참조한다. 태그는 `.env.tags`(deploy.sh가 갱신)에서 치환되고, backend는 `.env.config`를 `env_file`로 통째로 받는다(키 목록: deploy.md 6.2.1절). 그중 `SPRING_PROFILES_ACTIVE`는 compose `environment`에서도 필수값으로 다시 참조하므로, `.env.config`가 없거나 그 키가 빠지면 컨테이너를 띄우기 전 compose 해석 단계에서 바로 실패한다.
 
 ```bash
 # 기동은 서비스 단위로만 한다 (scripts/deploy.sh가 수행)
 docker compose -f docker-compose.prod.yml up -d backend-green
 ```
 
-EC2의 `.env` 작성 절차와 값의 의미는 deploy.md 6.2절을 따른다. `.env.example`은 필요한 키 목록의 원본이며 실제 값은 서버에만 존재한다 (Git 커밋 금지).
+두 파일의 작성 절차는 deploy.md 6.2절을 따른다. `deploy/.env.config.example`은 키 목록의 원본이며 실제 값은 Jenkins credential에만 있다 (Git 커밋 금지).
 
 - 인자 없이 `up -d`를 실행하지 않는다 — blue/green 6개 컨테이너가 전부 뜬다
 - `REGISTRY_PREFIX`는 현재 빈 값(로컬 이미지 저장소). 레지스트리 도입 시 이 값만 변경한다
 - 서비스별 태그(`WEB_TAG`, `BACKEND_TAG`, `AI_TAG`)는 deploy.sh가 배포 시 갱신한다
+- `redis`(컨테이너 `itda-redis`, `redis:8.2.9-alpine`, AOF 켬, 볼륨 `itda-redis-data`)는 blue-green 대상이 아니다. 포트를 열지 않고 compose 기본 네트워크 안에서 backend만 `redis:6379`로 접근한다. Jenkins `Redis` 단계가 배포마다 `up -d redis`로 떠 있는지 보장한다. 볼륨을 지우면 모든 로그인 상태가 사라지므로 `docker compose down -v`를 운영에서 쓰지 않는다
 
 이미지 보존 정책 (EC2 로컬 저장소가 곧 이미지 보관소이므로 반드시 지킨다):
 

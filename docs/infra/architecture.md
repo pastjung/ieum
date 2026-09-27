@@ -6,7 +6,7 @@
 
 ```mermaid
 flowchart LR
-    U["👤 사용자<br/>(브라우저 · 모바일 앱)"] -- "https://j15b201.p.ssafy.io<br/>(HTTPS, 443만 개방)" --> NX
+    U["👤 사용자<br/>(브라우저 · 모바일 앱)"] -- "https://i-eum.site<br/>(HTTPS, 443만 개방)" --> NX
 
     subgraph EC2["EC2 서버 (Ubuntu · 방화벽 3중 방어)"]
         NX["🚪 호스트 Nginx<br/>HTTPS 해제 + 경로 교통정리<br/>+ blue/green 전환 스위치"]
@@ -29,13 +29,15 @@ flowchart LR
         NX -- "/api/ → API" --> BB
         NX -. "대기 슬롯" .-> BG
         BB -- "AI 기능 내부 호출<br/>(Nginx 내부 리스너 :9100 경유)" --> AB
+        BB -- "인증 토큰 상태·사용량" --> RD[("🧠 Redis<br/>itda-redis")]
+        NX -- "/app/ → APK·latest.json" --> DL["📦 downloads/<br/>(정적 파일)"]
     end
 
-    BB -. "RDS 연결 예정<br/>(현재는 H2 임시 — 재배포 시 데이터 소실)" .-> RDS[("🗄️ RDS MySQL<br/>(예정)")]
+    BB -- "DB_URL" --> DB[("🗄️ 외부 MariaDB")]
 ```
 
 - **실선 = 지금 트래픽이 흐르는 길**, 점선 = 대기 슬롯/예정. 서비스마다 슬롯이 2개씩 있고 Nginx가 한쪽으로만 트래픽을 보낸다 — 배포는 빈 슬롯에 새 버전을 띄우고 스위치만 돌리는 방식이라 무중단이다 ([deploy.md](./deploy.md) 7절).
-- 외부에서 접근 가능한 문은 사실상 호스트 Nginx(443) 하나다. 컨테이너 포트는 전부 127.0.0.1 바인딩이고, ai는 backend만 내부 리스너(9100)로 호출한다 ([deploy.md](./deploy.md) 3절).
+- 외부에서 접근 가능한 문은 사실상 호스트 Nginx(443) 하나다. 컨테이너 포트는 전부 127.0.0.1 바인딩이고, ai는 backend만 내부 리스너(9100)로 호출한다 ([deploy.md](./deploy.md) 3절). 옛 도메인 `j15b201.p.ssafy.io`는 i-eum.site로 301 넘기고, 실시간 음성 신호는 `openvidu.i-eum.site`(같은 nginx → OpenVidu)로 들어온다.
 
 ## 2. 시스템 아키텍처 — 코드가 서버에 도착하기까지 (CI/CD)
 

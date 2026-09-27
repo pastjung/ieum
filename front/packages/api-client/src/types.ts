@@ -19,11 +19,19 @@ export interface TokenStore {
 }
 
 export interface RequestOptions {
+  /** JSON으로 보낼 값. `FormData`면 그대로 보내고 Content-Type은 fetch가 정한다(multipart boundary) */
   body?: unknown;
   /** 기본 true. false면 Authorization을 붙이지 않고 401 자동 갱신도 하지 않는다 */
   auth?: boolean;
   /** 요청별 헤더(예: Idempotency-Key). 플랫폼·Content-Type·Authorization은 덮지 못한다 */
   headers?: Readonly<Record<string, string>>;
+  /**
+   * 성공 응답 해석 방식. 기본 "json". "arrayBuffer"면 본문 바이트를 그대로 돌려준다(예: MP3).
+   * 오류 응답은 어느 쪽이든 JSON `{code, message}`로 해석해 ApiError로 던진다
+   */
+  responseType?: "json" | "arrayBuffer";
+  /** 요청 취소(시간 제한 등). 취소되면 NETWORK_UNAVAILABLE ApiError로 끝난다 */
+  signal?: AbortSignal;
 }
 
 export interface ApiClientConfig {

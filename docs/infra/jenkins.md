@@ -4,7 +4,7 @@
 
 이 문서는 CI/CD 서버인 Jenkins의 설치 구성과 그 이유, 초기 설정, Credentials 관리 기준을 정의한다. 파이프라인(잡, Webhook, Jenkinsfile)은 4단계에서 별도 문서로 다룬다.
 
-- 접속: `https://j15b201.p.ssafy.io/jenkins/` (호스트 Nginx 경유, 관리자 계정은 팀 비공개 페이지에 기록)
+- 접속: `https://i-eum.site/jenkins/` (호스트 Nginx 경유, 관리자 계정은 팀 비공개 페이지에 기록)
 - 설치 정의 원본: repo `deploy/jenkins/` (Dockerfile, docker-compose.yml, .env.example)
 
 ## 2. 사전 지식
@@ -41,7 +41,7 @@ mkdir -p /home/ubuntu/jenkins /home/ubuntu/jenkins-data
 sudo chown -R 1000:1000 /home/ubuntu/jenkins-data
 
 # 본인 PC의 repo 루트에서 — 설치 정의 전송
-scp -i <pem> deploy/jenkins/Dockerfile deploy/jenkins/docker-compose.yml ubuntu@j15b201.p.ssafy.io:/home/ubuntu/jenkins/
+scp -i <pem> deploy/jenkins/Dockerfile deploy/jenkins/docker-compose.yml ubuntu@i-eum.site:/home/ubuntu/jenkins/
 
 # EC2에서 — DOCKER_GID 기록 후 기동
 cd /home/ubuntu/jenkins
@@ -58,10 +58,11 @@ Nginx의 `/jenkins/` 경로는 `deploy/nginx/itda.conf`에 정의되어 있으�
 
 ## 5. 초기 설정 (브라우저)
 
-1. `https://j15b201.p.ssafy.io/jenkins/` 접속 → 초기 비밀번호 입력 (Unlock)
+1. `https://i-eum.site/jenkins/` 접속 → 초기 비밀번호 입력 (Unlock)
 2. **Install suggested plugins**
 3. 관리자 계정 생성 — 팀 공용, 계정 정보는 팀 비공개 페이지에 기록
-4. Jenkins URL: `https://j15b201.p.ssafy.io/jenkins/` 확인
+4. Jenkins URL: `https://i-eum.site/jenkins/` 확인
+   (옛 도메인으로 설정돼 있던 서버는 System → Jenkins URL을 이 값으로 바꾼다 — deploy.md 10절)
 5. 추가 플러그인 설치: Manage Jenkins → Plugins → Available에서 **GitLab** (Webhook 트리거와 빌드 상태 회신용 — suggested에 미포함)
 
 ## 6. Credentials 관리 기준

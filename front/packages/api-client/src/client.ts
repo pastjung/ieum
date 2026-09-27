@@ -8,6 +8,17 @@ export function createClient(config: ApiClientConfig): ApiClient {
   // 스프레드로는 안 걸러진다 — 소문자로 비교해 여기서 미리 뺀다 (M6)
   const RESERVED_HEADER_NAMES = new Set(["authorization", "x-client-platform", "content-type"]);
 
+  // FormData는 문자열로 바꾸면 "{}"가 된다. 그대로 넘기고 boundary는 fetch에게 맡긴다
+  function isFormData(body: unknown): body is FormData {
+    return typeof FormData !== "undefined" && body instanceof FormData;
+  }
+
+  function encodeBody(body: unknown): BodyInit | undefined {
+    if (body === undefined) return undefined;
+    if (isFormData(body)) return body;
+    return JSON.stringify(body);
+  }
+
   function buildHeaders(options: RequestOptions): Record<string, string> {
     const headers: Record<string, string> = {};
     if (options.headers) {
@@ -16,8 +27,9 @@ export function createClient(config: ApiClientConfig): ApiClient {
       }
     }
     headers["X-Client-Platform"] = config.platform;
-    // body가 없는 요청에 Content-Type을 붙이지 않는다 — 보낼 표현이 없다
-    if (options.body !== undefined) {
+    // body가 없는 요청에 Content-Type을 붙이지 않는다 — 보낼 표현이 없다.
+    // FormData는 fetch가 multipart boundary를 담아 직접 붙여야 한다
+    if (options.body !== undefined && !isFormData(options.body)) {
       headers["Content-Type"] = "application/json";
     }
     if (options.auth !== false) {
@@ -35,11 +47,21 @@ export function createClient(config: ApiClientConfig): ApiClient {
       response = await fetchFn(`${config.baseUrl}${path}`, {
         method,
         headers: buildHeaders(options),
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body: encodeBody(options.body),
+        ...(options.signal ? { signal: options.signal } : {}),
       });
     } catch {
       // 원인 메시지를 그대로 노출하지 않는다 — 사용자에게 의미가 없다
       throw new ApiError(0, NETWORK_UNAVAILABLE, "네트워크에 연결할 수 없어요.");
+    }
+
+    // 바이트 응답(MP3 등)은 성공일 때만 그대로 넘긴다. 오류는 아래 JSON 경로로 해석한다
+    if (response.ok && options.responseType === "arrayBuffer") {
+      try {
+        return (await response.arrayBuffer()) as T;
+      } catch {
+        throw new ApiError(response.status, INVALID_RESPONSE, "서버 응답을 해석하지 못했어요.");
+      }
     }
 
     // 204와, 오류 상태에서 body를 생략한 응답을 같은 경로로 처리한다

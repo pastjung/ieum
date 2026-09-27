@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppActionRedirectPage } from '../pages/AppActionRedirectPage'
+import { AppDownloadPage } from '../pages/AppDownloadPage'
 import { LectureCreatePage } from '../pages/LectureCreatePage'
 import { LectureListPage } from '../pages/LectureListPage'
 import { LiveLecturePage } from '../pages/LiveLecturePage'
@@ -12,6 +13,8 @@ export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/lectures" replace /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/signup', element: <SignupPage /> },
+  // 학습자 앱 다운로드 — 로그인 없이 연다. /app/latest.json·/app/ieum.apk 는 호스트 nginx가 먼저 처리한다
+  { path: '/app', element: <AppDownloadPage /> },
   {
     element: <RequireInstructor />,
     children: [
