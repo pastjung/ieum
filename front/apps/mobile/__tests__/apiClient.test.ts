@@ -366,3 +366,76 @@ describe("api-client 요청별 헤더", () => {
     expect(headers["content-type"]).toBeUndefined();
   });
 });
+
+describe("api-client 멀티파트·바이트 응답·취소", () => {
+  function clientWith(fetchFn: jest.Mock) {
+    const { store } = memoryTokenStore("access-1", "refresh-1");
+    return createClient({
+      baseUrl: "http://localhost:8080/api/v1",
+      platform: "MOBILE",
+      tokens: store,
+      onSessionExpired: () => {},
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+  }
+
+  it("FormData 본문은 그대로 보내고 Content-Type을 붙이지 않는다 (boundary는 fetch가 붙인다)", async () => {
+    const fetchFn = jest.fn(async () => fakeResponse(201, { voiceId: "v-1" }));
+    const form = new FormData();
+    form.append("name", "내 목소리");
+
+    const result = await clientWith(fetchFn).post<{ voiceId: string }>("/voice/clones", form);
+
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(init.body).toBe(form);
+    expect(headers["Content-Type"]).toBeUndefined();
+    expect(headers.Authorization).toBe("Bearer access-1");
+    expect(result.voiceId).toBe("v-1");
+  });
+
+  it("responseType arrayBuffer면 성공 응답의 바이트를 그대로 돌려준다", async () => {
+    const bytes = new Uint8Array([0x49, 0x44, 0x33]).buffer;
+    const fetchFn = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => bytes,
+      text: async () => {
+        throw new Error("바이트 응답을 text로 읽으면 안 된다");
+      },
+    }));
+
+    const result = await clientWith(fetchFn).post<ArrayBuffer>(
+      "/voice/speech",
+      { voiceId: "v-1", text: "안녕" },
+      { responseType: "arrayBuffer" },
+    );
+
+    expect(new Uint8Array(result)).toEqual(new Uint8Array([0x49, 0x44, 0x33]));
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+  });
+
+  it("responseType arrayBuffer여도 오류 응답은 code를 ApiError로 옮긴다", async () => {
+    const fetchFn = jest.fn(async () =>
+      fakeResponse(503, { code: "VOICE_SYNTHESIS_UNAVAILABLE", message: "음성 합성을 사용할 수 없습니다." }),
+    );
+
+    await expect(
+      clientWith(fetchFn).post("/voice/speech", { voiceId: "v-1", text: "안녕" }, { responseType: "arrayBuffer" }),
+    ).rejects.toMatchObject({ status: 503, code: "VOICE_SYNTHESIS_UNAVAILABLE" });
+  });
+
+  it("signal을 fetch에 넘기고, 없으면 init에 signal 키를 넣지 않는다", async () => {
+    const fetchFn = jest.fn(async () => fakeResponse(200, {}));
+    const controller = new AbortController();
+
+    await clientWith(fetchFn).get("/users/me", { signal: controller.signal });
+    await clientWith(fetchFn).get("/users/me");
+
+    const [, withSignal] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const [, withoutSignal] = fetchFn.mock.calls[1] as unknown as [string, RequestInit];
+    expect(withSignal.signal).toBe(controller.signal);
+    expect("signal" in withoutSignal).toBe(false);
+  });
+});
