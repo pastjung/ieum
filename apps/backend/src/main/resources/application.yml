@@ -87,6 +87,16 @@ itda:
     url: ${LIVEKIT_URL}
     api-key: ${LIVEKIT_API_KEY}
     api-secret: ${LIVEKIT_API_SECRET}
+  # Cartesia 음성 복제·합성 (API 명세 12절). APK에 키를 넣지 않기 위해 학습자 앱 대신 backend가 호출한다.
+  # 키는 선택값이다 — 비어 있으면 기동은 하고 두 음성 API가 503 VOICE_SYNTHESIS_UNAVAILABLE을 돌려준다.
+  cartesia:
+    base-url: https://api.cartesia.ai
+    api-key: ${CARTESIA_API_KEY:}
+    # 앱(front/apps/mobile/src/services/cartesia.ts)이 실제 호출로 확인한 API 버전. 따옴표는 날짜로 읽히지 않게 하려는 것이다.
+    api-version: "2026-08-14"
+    connect-timeout: 5s
+    clone-timeout: 60s
+    speech-timeout: 20s
   mail:
     # 계정 메일(이메일 인증·비밀번호 재설정) SMTP 발송. 재시도·backoff·제한 시간·보존 기간은 ERD 3.5절의 계약 값이라
     # MailDispatchProperties 기본값으로 고정하고 여기서 열지 않는다.
