@@ -69,4 +69,20 @@ public interface ProblemAttemptRepository extends JpaRepository<ProblemAttempt, 
     GROUP BY p.level
     """)
   List<LevelAttemptCount> countByLevel(@Param("userId") Long userId);
+
+  /**
+   * 수업 목록 항목의 correctRate 분자·분모. LIVE 풀이만 세고 수업 id로 묶는다.
+   *
+   * <p>페이지에 실린 수업 id들로 한 번에 묶어 센다 — 항목마다 다시 조회하지 않는다 (API 명세 8.2절).
+   */
+  @Query(
+      """
+    SELECT a.lectureId AS lectureId,
+           COUNT(a) AS totalCount,
+           SUM(CASE WHEN a.correct = true THEN 1L ELSE 0L END) AS correctCount
+    FROM ProblemAttempt a
+    WHERE a.lectureId IN :lectureIds AND a.attemptMode = com.itda.learning.domain.AttemptMode.LIVE
+    GROUP BY a.lectureId
+    """)
+  List<LectureLiveAttemptCount> countLiveByLectureIdIn(@Param("lectureIds") List<Long> lectureIds);
 }

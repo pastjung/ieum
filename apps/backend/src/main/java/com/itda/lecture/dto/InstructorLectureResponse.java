@@ -37,9 +37,4 @@ public record InstructorLectureResponse(
         lecture.getParticipationCode(),
         snapshot.linkedProblems().stream().map(LinkedProblemResponse::from).toList());
   }
-
-  /** 수업 목록 항목. 문제 정보는 채우지 않는다 (API 명세 8.2절). */
-  public static InstructorLectureResponse from(Lecture lecture) {
-    return from(LectureSnapshot.ofInstructor(lecture));
-  }
 }

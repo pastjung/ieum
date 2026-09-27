@@ -3,16 +3,24 @@ package com.itda.lecture.service;
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.learning.domain.LectureLiveAttemptCount;
+import com.itda.learning.domain.ProblemAttemptRepository;
 import com.itda.lecture.domain.Lecture;
+import com.itda.lecture.domain.LectureIdCount;
 import com.itda.lecture.domain.LectureStatus;
 import com.itda.lecture.domain.ParticipantId;
 import com.itda.lecture.media.LectureRoom;
 import com.itda.lecture.media.LiveRoomGateway;
+import com.itda.lecture.repository.LectureProblemRepository;
 import com.itda.lecture.repository.LectureRepository;
 import com.itda.lecture.repository.ParticipantRepository;
 import com.itda.user.domain.UserRole;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -31,6 +39,8 @@ public class LectureService {
 
   private final LectureRepository lectureRepository;
   private final ParticipantRepository participantRepository;
+  private final LectureProblemRepository lectureProblemRepository;
+  private final ProblemAttemptRepository problemAttemptRepository;
   private final ParticipationCodeGenerator codeGenerator;
   private final LiveRoomGateway liveRoomGateway;
   private final LectureProblemQuery problemQuery;
@@ -44,6 +54,8 @@ public class LectureService {
   public LectureService(
       LectureRepository lectureRepository,
       ParticipantRepository participantRepository,
+      LectureProblemRepository lectureProblemRepository,
+      ProblemAttemptRepository problemAttemptRepository,
       ParticipationCodeGenerator codeGenerator,
       LiveRoomGateway liveRoomGateway,
       LectureProblemQuery problemQuery,
@@ -51,6 +63,8 @@ public class LectureService {
     this(
         lectureRepository,
         participantRepository,
+        lectureProblemRepository,
+        problemAttemptRepository,
         codeGenerator,
         liveRoomGateway,
         problemQuery,
@@ -61,12 +75,16 @@ public class LectureService {
   LectureService(
       LectureRepository lectureRepository,
       ParticipantRepository participantRepository,
+      LectureProblemRepository lectureProblemRepository,
+      ProblemAttemptRepository problemAttemptRepository,
       ParticipationCodeGenerator codeGenerator,
       LiveRoomGateway liveRoomGateway,
       LectureProblemQuery problemQuery,
       TransactionOperations transactionOperations) {
     this.lectureRepository = lectureRepository;
     this.participantRepository = participantRepository;
+    this.lectureProblemRepository = lectureProblemRepository;
+    this.problemAttemptRepository = problemAttemptRepository;
     this.codeGenerator = codeGenerator;
     this.liveRoomGateway = liveRoomGateway;
     this.problemQuery = problemQuery;
@@ -83,12 +101,55 @@ public class LectureService {
   }
 
   @Transactional(readOnly = true)
-  public Page<Lecture> listMine(AuthenticatedUser user, LectureStatus status, int page, int size) {
+  public Page<LectureListItem> listMine(
+      AuthenticatedUser user, LectureStatus status, int page, int size) {
     requireInstructor(user);
     PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-    return status == null
-        ? lectureRepository.findAllByInstructorUserId(user.userId(), pageable)
-        : lectureRepository.findAllByInstructorUserIdAndStatus(user.userId(), status, pageable);
+    Page<Lecture> lectures =
+        status == null
+            ? lectureRepository.findAllByInstructorUserId(user.userId(), pageable)
+            : lectureRepository.findAllByInstructorUserIdAndStatus(user.userId(), status, pageable);
+    return lectures.map(withCounts(lectures.getContent()));
+  }
+
+  /**
+   * 페이지에 실린 수업 id들로 문제·참여자·LIVE 정답 집계를 한 번씩만 묶어 읽는다 (지표당 쿼리 1건, N+1 없음).
+   *
+   * <p>수업이 없으면(빈 페이지) 집계 쿼리를 아예 부르지 않는다 — {@code IN ()}은 JPQL이 허용하지 않는다.
+   */
+  private Function<Lecture, LectureListItem> withCounts(List<Lecture> lectures) {
+    List<Long> lectureIds = lectures.stream().map(Lecture::getId).toList();
+    if (lectureIds.isEmpty()) {
+      return lecture -> new LectureListItem(lecture, 0, 0, 0, null);
+    }
+    Map<Long, Long> problemCounts =
+        toCountMap(lectureProblemRepository.countByLectureIdIn(lectureIds));
+    Map<Long, Long> joinedCounts =
+        toCountMap(participantRepository.countActiveByLectureIdIn(lectureIds));
+    Map<Long, Long> participantCounts =
+        toCountMap(participantRepository.countByLectureIdIn(lectureIds));
+    Map<Long, LectureLiveAttemptCount> liveCounts =
+        problemAttemptRepository.countLiveByLectureIdIn(lectureIds).stream()
+            .collect(Collectors.toMap(LectureLiveAttemptCount::getLectureId, count -> count));
+    return lecture ->
+        new LectureListItem(
+            lecture,
+            problemCounts.getOrDefault(lecture.getId(), 0L).intValue(),
+            joinedCounts.getOrDefault(lecture.getId(), 0L).intValue(),
+            participantCounts.getOrDefault(lecture.getId(), 0L).intValue(),
+            correctRate(liveCounts.get(lecture.getId())));
+  }
+
+  private static Map<Long, Long> toCountMap(List<LectureIdCount> counts) {
+    return counts.stream()
+        .collect(Collectors.toMap(LectureIdCount::getLectureId, LectureIdCount::getCount));
+  }
+
+  private static Integer correctRate(LectureLiveAttemptCount count) {
+    if (count == null || count.getTotalCount() == 0) {
+      return null;
+    }
+    return (int) Math.round(100.0 * count.getCorrectCount() / count.getTotalCount());
   }
 
   @Transactional(readOnly = true)

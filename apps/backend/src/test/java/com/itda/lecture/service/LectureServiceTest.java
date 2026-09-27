@@ -8,10 +8,12 @@ import static org.mockito.BDDMockito.given;
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.ErrorCode;
 import com.itda.global.security.AuthenticatedUser;
+import com.itda.learning.domain.ProblemAttemptRepository;
 import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.LectureStatus;
 import com.itda.lecture.domain.Participant;
 import com.itda.lecture.domain.ParticipantId;
+import com.itda.lecture.repository.LectureProblemRepository;
 import com.itda.lecture.repository.LectureRepository;
 import com.itda.lecture.repository.ParticipantRepository;
 import com.itda.user.domain.UserRole;
@@ -42,6 +44,8 @@ class LectureServiceTest {
 
   @Mock private LectureRepository lectureRepository;
   @Mock private ParticipantRepository participantRepository;
+  @Mock private LectureProblemRepository lectureProblemRepository;
+  @Mock private ProblemAttemptRepository problemAttemptRepository;
   @Mock private ParticipationCodeGenerator codeGenerator;
   @Mock private LectureProblemQuery problemQuery;
 
@@ -55,6 +59,8 @@ class LectureServiceTest {
         new LectureService(
             lectureRepository,
             participantRepository,
+            lectureProblemRepository,
+            problemAttemptRepository,
             codeGenerator,
             gateway,
             problemQuery,

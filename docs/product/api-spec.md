@@ -1033,7 +1033,7 @@ assigned_problems에는 item_no와 problem_id만 저장한다. 기본/개인화 
 | method·path | 성공 | 권한·핵심 계약 |
 | --- | --- | --- |
 | `POST /api/v1/lectures` | 201 | INSTRUCTOR. `title` 필수, `description`·`scheduledAt` 선택. 서버가 SCHEDULED·담당자·6자리 코드를 결정한다. |
-| `GET /api/v1/lectures` | 200 | INSTRUCTOR 본인 수업 목록. 선택 `status`, `page`, `size`; 기본 size 20, 최대 100. |
+| `GET /api/v1/lectures` | 200 | INSTRUCTOR 본인 수업 목록. 선택 `status`, `page`, `size`; 기본 size 20, 최대 100. 항목마다 `problemCount`·`joinedCount`·`participantCount`·`correctRate` 집계를 더한다. |
 | `GET /api/v1/lectures/{lectureId}` | 200 | 담당 INSTRUCTOR 또는 해당 participants 행의 LEARNER. 재접속의 권위 있는 Snapshot. |
 | `PATCH /api/v1/lectures/{lectureId}` | 200 | 담당 INSTRUCTOR, SCHEDULED 전용. `title`·`description`·`scheduledAt` 중 하나 이상을 보낸다. status·코드·현재 문제는 받지 않는다. |
 | `PUT /api/v1/lectures/{lectureId}/status` | 200 | 담당 INSTRUCTOR. body `status`는 OPEN 또는 CLOSED. 동일 상태 재요청은 현재 자원, 역행·건너뛰기는 409. |
@@ -1062,7 +1062,7 @@ assigned_problems에는 item_no와 problem_id만 저장한다. 기본/개인화 
 
 `reviewableCurriculumStages`는 수업 상태가 CLOSED이고 요청 학습자의 participants 이력이 있을 때 본인의 서로 다른 LIVE 오답을 단계별로 집계한 파생 응답이다. 각 항목은 `{stageId, level, title, incorrectProblemCount}`이며 stageId는 10진수 문자열, incorrectProblemCount는 해당 단계에 연결된 서로 다른 본인 오답 problemId 수다. `users.level` 범위에서 열린 L1~L6만 `curriculum_stages.order_no` 오름차순으로 제공한다. 같은 문제가 여러 열린 단계에 연결되면 각 단계에서 한 번씩 집계한다. CLOSED가 아니거나 대상 단계가 없으면 빈 배열이며 INSTRUCTOR 응답에는 이 필드를 넣지 않는다. 문제 ID·정답·요소 상세는 포함하지 않는다. 하나의 항목은 프론트가 기본 선택할 수 있고, 여러 항목은 사용자가 하나를 선택하며, 빈 배열은 일반 개인 학습 흐름으로 이동해 sourceLectureId를 생략한다.
 
-학습자 HTTP 상세의 `currentProblem`은 null이거나 `problemId`, `problemType`(problems.level), `targetText`, `displayText`, `cellCount`, `submitted`를 가진다. submitted와 myResult는 요청 학습자 본인의 제출 여부·결과다. myResult는 제출한 현재 문제에만 포함하며 형태는 LIVE 답안 응답(8.2.2절)과 같다. 담당 강사 Snapshot의 `currentProblem`(null 가능)과 `linkedProblems`(연결 순서 = lecture_problems.id 오름차순)는 LinkedProblem(8.2.1절)이며 정답 Cell(`expectedPattern`)을 포함한다. 수업 목록(`GET /api/v1/lectures`)의 항목은 문제 정보를 채우지 않는다(`currentProblem` null, `linkedProblems` 빈 배열). 공통 알림에는 정답과 특정 학습자의 제출 여부·결과를 넣지 않는다.
+학습자 HTTP 상세의 `currentProblem`은 null이거나 `problemId`, `problemType`(problems.level), `targetText`, `displayText`, `cellCount`, `submitted`를 가진다. submitted와 myResult는 요청 학습자 본인의 제출 여부·결과다. myResult는 제출한 현재 문제에만 포함하며 형태는 LIVE 답안 응답(8.2.2절)과 같다. 담당 강사 Snapshot의 `currentProblem`(null 가능)과 `linkedProblems`(연결 순서 = lecture_problems.id 오름차순)는 LinkedProblem(8.2.1절)이며 정답 Cell(`expectedPattern`)을 포함한다. 수업 목록(`GET /api/v1/lectures`)의 항목은 문제 정보를 채우지 않는다(`currentProblem` null, `linkedProblems` 빈 배열). 대신 정수 `problemCount`(연결된 lecture_problems 수), `joinedCount`(left_at이 NULL인 현재 참여자 수), `participantCount`(전체 participants 수)와, LIVE 풀이 정답률을 반올림한 정수 `correctRate`(LIVE 풀이가 없으면 null)를 더한다. 공통 알림에는 정답과 특정 학습자의 제출 여부·결과를 넣지 않는다.
 
 참여 요청과 현재 문제 변경 요청은 각각 다음과 같다.
 

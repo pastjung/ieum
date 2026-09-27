@@ -728,4 +728,62 @@ class LectureProblemApiIntegrationTest {
     assertThat(response.statusCode()).isEqualTo(200);
     assertThat(list(HttpTestClient.json(response).get("answers"))).hasSize(1);
   }
+
+  // ---------- 수업 목록 항목의 집계 (API 명세 8.2절) ----------
+
+  private HttpResponse<String> listLectures(Account who) {
+    return send("GET", "/lectures", null, who);
+  }
+
+  private void leave(String lectureId, Account who) {
+    Participant participant =
+        this.participantRepository
+            .findById(ParticipantId.of(Long.parseLong(lectureId), who.userId()))
+            .orElseThrow();
+    participant.leave(LocalDateTime.now(ZoneOffset.UTC));
+    this.participantRepository.save(participant);
+  }
+
+  private Map<String, Object> listItem(String lectureId) {
+    return list(HttpTestClient.json(listLectures(this.instructor)).get("items")).stream()
+        .map(LectureProblemApiIntegrationTest::map)
+        .filter(item -> lectureId.equals(item.get("lectureId")))
+        .findFirst()
+        .orElseThrow();
+  }
+
+  @Test
+  void 목록_항목은_연결_문제_참여자_LIVE_정답률을_담는다() {
+    Live live = openLectureWithLinkedWord(List.of(8, 3));
+    Problem second = seedWord(List.of(1));
+    register(live.lectureId(), second.getTargetText(), this.instructor);
+    join(live.lectureId(), this.otherLearner);
+    deliver(live.lectureId(), live.problemId(), this.instructor);
+    submit(live, this.learner, "[8,3]");
+    submit(live, this.otherLearner, "[9,3]");
+    leave(live.lectureId(), this.otherLearner);
+
+    Map<String, Object> item = listItem(live.lectureId());
+
+    assertThat(item)
+        .containsEntry("problemCount", 2)
+        .containsEntry("joinedCount", 1)
+        .containsEntry("participantCount", 2)
+        .containsEntry("correctRate", 50)
+        .containsEntry("currentProblem", null)
+        .containsEntry("linkedProblems", List.of());
+  }
+
+  @Test
+  void LIVE_풀이가_없는_수업의_목록_항목은_correctRate가_null이다() {
+    String lectureId = createLecture();
+
+    Map<String, Object> item = listItem(lectureId);
+
+    assertThat(item)
+        .containsEntry("problemCount", 0)
+        .containsEntry("joinedCount", 0)
+        .containsEntry("participantCount", 0)
+        .containsEntry("correctRate", null);
+  }
 }
