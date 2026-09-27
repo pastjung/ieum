@@ -1,38 +1,40 @@
 import { Directory, File, Paths } from "expo-file-system";
+import { z } from "zod";
+import { api } from "./apiClient";
+import { voiceFailureMessage } from "./voiceSynthesisErrors";
 
 /**
- * Cartesia 음성 복제 API.
+ * 내 목소리 복제·합성 — **백엔드 대리 호출**을 쓴다 (설계 2026-09-27-deploy-rebuild-design.md §6).
  *
- * - `POST /voices/clone`  WAV 샘플을 올리고 voice id를 받는다
- * - `POST /tts/bytes`     그 voice id로 문장을 읽어 MP3를 받는다
+ * - `POST /voice/clones`  WAV 샘플(multipart `clip`, `name`)을 올리고 `{voiceId}`를 받는다
+ * - `POST /voice/speech`  `{voiceId, text}`로 문장을 읽어 MP3 바이트를 받는다
  *
- * 규격은 실제 호출로 확인했다 — 인증 `Authorization: Bearer`, 버전 헤더 `Cartesia-Version`,
- * 모델 `sonic-3.6`. 응답은 **MP3로 받는다**: WAV로 받으면 스트리밍용 헤더가 붙어
- * (RIFF 크기 0xFFFFFFFF, data 앞에 LIST 청크) 플레이어가 열지 못한다.
- *
- * API 키는 저장소에 올리지 않는다. `front/apps/mobile/.env`에 넣으면 빌드 시 인라인된다.
- * (`.env.example` 참고. 키가 없으면 음성 복제 기능만 꺼지고 나머지는 그대로 동작한다.)
+ * Cartesia 키·모델·출력 형식은 backend에만 있다. APK에는 키가 들어가지 않는다.
+ * 서버에 키가 없으면 503, 너무 자주 부르면 429, Cartesia가 실패하면 502 — 사용자 문구는
+ * `voiceSynthesisErrors`가 정한다. 합성 결과는 기기 캐시(`cartesia-tts`)에 남겨 같은 문장은 다시 받지 않는다.
  */
-const API_KEY = process.env.EXPO_PUBLIC_CARTESIA_API_KEY ?? "";
-const BASE_URL = "https://api.cartesia.ai";
-const API_VERSION = "2026-08-14";
-const MODEL_ID = "sonic-3.6";
-const LANGUAGE = "ko";
 
-/** 업로드 + 서버 처리까지 기다리는 시간. 클립 크기와 거의 무관하게 12~14초가 걸린다. */
-const CLONE_TIMEOUT_MS = 120_000;
-const TTS_TIMEOUT_MS = 20_000;
+/** 업로드 + 서버의 Cartesia 대기(60초). 서버가 먼저 끊고 502를 주도록 조금 길게 둔다 */
+const CLONE_TIMEOUT_MS = 90_000;
+/** 서버의 합성 대기(20초)보다 조금 길게. 이보다 길면 잇다 안내가 너무 늦게 기본 목소리로 넘어간다 */
+const TTS_TIMEOUT_MS = 25_000;
+/** 서버 계약: text는 앞뒤 공백을 뺀 뒤 1~300자 */
+const MAX_TEXT_LENGTH = 300;
+const DEFAULT_VOICE_NAME = "내 목소리";
+
+const cloneResponseSchema = z.object({ voiceId: z.string().min(1) });
 
 export interface ClonedVoice {
   readonly id: string;
   readonly name: string;
-  readonly language: string;
 }
 
+/** 키는 서버에 있으므로 앱은 항상 시도한다. 쓸 수 없으면 서버가 503으로 알린다 */
 export function isCartesiaConfigured(): boolean {
-  return API_KEY.length > 0;
+  return true;
 }
 
+/** 사용자에게 그대로 보여 주고 읽어 줄 수 있는 문장을 message로 갖는다 */
 export class CartesiaError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
@@ -45,7 +47,7 @@ export class CartesiaError extends Error {
  *
  * Expo가 전역 `fetch`를 자기 구현으로 덮어 두는데, **그쪽은 RN식 `{uri}` 파트를 읽지 않는다**
  * (`Unsupported FormDataPart implementation`). 받아 주는 건 `bytes()`를 가진 객체뿐이다.
- * RN 구현으로 되돌아가도 되도록 `uri`도 함께 남겨 둔다.
+ * RN 구현으로 되돌아가도 되도록 `uri`도 함께 남겨 둔다. api-client도 같은 전역 fetch를 쓴다.
  */
 function uploadPart(file: File, name: string, type: string) {
   return {
@@ -58,57 +60,42 @@ function uploadPart(file: File, name: string, type: string) {
 }
 
 /** 음성 샘플(WAV) 하나로 목소리를 복제한다. */
-export async function cloneVoice(clipUri: string, name = "내 목소리"): Promise<ClonedVoice> {
-  requireKey();
-
+export async function cloneVoice(clipUri: string, name = DEFAULT_VOICE_NAME): Promise<ClonedVoice> {
   const clip = new File(clipUri);
-  if (!clip.exists) throw new CartesiaError(`녹음 파일이 없어요 (${clipUri}).`);
+  if (!clip.exists) throw new CartesiaError("녹음 파일을 찾지 못했어요. 다시 녹음해 주세요.");
 
   const form = new FormData();
   form.append("clip", uploadPart(clip, "voice-sample.wav", "audio/wav") as unknown as Blob);
   form.append("name", name);
-  form.append("language", LANGUAGE);
-  form.append("description", "잇다 사용자 목소리");
 
-  const response = await request("/voices/clone", form, CLONE_TIMEOUT_MS).catch((error: unknown) => {
-    throw error instanceof CartesiaError
-      ? new CartesiaError(`${error.message} (clip: ${clipUri})`, { cause: error })
-      : error;
-  });
-  const json = (await response.json()) as { id?: string; name?: string; language?: string };
-  if (!json.id) throw new CartesiaError("복제 응답에 voice id가 없어요.");
+  const response = await withTimeout(CLONE_TIMEOUT_MS, (signal) =>
+    api.post<unknown>("/voice/clones", form, { signal }),
+  );
+  const parsed = cloneResponseSchema.safeParse(response);
+  if (!parsed.success) throw new CartesiaError("목소리를 만들지 못했어요. 잠시 뒤 다시 시도해 주세요.");
 
-  return { id: json.id, name: json.name ?? name, language: json.language ?? LANGUAGE };
+  return { id: parsed.data.voiceId, name };
 }
 
 /** 복제한 목소리로 문장을 읽어 캐시에 MP3로 저장하고 그 파일 URI를 돌려준다. */
 export async function synthesizeToFile(voiceId: string, text: string): Promise<string> {
-  requireKey();
+  const length = text.trim().length;
+  if (length === 0 || length > MAX_TEXT_LENGTH) {
+    throw new CartesiaError(`합성할 수 있는 문장은 1~${MAX_TEXT_LENGTH}자예요.`);
+  }
 
   const cached = cacheFile(voiceId, text);
   if (cached.exists) return cached.uri;
 
-  const response = await request("/tts/bytes", ttsRequestBody(voiceId, text), TTS_TIMEOUT_MS);
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const buffer = await withTimeout(TTS_TIMEOUT_MS, (signal) =>
+    api.post<ArrayBuffer>("/voice/speech", { voiceId, text }, { signal, responseType: "arrayBuffer" }),
+  );
+  const bytes = new Uint8Array(buffer);
   if (bytes.byteLength === 0) throw new CartesiaError("합성 결과가 비어 있어요.");
 
   cached.create({ overwrite: true, intermediates: true });
   cached.write(bytes);
   return cached.uri;
-}
-
-/**
- * `/tts/bytes` 요청 본문. 순수 함수라 테스트에서 그대로 검증한다.
- * MP3로 받는 이유는 파일 상단 주석 참고.
- */
-export function ttsRequestBody(voiceId: string, text: string): string {
-  return JSON.stringify({
-    model_id: MODEL_ID,
-    transcript: text,
-    voice: { id: voiceId },
-    language: LANGUAGE,
-    output_format: { container: "mp3", sample_rate: 44_100, bit_rate: 128_000 },
-  });
 }
 
 // --- 캐시 -------------------------------------------------------------------
@@ -137,54 +124,23 @@ export function clearSynthesisCache(): void {
 
 // --- 공통 -------------------------------------------------------------------
 
-/** 던져진 값을 사람이 읽을 한 줄로. RN의 fetch 실패는 name까지 봐야 구분된다. */
-function describe(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message ? `${error.name}: ${error.message}` : error.name;
-  }
-  return String(error);
-}
-
-function requireKey(): void {
-  if (!isCartesiaConfigured()) {
-    throw new CartesiaError(
-      "Cartesia API 키가 없어요. front/apps/mobile/.env 에 EXPO_PUBLIC_CARTESIA_API_KEY 를 넣고 다시 빌드해 주세요.",
-    );
-  }
-}
-
-async function request(path: string, body: FormData | string, timeoutMs: number): Promise<Response> {
+/**
+ * 시간 제한을 걸어 부르고, 실패를 사용자 문장으로 바꾼다.
+ * 취소된 요청은 api-client에서 NETWORK_UNAVAILABLE로 오므로 신호 상태로 시간 초과를 구분한다.
+ */
+async function withTimeout<T>(timeoutMs: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        "Cartesia-Version": API_VERSION,
-        // FormData일 때는 boundary를 fetch가 직접 붙여야 하므로 Content-Type을 건드리지 않는다.
-        ...(typeof body === "string" ? { "Content-Type": "application/json" } : {}),
-      },
-      body,
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new CartesiaError(`Cartesia ${response.status}: ${detail.slice(0, 300) || "본문 없음"}`);
-    }
-    return response;
+    return await run(controller.signal);
   } catch (error) {
-    if (error instanceof CartesiaError) throw error;
-    if (error instanceof Error && error.name === "AbortError") {
+    if (controller.signal.aborted) {
       throw new CartesiaError(
         `${Math.round(timeoutMs / 1000)}초 안에 응답이 오지 않았어요. 네트워크가 느리면 와이파이에서 다시 시도해 주세요.`,
         { cause: error },
       );
     }
-    // 원인을 삼키면 "연결 실패"만 남아 무엇이 잘못됐는지 알 수 없다. 반드시 붙여 보낸다.
-    throw new CartesiaError(`Cartesia에 연결하지 못했어요 — ${describe(error)}`, { cause: error });
+    throw new CartesiaError(voiceFailureMessage(error), { cause: error });
   } finally {
     clearTimeout(timer);
   }

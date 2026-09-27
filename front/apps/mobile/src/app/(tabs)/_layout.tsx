@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Tabs } from "expo-router";
+import { checkForAppUpdateOnce } from "@/services/appUpdateCheck";
 import { useTheme } from "@/theme";
 
 const tabs = [
@@ -10,6 +12,12 @@ const tabs = [
 
 export default function TabsLayout() {
   const theme = useTheme();
+
+  // 로그인·온보딩을 마친 첫 안정 화면에서 새 버전을 확인한다(실행당 한 번, 실패는 조용히)
+  useEffect(() => {
+    void checkForAppUpdateOnce();
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
