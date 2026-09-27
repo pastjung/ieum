@@ -16,6 +16,10 @@ public interface ProblemAttemptRepository extends JpaRepository<ProblemAttempt, 
   Optional<ProblemAttempt> findByLectureIdAndUserIdAndProblemId(
       Long lectureId, Long userId, Long problemId);
 
+  /** 강사 답안 목록. 제출 시각 오름차순, 같은 시각이면 id 오름차순 (API 명세 8.2.2절). */
+  List<ProblemAttempt> findAllByLectureIdAndProblemIdOrderByAttemptedAtAscIdAsc(
+      Long lectureId, Long problemId);
+
   /** "내 실력" 화면의 푼 문제 수 */
   long countByUserId(Long userId);
 

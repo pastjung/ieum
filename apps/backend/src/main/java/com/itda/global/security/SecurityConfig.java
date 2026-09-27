@@ -182,6 +182,7 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, LECTURE_CURRENT_PROBLEM_PATH),
                 PathPatternRequestMatcher.pathPattern(
                     HttpMethod.POST, LECTURE_PROBLEM_ANSWERS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LECTURE_PROBLEM_ANSWERS_PATH),
                 PathPatternRequestMatcher.pathPattern(
                     HttpMethod.POST, LECTURE_PARTICIPATIONS_PATH)))
         .addFilterBefore(

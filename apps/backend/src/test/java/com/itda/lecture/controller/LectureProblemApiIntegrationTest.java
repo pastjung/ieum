@@ -643,4 +643,79 @@ class LectureProblemApiIntegrationTest {
       this.gateway.failSignals = false;
     }
   }
+
+  // ---------- 강사 답안 목록 (API 명세 8.2.2절) ----------
+
+  private HttpResponse<String> answers(String lectureId, long problemId, Account who) {
+    return send("GET", "/lectures/" + lectureId + "/problems/" + problemId + "/answers", null, who);
+  }
+
+  @Test
+  void 강사는_제출한_학습자의_답안만_제출_순서대로_본다() {
+    Live live = openLectureWithLinkedWord(List.of(8, 3));
+    join(live.lectureId(), this.otherLearner);
+    Account absent = accountFor(UserRole.LEARNER);
+    join(live.lectureId(), absent);
+    deliver(live.lectureId(), live.problemId(), this.instructor);
+    submit(live, this.learner, "[9,3]");
+    submit(live, this.otherLearner, "[8,3]");
+
+    HttpResponse<String> response = answers(live.lectureId(), live.problemId(), this.instructor);
+
+    assertThat(response.statusCode()).isEqualTo(200);
+    Map<String, Object> body = HttpTestClient.json(response);
+    assertThat(body).containsEntry("problemId", String.valueOf(live.problemId()));
+    List<Object> items = list(body.get("answers"));
+    assertThat(items).hasSize(2);
+    assertThat(map(items.get(0)))
+        .containsEntry("userId", String.valueOf(this.learner.userId()))
+        .containsEntry("username", this.learner.username())
+        .containsEntry("isCorrect", false)
+        .containsKey("attemptedAt");
+    assertThat(map(list(map(items.get(0)).get("cells")).get(0))).containsEntry("diffMask", 1);
+    assertThat(map(items.get(1)))
+        .containsEntry("userId", String.valueOf(this.otherLearner.userId()))
+        .containsEntry("isCorrect", true);
+  }
+
+  @Test
+  void 제출이_없으면_빈_목록이다() {
+    Live live = deliveredWord(List.of(8));
+
+    assertThat(
+            list(
+                HttpTestClient.json(answers(live.lectureId(), live.problemId(), this.instructor))
+                    .get("answers")))
+        .isEmpty();
+  }
+
+  @Test
+  void 연결되지_않은_문제의_답안_목록은_404다() {
+    Live live = deliveredWord(List.of(8));
+
+    assertError(
+        answers(live.lectureId(), seedWord(List.of(1)).getId(), this.instructor),
+        404,
+        "PROBLEM_NOT_FOUND");
+  }
+
+  @Test
+  void 학습자에게는_답안_목록_대상_수업을_숨긴다() {
+    Live live = deliveredWord(List.of(8));
+
+    assertError(
+        answers(live.lectureId(), live.problemId(), this.learner), 404, "LECTURE_NOT_FOUND");
+  }
+
+  @Test
+  void 종료_뒤에도_답안_목록을_본다() {
+    Live live = deliveredWord(List.of(8));
+    submit(live, this.learner, "[8]");
+    changeStatus(live.lectureId(), "CLOSED");
+
+    HttpResponse<String> response = answers(live.lectureId(), live.problemId(), this.instructor);
+
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(list(HttpTestClient.json(response).get("answers"))).hasSize(1);
+  }
 }

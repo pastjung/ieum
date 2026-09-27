@@ -12,18 +12,24 @@ import com.itda.lecture.domain.Participant;
 import com.itda.lecture.domain.ParticipantId;
 import com.itda.lecture.media.LectureRoom;
 import com.itda.lecture.media.LiveRoomGateway;
+import com.itda.lecture.repository.LectureProblemRepository;
 import com.itda.lecture.repository.LectureRepository;
 import com.itda.lecture.repository.ParticipantRepository;
 import com.itda.problem.domain.ProblemCell;
 import com.itda.problem.repository.ProblemCellRepository;
+import com.itda.user.domain.User;
 import com.itda.user.domain.UserRole;
+import com.itda.user.repository.UserJpaRepository;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -37,6 +43,8 @@ public class LectureAnswerService {
   private final ProblemAttemptRepository problemAttemptRepository;
   private final AttemptCellRepository attemptCellRepository;
   private final ProblemCellRepository problemCellRepository;
+  private final LectureProblemRepository lectureProblemRepository;
+  private final UserJpaRepository userJpaRepository;
   private final LectureProblemQuery problemQuery;
   private final LiveRoomGateway liveRoomGateway;
   private final TransactionOperations transactionOperations;
@@ -47,6 +55,8 @@ public class LectureAnswerService {
       ProblemAttemptRepository problemAttemptRepository,
       AttemptCellRepository attemptCellRepository,
       ProblemCellRepository problemCellRepository,
+      LectureProblemRepository lectureProblemRepository,
+      UserJpaRepository userJpaRepository,
       LectureProblemQuery problemQuery,
       LiveRoomGateway liveRoomGateway,
       PlatformTransactionManager transactionManager) {
@@ -55,6 +65,8 @@ public class LectureAnswerService {
     this.problemAttemptRepository = problemAttemptRepository;
     this.attemptCellRepository = attemptCellRepository;
     this.problemCellRepository = problemCellRepository;
+    this.lectureProblemRepository = lectureProblemRepository;
+    this.userJpaRepository = userJpaRepository;
     this.problemQuery = problemQuery;
     this.liveRoomGateway = liveRoomGateway;
     this.transactionOperations = new TransactionTemplate(transactionManager);
@@ -163,6 +175,45 @@ public class LectureAnswerService {
           problemId,
           e.getClass().getSimpleName());
     }
+  }
+
+  /** 담당 강사만, 수업 상태와 관계없이 본다. 연결되지 않은 문제면 404 (API 명세 8.2.2절). */
+  @Transactional(readOnly = true)
+  public LectureAnswers listAnswers(AuthenticatedUser user, long lectureId, long problemId) {
+    Lecture lecture = lectureRepository.findById(lectureId).orElseThrow(LectureService::notFound);
+    if (!LectureService.isOwner(user, lecture)) {
+      throw LectureService.notFound();
+    }
+    if (lectureProblemRepository.findByLecture_IdAndProblem_Id(lectureId, problemId).isEmpty()) {
+      throw new BusinessException(ErrorCode.PROBLEM_NOT_FOUND);
+    }
+    List<ProblemAttempt> attempts =
+        problemAttemptRepository.findAllByLectureIdAndProblemIdOrderByAttemptedAtAscIdAsc(
+            lectureId, problemId);
+    if (attempts.isEmpty()) {
+      return new LectureAnswers(problemId, List.of());
+    }
+    Map<Long, List<AttemptCell>> cellsByAttempt =
+        attemptCellRepository
+            .findAllByAttemptIds(attempts.stream().map(ProblemAttempt::getId).toList())
+            .stream()
+            .collect(Collectors.groupingBy(cell -> cell.getAttempt().getId()));
+    Map<Long, String> usernames =
+        userJpaRepository
+            .findAllById(attempts.stream().map(ProblemAttempt::getUserId).toList())
+            .stream()
+            .collect(Collectors.toMap(User::getId, User::getUsername));
+    List<LearnerAnswer> answers =
+        attempts.stream()
+            .map(
+                attempt ->
+                    new LearnerAnswer(
+                        attempt.getUserId(),
+                        usernames.get(attempt.getUserId()),
+                        LiveAnswer.of(
+                            attempt, cellsByAttempt.getOrDefault(attempt.getId(), List.of()))))
+            .toList();
+    return new LectureAnswers(problemId, answers);
   }
 
   private record Submission(LiveAnswer answer, boolean created, long instructorUserId) {}

@@ -3,6 +3,7 @@ package com.itda.lecture.controller;
 import com.itda.global.security.AuthenticatedUser;
 import com.itda.lecture.dto.DeliverProblemRequest;
 import com.itda.lecture.dto.InstructorLectureResponse;
+import com.itda.lecture.dto.LectureAnswersResponse;
 import com.itda.lecture.dto.LiveAnswerResponse;
 import com.itda.lecture.dto.SubmitAnswerRequest;
 import com.itda.lecture.service.LectureAnswerService;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -62,5 +64,13 @@ public class LectureProblemController {
     SubmittedAnswer submitted = answerService.submit(user, lectureId, problemId, request.cells());
     return ResponseEntity.status(submitted.created() ? HttpStatus.CREATED : HttpStatus.OK)
         .body(LiveAnswerResponse.from(submitted.answer()));
+  }
+
+  @GetMapping("/problems/{problemId}/answers")
+  public LectureAnswersResponse listAnswers(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable @Positive Long lectureId,
+      @PathVariable @Positive Long problemId) {
+    return LectureAnswersResponse.from(answerService.listAnswers(user, lectureId, problemId));
   }
 }
