@@ -1,6 +1,6 @@
 # I:EUM API 명세서 V2
 
-> 갱신일: 2026-09-09  
+> 갱신일: 2026-09-27  
 > 상태: 현행 MVP 기준 · 외부 연동·운영 세부는 후속 계약
 > 기준: [기능 V2](./feature-spec.md), [ERD V2](./erd.md) · 설계 결정 기록은 로컬 별도 참고 자료로 보관한다.
 
@@ -1330,14 +1330,18 @@ contentMode는 배정 구성에서 파생하는 기존 응답이다. 기본 문�
 - 설정: `CARTESIA_API_KEY` 는 Backend 설정에만 둔다. 비어 있어도 Backend는 기동하며 두 API가 503을 돌려준다.
 - Cartesia 호출 제한 시간: 복제 60초, 합성 20초. 앱의 요청 제한 시간은 이보다 길어야 한다.
 - Cartesia의 오류 응답·예외 원문은 응답·로그에 넣지 않는다. 로그에는 호출 경로와 HTTP 상태만 남긴다.
+- `voiceId` 는 소유자와 묶이지 않는다 — Backend는 이를 저장하지 않고, Cartesia가 발급하는 예측 불가능한 문자열이므로 다른 학습자의 값을 넣어도 서버가 소유권을 확인하지 않는다.
 
 | HTTP | code | 조건 |
 | --- | --- | --- |
 | 400 | INVALID_REQUEST_PARAMETER | `clip` 없음·빈 파일·WAV 아님, `name` 50자 초과, `voiceId`·`text` 길이 위반, multipart 본문 해석 실패 |
+| 400 | MALFORMED_REQUEST_BODY | `speech` 의 JSON 본문이 문법적으로 깨짐(공통 처리기 — 요청 DTO로 읽지 못함) |
 | 401 | UNAUTHORIZED | 인증되지 않음·유효하지 않은 Access JWT |
 | 403 | LEARNER_ACCESS_REQUIRED | 요청자가 LEARNER가 아님 |
 | 413 | (body 없음) | `clip` 10MB 초과 — 공통 code가 없는 상태이므로 상태만 유지한다 (2.2절) |
-| 415 | UNSUPPORTED_CONTENT_TYPE | `clones` 에 `multipart/form-data` 가 아닌 요청 |
+| 415 | UNSUPPORTED_CONTENT_TYPE | 잘못된 `Content-Type`(`clones` 에 `multipart/form-data` 가 아닌 요청, `speech` 에 `application/json` 이 아닌 요청) |
 | 429 | VOICE_RATE_LIMITED | 이번 분의 사용량 30회를 넘음 |
 | 502 | VOICE_SYNTHESIS_FAILED | Cartesia 오류 응답·시간 초과·연결 실패·빈 결과 |
 | 503 | VOICE_SYNTHESIS_UNAVAILABLE | `CARTESIA_API_KEY` 미설정, 사용량 저장소(Redis) 장애 |
+
+413·415·`MALFORMED_REQUEST_BODY`·multipart 해석 실패는 프레임워크(Tomcat·Spring MVC)가 컨트롤러에 닿기 전에 판정하므로, 서비스의 역할(403) 판정보다 먼저 응답된다.
