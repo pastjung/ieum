@@ -15,7 +15,11 @@ import {
   type StudentAnswerView,
 } from '../domains/lecture/model/answerView'
 import { dotLabel, dotsOf } from '../domains/lecture/model/braille'
-import { mergeLinkedProblem, reconcileLinkedProblems } from '../domains/lecture/model/problemSet'
+import {
+  mergeLinkedProblem,
+  problemTitleSize,
+  reconcileLinkedProblems,
+} from '../domains/lecture/model/problemSet'
 import type {
   InstructorLecture,
   LectureStatus,
@@ -231,22 +235,30 @@ function StudentCard({
           style={{
             ...ANSWER_LOOK[answer.state].box,
             borderRadius: theme.radius.small,
-            padding: '6px 8px',
-            minHeight: 32,
+            padding: '8px 10px',
+            minHeight: 44,
             boxSizing: 'border-box',
             display: 'flex',
-            alignItems: 'center',
-            gap: 8,
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: 6,
+            minWidth: 0,
           }}
         >
           {answer.glyph && (
-            <span style={{ fontSize: 18, lineHeight: 1, color: ANSWER_LOOK[answer.state].accent }}>
+            <span
+              style={{
+                fontSize: 28,
+                lineHeight: 1.1,
+                letterSpacing: '.04em',
+                color: ANSWER_LOOK[answer.state].accent,
+                overflowWrap: 'anywhere',
+              }}
+            >
               {answer.glyph}
             </span>
           )}
-          <span
-            style={{ fontSize: 11.5, fontWeight: 700, color: ANSWER_LOOK[answer.state].accent }}
-          >
+          <span style={{ fontSize: 13, fontWeight: 800, color: ANSWER_LOOK[answer.state].accent }}>
             {answer.detail}
           </span>
         </div>
@@ -733,18 +745,20 @@ export function LiveLecturePage() {
             </p>
           )}
 
-          {/* 실제: 지금 문제 (강사 Snapshot currentProblem) */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 32,
-            }}
-          >
-            {currentProblem ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-                <div>
+          {/* 실제: 지금 문제 (강사 Snapshot currentProblem) — 윗줄 제목·버튼, 아랫줄 칸별 정답 점형 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
+                gap: 16,
+              }}
+            >
+              {currentProblem ? (
+                // 좁으면 버튼이 먼저 다음 줄로 내려간다 — 제목이 낱말 안에서 꺾이지 않게 최소 폭을 둔다
+                <div style={{ minWidth: 0, flex: '1 1 320px' }}>
                   <div style={{ fontSize: 13, color: c.textSub }}>
                     지금 문제
                     {currentIndex >= 0
@@ -753,61 +767,85 @@ export function LiveLecturePage() {
                   </div>
                   <div
                     style={{
-                      fontSize: 42,
+                      fontSize: problemTitleSize(currentProblem.displayText),
                       fontWeight: 900,
                       letterSpacing: '-.02em',
-                      lineHeight: 1.1,
+                      lineHeight: 1.2,
+                      wordBreak: 'keep-all',
+                      overflowWrap: 'anywhere',
                     }}
                   >
                     {currentProblem.displayText}
                   </div>
                 </div>
-                <div
+              ) : (
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: c.textSub }}>
+                  오른쪽에서 문제를 골라 출제하세요
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  disabled
+                  title="준비 중"
+                  style={{ ...buttonStyle('outline'), ...inactive }}
+                >
+                  한 번 더 읽어주기
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  title="준비 중"
+                  style={{ ...buttonStyle('mintOutline'), fontWeight: 800, ...inactive }}
+                >
+                  오른쪽에서 다음 문제 선택 ▸
+                </button>
+              </div>
+            </div>
+            {currentProblem && (
+              <div
+                style={{
+                  ...cardStyle,
+                  borderRadius: theme.radius.panel,
+                  padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                <span style={{ fontSize: 12, color: c.textSub }}>
+                  정답 점형 · {currentProblem.cellCount}칸
+                </span>
+                <ol
+                  aria-label={`정답 점형 ${dotLabel(currentProblem.expectedPattern)}`}
                   style={{
-                    ...cardStyle,
-                    borderRadius: theme.radius.panel,
-                    padding: '12px 16px',
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: 16,
+                    flexWrap: 'wrap',
+                    gap: 12,
                   }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={{ fontSize: 12, color: c.textSub }}>정답 점형</span>
-                    <span style={{ fontFamily: mono, fontSize: 14, fontWeight: 700 }}>
-                      {dotLabel(currentProblem.expectedPattern)}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxWidth: 420 }}>
-                    {currentProblem.expectedPattern.map((pattern, i) => (
-                      <BrailleCell key={i} dots={dotsOf(pattern)} />
-                    ))}
-                  </div>
-                </div>
+                  {currentProblem.expectedPattern.map((pattern, i) => (
+                    <li
+                      key={i}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <BrailleCell dots={dotsOf(pattern)} />
+                      <span style={{ fontFamily: mono, fontSize: 12, fontWeight: 700 }}>
+                        {dotLabel([pattern])}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               </div>
-            ) : (
-              <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: c.textSub }}>
-                오른쪽에서 문제를 골라 출제하세요
-              </p>
             )}
-            <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
-              <button
-                type="button"
-                disabled
-                title="준비 중"
-                style={{ ...buttonStyle('outline'), ...inactive }}
-              >
-                한 번 더 읽어주기
-              </button>
-              <button
-                type="button"
-                disabled
-                title="준비 중"
-                style={{ ...buttonStyle('mintOutline'), fontWeight: 800, ...inactive }}
-              >
-                오른쪽에서 다음 문제 선택 ▸
-              </button>
-            </div>
           </div>
 
           {/* 실제: 제출 현황 — 답안 목록과 LiveKit 접속자로 계산 (접속 학생 기준) */}
@@ -942,7 +980,7 @@ export function LiveLecturePage() {
                   minHeight: 0,
                   overflowY: 'auto',
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
                   alignContent: 'start',
                   gap: 10,
                 }}

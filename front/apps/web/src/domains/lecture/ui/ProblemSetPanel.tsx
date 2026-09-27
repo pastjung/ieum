@@ -78,6 +78,9 @@ function SetRow({ item, status, canDeliver, delivering, disabled, onDeliver }: S
           fontSize: 16,
           lineHeight: 1,
           minWidth: 0,
+          // 글자(displayText)에 공간을 먼저 준다 — 긴 점자는 최대 45%까지만 차지하고 말줄임한다
+          flex: '0 1 auto',
+          maxWidth: '45%',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
