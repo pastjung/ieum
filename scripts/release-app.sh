@@ -29,6 +29,7 @@ DEPLOY_HOST="${IEUM_DEPLOY_HOST:-ubuntu@i-eum.site}"
 
 DONE=()
 WORK=""
+TOKEN_HEADER_FILE=""
 
 step_done() {
   DONE+=("$1")
@@ -37,6 +38,9 @@ step_done() {
 
 on_exit() {
   local code=$?
+  if [ -n "$TOKEN_HEADER_FILE" ]; then
+    rm -f "$TOKEN_HEADER_FILE"
+  fi
   if [ "$code" -ne 0 ]; then
     echo "[release] 실패 (종료 코드 $code). 끝난 단계:" >&2
     if [ "${#DONE[@]}" -eq 0 ]; then
@@ -56,13 +60,27 @@ fail() {
   exit 1
 }
 
+# GITLAB_TOKEN을 프로세스 목록에 남기지 않도록 헤더 파일(mode 600)로 전달한다.
+init_gitlab_token_header() {
+  TOKEN_HEADER_FILE="$(mktemp)"
+  chmod 600 "$TOKEN_HEADER_FILE"
+  printf 'PRIVATE-TOKEN: %s\n' "$GITLAB_TOKEN" > "$TOKEN_HEADER_FILE"
+}
+
 # GitLab API 호출. 실패하면 응답 본문을 보여 주고 멈춘다 (토큰은 출력하지 않는다)
 gitlab() {
   local out
-  if ! out="$(curl --fail-with-body -sS -H "PRIVATE-TOKEN: $GITLAB_TOKEN" "$@")"; then
+  if ! out="$(curl --fail-with-body -sS -H "@$TOKEN_HEADER_FILE" "$@")"; then
     echo "[release] GitLab API 실패: $out" >&2
     return 1
   fi
+}
+
+# GET한 리소스가 이미 있는지(200)만 본다 — 재실행 시 건너뛰기 판단용, 실패해도 계속한다
+gitlab_exists() {
+  local status
+  status="$(curl -sS -o /dev/null -w '%{http_code}' -H "@$TOKEN_HEADER_FILE" "$1")" || return 1
+  [ "$status" = "200" ]
 }
 
 # ── 0. 입력 ──────────────────────────────────────────────────────────────
@@ -76,6 +94,7 @@ for cmd in git node pnpm npx curl scp ssh sha256sum; do
   command -v "$cmd" >/dev/null 2>&1 || fail "$cmd 명령을 찾을 수 없습니다"
 done
 SSH_OPTS=(-i "$IEUM_DEPLOY_KEY" -o StrictHostKeyChecking=accept-new)
+init_gitlab_token_header
 
 # ── 1. 확인 ──────────────────────────────────────────────────────────────
 cd "$REPO_ROOT"
@@ -107,6 +126,15 @@ step_done "테스트·타입 검사"
 [ -f "$APK_BUILT" ] || fail "빌드 산출물이 없습니다: $APK_BUILT"
 step_done "release APK 빌드"
 
+# ── 3-1. 서명 확인 — 디버그 키로 서명된 채 배포되지 않게 막는다 ───────────
+ANDROID_SDK_DIR="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+[ -n "$ANDROID_SDK_DIR" ] || fail "ANDROID_SDK_ROOT(또는 ANDROID_HOME)이 설정되어 있지 않습니다 (apksigner 위치 확인용)"
+APKSIGNER="$(find "$ANDROID_SDK_DIR/build-tools" -maxdepth 2 -type f \( -name 'apksigner' -o -name 'apksigner.bat' \) 2>/dev/null | sort -V | tail -n1)"
+[ -n "$APKSIGNER" ] || fail "apksigner를 찾지 못했습니다 ($ANDROID_SDK_DIR/build-tools/<버전>/apksigner) — Android SDK build-tools 설치를 확인하세요"
+SIGN_INFO="$("$APKSIGNER" verify --print-certs "$APK_BUILT" 2>&1)" || fail "APK 서명 검증 실패: $SIGN_INFO"
+grep -qi 'CN=Android Debug' <<<"$SIGN_INFO" && fail "release APK가 디버그 키로 서명되어 있습니다 — IEUM_UPLOAD_* 서명 속성을 확인하세요"
+step_done "서명 확인 (디버그 키 아님)"
+
 # ── 4. 산출물·해시 ───────────────────────────────────────────────────────
 WORK="$(mktemp -d)"
 APK_NAME="ieum-$VERSION.apk"
@@ -135,10 +163,14 @@ process.stdout.write(JSON.stringify(body, null, 2) + "\n");
 ' < "$WORK/notes.txt" > "$WORK/latest.json"
 step_done "latest.json 생성"
 
-# ── 6. GitLab: 일반 패키지 업로드 + Release ──────────────────────────────
+# ── 6. GitLab: 일반 패키지 업로드 + Release (재실행 시 이미 있으면 건너뛴다) ──
 PKG_URL="$GITLAB_API/projects/$PROJECT_ID/packages/generic/$PACKAGE_NAME/$VERSION"
-gitlab --upload-file "$WORK/$APK_NAME" "$PKG_URL/$APK_NAME"
-gitlab --upload-file "$WORK/$APK_NAME.sha256" "$PKG_URL/$APK_NAME.sha256"
+if gitlab_exists "$PKG_URL/$APK_NAME"; then
+  echo "[release] 패키지가 이미 있어 다시 올리지 않습니다: $PACKAGE_NAME/$VERSION/$APK_NAME"
+else
+  gitlab --upload-file "$WORK/$APK_NAME" "$PKG_URL/$APK_NAME"
+  gitlab --upload-file "$WORK/$APK_NAME.sha256" "$PKG_URL/$APK_NAME.sha256"
+fi
 step_done "GitLab 패키지 업로드 ($PACKAGE_NAME/$VERSION)"
 
 REL_TAG="$TAG" REL_VERSION="$VERSION" REL_VERSION_CODE="$VERSION_CODE" REL_SHA256="$SHA256" \
@@ -161,8 +193,13 @@ const body = {
 };
 process.stdout.write(JSON.stringify(body));
 ' < "$WORK/notes.txt" > "$WORK/release.json"
-gitlab -X POST -H "Content-Type: application/json" --data-binary @- \
-  "$GITLAB_API/projects/$PROJECT_ID/releases" < "$WORK/release.json"
+RELEASE_URL="$GITLAB_API/projects/$PROJECT_ID/releases/$TAG"
+if gitlab_exists "$RELEASE_URL"; then
+  echo "[release] GitLab Release가 이미 있어 새로 만들지 않습니다: $TAG (실패 후 재실행 — 서버 교체로 계속한다)"
+else
+  gitlab -X POST -H "Content-Type: application/json" --data-binary @- \
+    "$GITLAB_API/projects/$PROJECT_ID/releases" < "$WORK/release.json"
+fi
 step_done "GitLab Release $TAG"
 
 # ── 7. 서버 교체 — 임시 이름으로 올린 뒤 mv (받는 도중 파일이 바뀌지 않게) ──

@@ -287,9 +287,10 @@ backend 컨테이너는 compose의 `env_file: .env.config`로 이 파일의 **�
 | | `AUTH_ACTION_ACTIVE_KID`·`AUTH_ACTION_ACTIVE_KEY`·`AUTH_ACTION_RETIRED_KEYS` | 위와 같은 형식, 별도 key. kid는 세 ring 통틀어 유일 | 필수(retired는 선택) |
 | 메일 | `MAIL_DISPATCH_ENABLED` | `true`(발송) / `false` | 필수 |
 | | `MAIL_SMTP_HOST`·`MAIL_SMTP_PORT`·`MAIL_SMTP_SECURITY` | 제공자 값, 보안 방식 `SSL` 또는 `STARTTLS` | 필수 |
-| | `MAIL_SMTP_USERNAME`·`MAIL_SMTP_PASSWORD` | 제공자 계정 | 제공자에 따라 |
+| | `MAIL_SMTP_USERNAME`·`MAIL_SMTP_PASSWORD` | 제공자 계정 | `MAIL_SMTP_SECURITY`가 `SSL`·`STARTTLS`면 필수(MailProviderProperties가 검사) |
 | | `MAIL_FROM_ADDRESS` | 발신 주소 | 필수 |
-| | `MAIL_FROM_NAME`·`MAIL_REPLY_TO` | 표시 이름(기본 `이음(I:EUM)`)·회신 주소 | 선택 |
+| | `MAIL_FROM_NAME` | 표시 이름. **줄을 아예 빼면 기본값 `이음(I:EUM)`을 쓰고, `MAIL_FROM_NAME=`처럼 값을 비워 두면 그 빈 값이 기본값을 덮어써 표시 이름 없이 나간다** — 기본값을 쓰려면 줄 자체를 지우거나 주석 처리한다 | 선택(줄을 생략하거나 값을 채운다) |
+| | `MAIL_REPLY_TO` | 회신 주소 | 선택 |
 | | `MAIL_LINK_EMAIL_VERIFICATION_URL` | `https://i-eum.site/auth/verify-email` | 필수 |
 | | `MAIL_LINK_PASSWORD_RESET_URL` | `https://i-eum.site/auth/reset-password` | 필수 |
 | 음성 | `LIVEKIT_URL` | `https://openvidu.i-eum.site` | 필수 |
@@ -327,7 +328,7 @@ MAIL_SMTP_USERNAME=
 MAIL_SMTP_PASSWORD=
 MAIL_SMTP_SECURITY=STARTTLS
 MAIL_FROM_ADDRESS=
-MAIL_FROM_NAME=
+# MAIL_FROM_NAME=   # 생략하면 기본값 이음(I:EUM). 값을 비운 채(=만) 두면 표시 이름 없이 나간다
 MAIL_REPLY_TO=
 MAIL_LINK_EMAIL_VERIFICATION_URL=https://i-eum.site/auth/verify-email
 MAIL_LINK_PASSWORD_RESET_URL=https://i-eum.site/auth/reset-password
@@ -515,6 +516,7 @@ APK는 PC에서 빌드해 두 곳에 올린다: **GitLab Releases**(기록·보�
 
 - 릴리스 keystore를 만들어 **저장소 밖**에 두고 백업한다 — 잃으면 이미 설치된 앱을 업데이트할 수 없다.
 - `~/.gradle/gradle.properties`: `IEUM_UPLOAD_STORE_FILE`, `IEUM_UPLOAD_KEY_ALIAS`, `IEUM_UPLOAD_STORE_PASSWORD`, `IEUM_UPLOAD_KEY_PASSWORD` (없으면 release 빌드가 실패한다 — 디버그 키 서명 방지)
+- `ANDROID_SDK_ROOT`(또는 `ANDROID_HOME`) 환경변수가 Android SDK 설치 경로를 가리켜야 한다 — 스크립트가 그 아래 `build-tools/<버전>/apksigner`로 서명을 확인한다(디버그 키 서명 방지의 2차 확인)
 - `front/apps/mobile/.env.production` (git 제외): `EXPO_PUBLIC_API_URL=https://i-eum.site/api/v1`, `EXPO_PUBLIC_APP_RELEASE_URL=https://i-eum.site/app`. Cartesia 키는 넣지 않는다(backend가 대신 호출)
 - GitLab 개인 액세스 토큰(scope `api`)을 발급해 **만료일을 팀 일정에 기록**한다. 파일에 저장하지 않고 실행할 때 환경변수로만 준다
 - 서버 pem 파일 경로 (저장소 밖)
@@ -532,12 +534,12 @@ export IEUM_DEPLOY_KEY='C:/keys/<서버>.pem'
 scripts/release-app.sh "첫 배포: 실시간 수업 입장, 목소리 기능"
 ```
 
-스크립트 순서: 확인(작업 트리·태그·versionCode·`.env.production`·토큰·서버 폴더) → `pnpm --filter @ieum/mobile test`·`typecheck` → `expo prebuild -p android --clean` + `gradlew assembleRelease` → SHA-256 → `latest.json` → GitLab 패키지·Release → 서버에 `*.tmp`로 올린 뒤 해시를 다시 확인하고 `mv`로 교체(이전 `ieum.apk`는 `ieum-<직전 버전>.apk`로 하나만 남김) → 공개 `latest.json` 확인. 실패하면 그 자리에서 멈추고 끝난 단계를 출력한다. 서버 교체가 마지막이라 그 전에 멈추면 학습자가 받는 파일은 그대로다.
+스크립트 순서: 확인(작업 트리·태그·versionCode·`.env.production`·토큰·서버 폴더) → `pnpm --filter @ieum/mobile test`·`typecheck` → `expo prebuild -p android --clean` + `gradlew assembleRelease` → **서명 확인(`apksigner verify --print-certs`로 디버그 키가 아닌지 확인 — `ANDROID_SDK_ROOT`/`ANDROID_HOME`에서 build-tools를 찾는다)** → SHA-256 → `latest.json` → GitLab 패키지·Release → 서버에 `*.tmp`로 올린 뒤 해시를 다시 확인하고 `mv`로 교체(이전 `ieum.apk`는 `ieum-<직전 버전>.apk`로 하나만 남김) → 공개 `latest.json` 확인. 실패하면 그 자리에서 멈추고 끝난 단계를 출력한다. 서버 교체가 마지막이라 그 전에 멈추면 학습자가 받는 파일은 그대로다.
 
 4. 확인: GitLab → Deploy → Releases에 `app-v<version>`, `https://i-eum.site/app`에 새 버전·배포일, 폰에서 설치 → 로그인 → 수업 입장.
 5. APK에 Cartesia 키가 없는지: `unzip -p ieum.apk assets/index.android.bundle | strings | grep -c sk_car` → `0`.
 
-다시 실행할 때: GitLab Release를 만든 뒤 실패했다면 같은 태그로는 Release 생성이 409로 거부된다 — GitLab에서 그 Release를 지우거나 versionCode를 올린 새 버전으로 한다. 윈도우 빌드가 `Filename longer than 260 characters`로 죽으면 `docs/solutions/2026-09-24-windows-ninja-long-path.md`.
+다시 실행할 때: 서버 교체 단계 전(빌드·GitLab 업로드 도중)에 실패했다면 같은 명령을 그대로 다시 실행한다 — GitLab 패키지 파일과 Release가 이미 있으면 스크립트가 이를 감지해 다시 올리지 않고 건너뛴 뒤 서버 교체로 이어간다(같은 태그로 Release를 다시 만들려 해서 409로 거부되지 않는다). 새 버전으로 다시 릴리스하려면 versionCode를 올린다. 윈도우 빌드가 `Filename longer than 260 characters`로 죽으면 `docs/solutions/2026-09-24-windows-ninja-long-path.md`.
 
 ### 9.3 되돌리기
 
@@ -563,3 +565,13 @@ scripts/release-app.sh "첫 배포: 실시간 수업 입장, 목소리 기능"
 5. **옛 도메인으로 된 주소 옮기기** — `j15b201.p.ssafy.io`는 301로 넘어가며, 301은 POST 본문을 잃을 수 있다. GitLab 웹훅 두 개(`pipeline.md` 7.5절)를 `https://i-eum.site/jenkins/project/...`로, Jenkins → System → Jenkins URL을 `https://i-eum.site/jenkins/`로 바꾼다. 바꾼 뒤 웹훅 Test → 200.
 6. **OpenVidu Meet 끄기(권장)·MinIO 확인** — `openvidu.md` 8절. 수업이 없는 시간에 한다(OpenVidu 재시작).
 7. **배포 후 확인** — spec §8 완료 기준: 헬스체크 200, 가입 메일 링크가 `i-eum.site`, 재로그인·토큰 갱신(Redis), 수업 음성, `curl -sI http://j15b201.p.ssafy.io/x` → `301` + `Location: https://i-eum.site/x`, `https://openvidu.i-eum.site` 유지.
+
+   **첫 배포에서 backend 헬스체크가 실패하면**: Jenkinsfile의 Deploy 단계는 `web backend ai` 순서로 진행하므로, backend에서 멈추면 web은 이미 새 빌드로 전환되어 있고 backend는 아직 이전 버전(또는 기동 실패 상태)이다 — web·backend 버전이 어긋난 채로 트래픽을 받지 않도록 web도 즉시 되돌린다.
+
+   ```bash
+   # 예: web을 blue(3001)로 되돌리기 (7.3절 방법 1과 같은 방식)
+   echo 'set $web_port 3001;' > /home/ubuntu/app/nginx/inc/web.inc
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+   또는 Jenkins에서 `itda-rollback` 잡을 `web` 서비스·직전 태그로 실행해 같은 결과를 얻는다(pipeline.md 6절). Jenkinsfile의 Deploy 단계 서비스 순서(`web backend ai`)는 이 문서·Jenkinsfile 양쪽에서 바꾸지 않는다 — 바꾸려면 별도 검토가 필요하다.
