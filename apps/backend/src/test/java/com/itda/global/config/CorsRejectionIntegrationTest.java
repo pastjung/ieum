@@ -171,6 +171,16 @@ class CorsRejectionIntegrationTest {
     assertThat(requestIdOf(response)).matches(UUID_V4);
   }
 
+  /** 운영 웹이 같은 출처에서 API를 부를 때도 브라우저는 Origin을 붙인다 — 막히면 웹의 모든 API가 403이 된다. */
+  @ParameterizedTest
+  @ValueSource(strings = {"https://i-eum.site", "https://www.i-eum.site"})
+  void 운영_웹_Origin의_요청은_허용된다(String origin) {
+    HttpResponse<String> response = http.send("GET", PROBE, null, ORIGIN, origin);
+
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(response.headers().allValues(ALLOW_ORIGIN)).containsExactly(origin);
+  }
+
   @Test
   void 허용_Origin의_preflight는_기존_허용_헤더를_돌려준다() {
     HttpResponse<String> preflight =
