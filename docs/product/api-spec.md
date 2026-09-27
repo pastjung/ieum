@@ -1021,6 +1021,7 @@ assigned_problems에는 item_no와 problem_id만 저장한다. 기본/개인화 
 - 같은 수업·문제 연결은 한 건이다. SCHEDULED에서는 연결·해제, OPEN에서는 새 연결·전달만 가능하고 기존 연결 삭제는 금지한다. CLOSED에서는 모두 금지한다. current_lecture_problem_id는 같은 수업의 lecture_problems 행만 가리킨다.
 - LIVE 제출은 OPEN 수업의 현재 문제와 left_at이 NULL인 참여자만 허용한다. 서버가 user_id·problem_id·lecture_id·attempt_mode=LIVE를 결정하며 learning_session_id·session_item_no·curriculum_stage_id는 NULL이다. (lecture_id, user_id, problem_id)는 UNIQUE다.
 - 같은 문제를 다시 보여 줘도 학습자의 새 LIVE Attempt를 만들지 않고 기존 결과를 제공한다. LIVE는 BKT와 user_skill_memory 갱신에서 제외하며, 저장된 본인 오답·요소 결과는 CLOSED 뒤 사용자가 요청한 FREE 세션의 문제 후보로만 사용한다.
+- LIVE 풀이는 개인 정답률 통계에서도 제외한다.
 - 종료와 답안 저장은 같은 lectures 행 잠금으로 직렬화한다. 답안 트랜잭션이 OPEN을 먼저 검증하면 커밋 후 종료하고, 종료가 먼저 CLOSED를 커밋하면 신규 제출을 거부한다. 종료 전에 저장된 동일 멱등 제출은 이후에도 기존 결과를 반환한다.
 
 이 절은 업무·저장·권한·동시성 계약이다. 실제 HTTP method/path·DTO·오류 코드와 WebSocket 현재 상태 Snapshot·재연결 이벤트는 실시간 수업 API 계약을 따른다. OpenVidu의 MVP 미디어 경계는 실시간 음성 범위, 버전 의존 계약은 다음 스프린트이며 LIVE BKT 제외·수업 후 개인 복습 연결은 수업 후 복습 규칙을 따른다.

@@ -20,11 +20,11 @@ public interface ProblemAttemptRepository extends JpaRepository<ProblemAttempt, 
   List<ProblemAttempt> findAllByLectureIdAndProblemIdOrderByAttemptedAtAscIdAsc(
       Long lectureId, Long problemId);
 
-  /** "내 실력" 화면의 푼 문제 수 */
-  long countByUserId(Long userId);
+  /** "내 실력" 화면의 푼 문제 수. LIVE 풀이는 뺀다 — 수업 중 풀이는 개인 정답률 통계에 넣지 않는다(API 명세 8.1절). */
+  long countByUserIdAndAttemptMode(Long userId, AttemptMode attemptMode);
 
-  /** 정답률의 분자. 분모는 {@link #countByUserId} */
-  long countByUserIdAndCorrectTrue(Long userId);
+  /** 정답률의 분자. 분모는 {@link #countByUserIdAndAttemptMode} */
+  long countByUserIdAndAttemptModeAndCorrectTrue(Long userId, AttemptMode attemptMode);
 
   /**
    * 커리큘럼 단계별 풀이·정답 수.

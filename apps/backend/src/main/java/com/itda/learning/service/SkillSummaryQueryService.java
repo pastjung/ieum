@@ -1,6 +1,7 @@
 package com.itda.learning.service;
 
 import com.itda.global.FastApiClient;
+import com.itda.learning.domain.AttemptMode;
 import com.itda.learning.domain.ProblemAttemptRepository;
 import com.itda.learning.domain.UserSkillMemory;
 import com.itda.learning.dto.LearningSkillStatePayload;
@@ -41,8 +42,10 @@ public class SkillSummaryQueryService {
 
   @Transactional(readOnly = true)
   public SkillSummary find(long userId) {
-    long total = problemAttemptRepository.countByUserId(userId);
-    long correct = problemAttemptRepository.countByUserIdAndCorrectTrue(userId);
+    long total = problemAttemptRepository.countByUserIdAndAttemptMode(userId, AttemptMode.FREE);
+    long correct =
+        problemAttemptRepository.countByUserIdAndAttemptModeAndCorrectTrue(
+            userId, AttemptMode.FREE);
     return new SkillSummary(Math.toIntExact(total), Math.toIntExact(correct), masteryViews(userId));
   }
 
