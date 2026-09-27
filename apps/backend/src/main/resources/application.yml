@@ -19,6 +19,12 @@ spring:
       # host·port는 프로필별로 지정한다.
       connect-timeout: 1s
       timeout: 1s
+  servlet:
+    multipart:
+      # 목소리 복제 녹음(WAV) 한도 (API 명세 12절). Boot 기본값(1MB)으로는 계약을 지킬 수 없다.
+      # 요청 전체는 파일 + name 파트·경계 문자열 여유분이다. 넘으면 413을 body 없이 보낸다 (GlobalExceptionHandler).
+      max-file-size: 10MB
+      max-request-size: 11MB
   jpa:
     open-in-view: false
     properties:

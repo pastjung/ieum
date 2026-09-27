@@ -129,6 +129,11 @@ public class SecurityConfig {
 
   private static final String LECTURE_PARTICIPATIONS_PATH = "/lecture-participations";
 
+  /** 음성 합성 대리 호출 (API 명세 12절). 학습자 역할로 판정하고 사용량을 사용자별로 세므로 인증이 필요하다. */
+  private static final String VOICE_CLONES_PATH = "/voice/clones";
+
+  private static final String VOICE_SPEECH_PATH = "/voice/speech";
+
   /**
    * CORS 설정 원본인 MVC 설정을 읽는 bean. Spring Security의 {@code http.cors()}도 MVC가 있으면 이 이름의 bean을 {@link
    * CorsConfigurationSource}로 찾는다.
@@ -186,8 +191,9 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(
                     HttpMethod.POST, LECTURE_PROBLEM_ANSWERS_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.GET, LECTURE_PROBLEM_ANSWERS_PATH),
-                PathPatternRequestMatcher.pathPattern(
-                    HttpMethod.POST, LECTURE_PARTICIPATIONS_PATH)))
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LECTURE_PARTICIPATIONS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, VOICE_CLONES_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, VOICE_SPEECH_PATH)))
         .addFilterBefore(
             new AccessTokenAuthenticationFilter(accessAuthenticationService),
             AuthorizationFilter.class)
