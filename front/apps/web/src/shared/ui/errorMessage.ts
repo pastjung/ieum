@@ -11,6 +11,7 @@ const MESSAGES: Record<string, string> = {
   LECTURE_PARTICIPANT_NOT_FOUND: '수업에 참여 중인 학생이 아니에요.',
   PROBLEM_NOT_FOUND: '해당하는 문제를 찾지 못했어요. 구분어와 글자를 확인해 주세요.',
   PROBLEM_TEXT_AMBIGUOUS: '어떤 문제인지 아래에서 골라 주세요.',
+  PROBLEM_TOO_LONG: '12칸까지만 출제할 수 있어요. 더 짧은 글자로 입력해 주세요.',
   INVALID_REQUEST_INPUT: '입력값을 확인해 주세요.',
   NETWORK_UNAVAILABLE: '서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.',
   INVALID_ACCOUNT_INPUT: '아이디와 비밀번호 형식을 확인해 주세요.',
