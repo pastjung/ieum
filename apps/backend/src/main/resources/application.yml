@@ -82,6 +82,11 @@ itda:
     # AuthRedisProperties 주석 참고. 값이 틀리면 다른 환경의 토큰 상태를 조용히 읽게 되므로 기본값을 두지 않는다.
     auth-redis:
       key-prefix: ${AUTH_REDIS_KEY_PREFIX}
+  # 발표 시연 계정 (DemoProperties). 이 계정이 '단어' 테마로 학습하면 아래 단어만 순서대로 나오고,
+  # 복습은 약한 스킬 순위대로 섞지 않고 나온다. DEMO_USERNAME 을 빈 값으로 두면 끈다.
+  demo:
+    username: ${DEMO_USERNAME:ssafy}
+    learning-words: ${DEMO_LEARNING_WORDS:자전거,드라마,고양이,마스크}
   # 오답 분석·맞춤 학습을 담당하는 FastAPI 서비스 (apps/ai). 주소가 환경마다 달라 소스에 두지 않는다.
   # 기본값은 로컬 개발용이며 배포 환경은 AI_BASE_URL로 덮어쓴다.
   ai:

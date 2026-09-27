@@ -2,6 +2,7 @@ package com.itda.problem.service;
 
 import com.itda.curriculum.domain.CurriculumStage;
 import com.itda.curriculum.domain.CurriculumStageRepository;
+import com.itda.global.DemoProperties;
 import com.itda.global.FastApiClient;
 import com.itda.global.error.BusinessException;
 import com.itda.global.error.CandidatesBusinessException;
@@ -74,6 +75,7 @@ public class ProblemService {
   private final UserSkillErrorCountRepository userSkillErrorCountRepository;
   private final FastApiClient fastApiClient;
   private final UserJpaRepository userJpaRepository;
+  private final DemoProperties demoProperties;
   private final LinkedProblemReader linkedProblemReader;
 
   /**
@@ -288,6 +290,11 @@ public class ProblemService {
     LearningSession learningSession = createSession(user.userId(), curriculumStage);
     Level level = curriculumStage.getLevel();
 
+    // 발표 시연 계정이 '단어' 테마로 시작하면 정해진 단어만 정해진 순서로 낸다 (DemoProperties)
+    if (level == Level.WORD && isDemoUser(user)) {
+      return assign(learningSession, demoLearningProblems());
+    }
+
     // 오답 재출제도 같은 셀 상한을 거쳐야 한다. 오답 문제는 아래 findAssignableByLevel의 후보에서
     // 제외될 뿐 따로 배정되므로, 여기서 거르지 않으면 13칸 이상 문제가 상한 검사를 통째로 비껴간다.
     List<UserWrongProblem> wrongProblems =
@@ -328,6 +335,12 @@ public class ProblemService {
 
     Collections.shuffle(randomProblems);
 
+    return assign(learningSession, randomProblems);
+  }
+
+  /** 고른 문제들을 세션에 순서대로 배정하고 앱에 내려줄 응답을 만든다 */
+  private ProblemsResponse assign(LearningSession learningSession, List<Problem> randomProblems) {
+
     List<ProblemSession> problemSessions = new ArrayList<>();
 
     for (int i = 0; i < randomProblems.size(); i++) {
@@ -362,6 +375,31 @@ public class ProblemService {
     }
 
     return new ProblemsResponse(learningSession.getId(), problemDetails);
+  }
+
+  private boolean isDemoUser(AuthenticatedUser user) {
+    if (demoProperties == null || !demoProperties.enabled()) {
+      return false;
+    }
+    return userJpaRepository
+        .findById(user.userId())
+        .map(User::getUsername)
+        .filter(demoProperties::isDemoUsername)
+        .isPresent();
+  }
+
+  /** 시연용 단어를 설정 순서대로. 같은 글자가 여럿이면 단어 단계의 id 가 가장 작은 문제를 쓴다. 하나라도 문제 은행에 없으면 시연 준비가 안 된 것이다. */
+  private List<Problem> demoLearningProblems() {
+    List<Problem> problems = new ArrayList<>();
+    for (String word : demoProperties.learningWords()) {
+      problems.add(
+          problemRepository
+              .findAllByTargetTextAndLevelInOrderByIdAsc(word, List.of(Level.WORD))
+              .stream()
+              .findFirst()
+              .orElseThrow(() -> new BusinessException(ErrorCode.LEARNING_CONTENT_NOT_READY)));
+    }
+    return problems;
   }
 
   /**
@@ -482,6 +520,8 @@ public class ProblemService {
     }
 
     Set<Long> selectedProblemIds = new HashSet<>();
+    // 약한 스킬 순위대로 고른 순서. 시연 계정은 이 순서 그대로 낸다(1순위 스킬 문제 4개가 먼저)
+    List<Long> rankedProblemIds = new ArrayList<>();
 
     // 요소마다 서로 다른 문제 4개를 뽑는다.
     //
@@ -520,10 +560,16 @@ public class ProblemService {
       if (picked.size() < REVIEW_PROBLEMS_PER_SKILL) {
         throw new BusinessException(ErrorCode.LEARNING_CONTENT_NOT_READY);
       }
+      rankedProblemIds.addAll(picked);
     }
 
-    List<Problem> randomProblems = problemRepository.findAllById(selectedProblemIds);
-    Collections.shuffle(randomProblems);
+    List<Problem> randomProblems =
+        new ArrayList<>(problemRepository.findAllById(selectedProblemIds));
+    if (isDemoUser(user)) {
+      randomProblems.sort(Comparator.comparingInt(p -> rankedProblemIds.indexOf(p.getId())));
+    } else {
+      Collections.shuffle(randomProblems);
+    }
 
     List<ProblemSession> problemSessions = new ArrayList<>();
 
