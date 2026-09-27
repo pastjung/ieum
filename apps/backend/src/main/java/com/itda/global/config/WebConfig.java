@@ -52,8 +52,9 @@ public class WebConfig implements WebMvcConfigurer {
         .addMapping("/**")
         .allowedOrigins(
             "http://localhost:5173", // web (vite dev)
-            "http://localhost:8081" // mobile (metro)
-            )
+            "http://localhost:8081", // mobile (metro)
+            "https://i-eum.site", // web (운영) — 같은 출처 요청에도 브라우저가 Origin을 붙인다
+            "https://www.i-eum.site")
         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         .allowedHeaders("*")
         .allowCredentials(true);
