@@ -27,6 +27,7 @@ public class LectureMediaService {
   private final ParticipantRepository participantRepository;
   private final UserJpaRepository userJpaRepository;
   private final LiveRoomGateway liveRoomGateway;
+  private final LectureProblemQuery problemQuery;
 
   @Transactional(readOnly = true)
   public IssuedMediaToken issue(AuthenticatedUser user, long lectureId) {
@@ -59,7 +60,8 @@ public class LectureMediaService {
     if (publisher) {
       // 마지막 참가자가 나가면 LiveKit이 방을 닫아 OPEN metadata가 사라진다. 강사가 재접속할 때 방을 다시 열어
       // 뒤이어 접속하는 학습자도 시작 신호를 받게 한다. 여러 번 불러도 결과가 같다 (API 명세 8.5절).
-      liveRoomGateway.openRoom(room);
+      // 방을 다시 열 때 현재 문제도 metadata에 되살린다 — 재접속한 학습자가 풀던 문제를 다시 받는다 (API 명세 8.5.2절).
+      liveRoomGateway.openRoom(room, problemQuery.currentProblemId(lecture));
     }
     return liveRoomGateway.issueToken(
         new MediaTokenRequest(

@@ -66,4 +66,14 @@ class LectureRepositoryTest {
     assertThat(found).extracting(Participant::getId).containsExactly(active.getId());
     assertThat(participantRepository.findById(ParticipantId.of(lecture.getId(), 11L))).isPresent();
   }
+
+  @Test
+  void 잠금_조회로_수업을_읽는다() {
+    Lecture saved =
+        lectureRepository.saveAndFlush(
+            Lecture.schedule(
+                7L, "잠금 수업", null, "654321", null, LocalDateTime.of(2026, 9, 27, 1, 0)));
+
+    assertThat(lectureRepository.findByIdForUpdate(saved.getId())).contains(saved);
+  }
 }

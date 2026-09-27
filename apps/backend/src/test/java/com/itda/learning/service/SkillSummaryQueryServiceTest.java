@@ -5,6 +5,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
 import com.itda.global.FastApiClient;
+import com.itda.learning.domain.AttemptMode;
 import com.itda.learning.domain.ProblemAttemptRepository;
 import com.itda.learning.domain.UserSkillMemory;
 import com.itda.learning.dto.LearningSkillSummaryFastApiResponse;
@@ -52,8 +53,12 @@ class SkillSummaryQueryServiceTest {
             problemAttemptRepository,
             fastApiClient);
     given(userSkillMemoryRepository.findAllByUser_Id(USER_ID)).willReturn(List.of());
-    given(problemAttemptRepository.countByUserId(USER_ID)).willReturn(184L);
-    given(problemAttemptRepository.countByUserIdAndCorrectTrue(USER_ID)).willReturn(151L);
+    given(problemAttemptRepository.countByUserIdAndAttemptMode(USER_ID, AttemptMode.FREE))
+        .willReturn(184L);
+    given(
+            problemAttemptRepository.countByUserIdAndAttemptModeAndCorrectTrue(
+                USER_ID, AttemptMode.FREE))
+        .willReturn(151L);
   }
 
   /** 숙련 기록이 있어야 AI에 물어본다 — 없으면 물어볼 것이 없어 조기 반환한다 */

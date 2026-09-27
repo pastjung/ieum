@@ -102,4 +102,38 @@ class ProblemAttemptRepositoryTest {
   void 풀이가_없으면_빈_목록이다() {
     assertThat(problemAttemptRepository.countByLevel(USER_ID)).isEmpty();
   }
+
+  /** LIVE 수업 풀이는 개인 정답률 통계에서도 제외한다 (API 명세 8.1절, 사용자 결정). */
+  @Test
+  void LIVE_풀이는_개인_정답률_집계에서_빠진다() {
+    Problem consonant = problem(Level.CONSONANT, "ㄱ");
+    freeAttempt(consonant, 1L, 1, 1L, true);
+    entityManager.persist(
+        ProblemAttempt.forLiveLecture(USER_ID, consonant.getId(), 200L, true, ATTEMPTED_AT));
+
+    long total = problemAttemptRepository.countByUserIdAndAttemptMode(USER_ID, AttemptMode.FREE);
+    long correct =
+        problemAttemptRepository.countByUserIdAndAttemptModeAndCorrectTrue(
+            USER_ID, AttemptMode.FREE);
+
+    assertThat(total).isEqualTo(1);
+    assertThat(correct).isEqualTo(1);
+  }
+
+  @Test
+  void LIVE_풀이는_단계별_집계에서도_빠진다() {
+    Problem consonant = problem(Level.CONSONANT, "ㄱ");
+    freeAttempt(consonant, 1L, 1, 1L, false);
+    entityManager.persist(
+        ProblemAttempt.forLiveLecture(USER_ID, consonant.getId(), 200L, true, ATTEMPTED_AT));
+
+    List<LevelAttemptCount> counts = problemAttemptRepository.countByLevel(USER_ID);
+
+    assertThat(counts)
+        .extracting(
+            LevelAttemptCount::getLevel,
+            LevelAttemptCount::getSolvedCount,
+            LevelAttemptCount::getCorrectCount)
+        .containsExactly(tuple(Level.CONSONANT, 1L, 0L));
+  }
 }

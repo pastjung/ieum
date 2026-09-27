@@ -457,6 +457,49 @@ export type BrailleDictionary = z.infer<typeof brailleDictionarySchema>;
 export const lectureStatusSchema = z.enum(["SCHEDULED", "OPEN", "CLOSED"]);
 export type LectureStatus = z.infer<typeof lectureStatusSchema>;
 
+/** LIVE 답안 칸 하나의 서버 채점. cellIndex는 1부터, 칸 수는 max(입력, 정답)이고 없는 쪽은 0이다 */
+export const answerCellSchema = z.object({
+  cellIndex: z.number().int().positive(),
+  inputPattern: cellSchema,
+  expectedPattern: cellSchema,
+  diffMask: cellSchema,
+  isCorrect: z.boolean(),
+});
+export type AnswerCell = z.infer<typeof answerCellSchema>;
+
+/** 수업 답안 제출 결과 (POST /lectures/{id}/problems/{problemId}/answers, 학습자 스냅샷의 myResult) */
+export const liveAnswerSchema = z.object({
+  attemptId: z.string(),
+  lectureId: z.string(),
+  problemId: z.string(),
+  isCorrect: z.boolean(),
+  score: z.number().int().min(0).max(100),
+  attemptedAt: z.string(),
+  cells: z.array(answerCellSchema),
+});
+export type LiveAnswer = z.infer<typeof liveAnswerSchema>;
+
+/** 수업 답안 제출 body. 서버가 422로 막는 범위(빈 배열·12칸 초과·0..63 밖)를 앱이 먼저 막는다 */
+export const liveAnswerRequestSchema = z.object({
+  cells: z.array(cellSchema).min(1).max(MAX_INPUT_CELLS),
+  durationMs: z.number().int().nonnegative(),
+});
+export type LiveAnswerRequest = z.infer<typeof liveAnswerRequestSchema>;
+
+/**
+ * 학습자에게 보이는 현재 문제. 제출 전에는 정답 점형을 주지 않는다(명세 8.2) — 섞여 와도 zod가 버린다.
+ * problemType은 표시·분기에 쓰지 않으므로 문자열로 받는다 — 서버가 level을 늘려도 스냅샷 전체가 깨지지 않게.
+ */
+export const learnerCurrentProblemSchema = z.object({
+  problemId: z.string(),
+  problemType: z.string(),
+  targetText: z.string(),
+  displayText: z.string(),
+  cellCount: z.number().int().positive(),
+  submitted: z.boolean(),
+});
+export type LearnerCurrentProblem = z.infer<typeof learnerCurrentProblemSchema>;
+
 /** 참여 학습자용 수업 Snapshot. 참여 코드·다른 참여자 정보는 오지 않는다 */
 export const learnerLectureSchema = z.object({
   /** BIGINT의 10진수 문자열. number로 바꾸지 않는다 */
@@ -467,7 +510,9 @@ export const learnerLectureSchema = z.object({
   scheduledAt: z.string().nullable(),
   startedAt: z.string().nullable(),
   endedAt: z.string().nullable(),
-  currentProblem: z.unknown().nullable(),
+  currentProblem: learnerCurrentProblemSchema.nullable(),
+  /** 현재 문제를 제출했을 때만 온다. 필드가 없던 서버와도 붙도록 없으면 null */
+  myResult: liveAnswerSchema.nullable().default(null),
   createdAt: z.string(),
   myParticipation: z.object({ joinedAt: z.string(), leftAt: z.string().nullable() }),
   reviewableCurriculumStages: z.array(z.unknown()),

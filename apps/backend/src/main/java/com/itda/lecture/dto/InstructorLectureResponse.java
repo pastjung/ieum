@@ -3,12 +3,10 @@ package com.itda.lecture.dto;
 import com.itda.lecture.domain.Lecture;
 import com.itda.lecture.domain.LectureStatus;
 import com.itda.lecture.service.LectureSnapshot;
+import com.itda.problem.dto.LinkedProblemResponse;
 import java.util.List;
 
-/**
- * 담당 강사용 Snapshot (API 명세 8.2절). currentProblem·linkedProblems는 문제 출제를 붙일 때 채운다 — MVP에서는 null과 빈
- * 배열이다.
- */
+/** 담당 강사용 Snapshot (API 명세 8.2절). currentProblem·linkedProblems는 정답 점형을 포함한다. */
 public record InstructorLectureResponse(
     String lectureId,
     String title,
@@ -17,16 +15,13 @@ public record InstructorLectureResponse(
     String scheduledAt,
     String startedAt,
     String endedAt,
-    Object currentProblem,
+    LinkedProblemResponse currentProblem,
     String createdAt,
     String participationCode,
-    List<Object> linkedProblems) {
+    List<LinkedProblemResponse> linkedProblems) {
 
   public static InstructorLectureResponse from(LectureSnapshot snapshot) {
-    return from(snapshot.lecture());
-  }
-
-  public static InstructorLectureResponse from(Lecture lecture) {
+    Lecture lecture = snapshot.lecture();
     return new InstructorLectureResponse(
         String.valueOf(lecture.getId()),
         lecture.getTitle(),
@@ -35,9 +30,16 @@ public record InstructorLectureResponse(
         UtcTimes.format(lecture.getScheduledAt()),
         UtcTimes.format(lecture.getStartedAt()),
         UtcTimes.format(lecture.getEndedAt()),
-        null,
+        snapshot.currentProblem() == null
+            ? null
+            : LinkedProblemResponse.from(snapshot.currentProblem()),
         UtcTimes.format(lecture.getCreatedAt()),
         lecture.getParticipationCode(),
-        List.of());
+        snapshot.linkedProblems().stream().map(LinkedProblemResponse::from).toList());
+  }
+
+  /** 수업 목록 항목. 문제 정보는 채우지 않는다 (API 명세 8.2절). */
+  public static InstructorLectureResponse from(Lecture lecture) {
+    return from(LectureSnapshot.ofInstructor(lecture));
   }
 }

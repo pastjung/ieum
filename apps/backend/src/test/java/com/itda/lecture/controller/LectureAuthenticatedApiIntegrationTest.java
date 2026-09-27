@@ -2,6 +2,8 @@ package com.itda.lecture.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.itda.global.error.BusinessException;
+import com.itda.global.error.ErrorCode;
 import com.itda.lecture.media.LiveRoomGateway;
 import com.itda.support.web.HttpTestClient;
 import com.itda.support.web.WebApiTest;
@@ -48,17 +50,29 @@ class LectureAuthenticatedApiIntegrationTest {
   private String instructorToken;
   private String learnerToken;
   private String otherLearnerToken;
+  private long learnerUserId;
+  private long otherLearnerUserId;
 
   @BeforeEach
   void setUp() {
     this.client = new HttpTestClient(this.port);
     this.instructorToken = tokenFor(UserRole.INSTRUCTOR);
-    this.learnerToken = tokenFor(UserRole.LEARNER);
-    this.otherLearnerToken = tokenFor(UserRole.LEARNER);
+    Account learner = accountFor(UserRole.LEARNER);
+    this.learnerToken = learner.token();
+    this.learnerUserId = learner.userId();
+    Account otherLearner = accountFor(UserRole.LEARNER);
+    this.otherLearnerToken = otherLearner.token();
+    this.otherLearnerUserId = otherLearner.userId();
+  }
+
+  private record Account(long userId, String token) {}
+
+  private String tokenFor(UserRole role) {
+    return accountFor(role).token();
   }
 
   /** 매번 새 계정을 만든다. 단조 증가 수열이라 같은 실행 안에서 UNIQUE 제약에 걸리지 않는다. */
-  private String tokenFor(UserRole role) {
+  private Account accountFor(UserRole role) {
     LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
     long sequence = ACCOUNT_SEQUENCE.incrementAndGet();
     User user =
@@ -70,9 +84,9 @@ class LectureAuthenticatedApiIntegrationTest {
             now);
     user.verifyEmail(now);
     long userId = this.userRepository.save(user).getId();
-    return this.accessTokenIssuer
-        .issue(new AccessTokenIssuer.Claims(userId, role, 0))
-        .compactToken();
+    String token =
+        this.accessTokenIssuer.issue(new AccessTokenIssuer.Claims(userId, role, 0)).compactToken();
+    return new Account(userId, token);
   }
 
   private HttpResponse<String> send(String method, String path, String body, String token) {
@@ -154,6 +168,115 @@ class LectureAuthenticatedApiIntegrationTest {
     assertThat(this.gateway.openedRooms).contains("lecture-" + lectureId);
   }
 
+  // ---------- 발언 권한 (API 명세 8.5.1절) ----------
+
+  /** 학습자(learnerToken)가 코드로 입장한 수업. open이면 강사가 시작까지 한다. */
+  private String lectureJoinedByLearner(boolean open) {
+    String lectureId = createLecture();
+    String code =
+        (String)
+            HttpTestClient.json(send("GET", "/lectures/" + lectureId, null, this.instructorToken))
+                .get("participationCode");
+    assertThat(
+            send(
+                    "POST",
+                    "/lecture-participations",
+                    "{\"participationCode\":\"" + code + "\"}",
+                    this.learnerToken)
+                .statusCode())
+        .isEqualTo(201);
+    if (open) {
+      assertThat(
+              send(
+                      "PUT",
+                      "/lectures/" + lectureId + "/status",
+                      "{\"status\":\"OPEN\"}",
+                      this.instructorToken)
+                  .statusCode())
+          .isEqualTo(200);
+    }
+    return lectureId;
+  }
+
+  private static String speakingPath(String lectureId, long userId) {
+    return "/lectures/" + lectureId + "/participants/" + userId + "/speaking";
+  }
+
+  @Test
+  void 강사가_참여_학습자의_발언을_허용한다() {
+    String lectureId = lectureJoinedByLearner(true);
+
+    HttpResponse<String> response =
+        send(
+            "PUT",
+            speakingPath(lectureId, this.learnerUserId),
+            "{\"allowed\":true}",
+            this.instructorToken);
+
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(HttpTestClient.json(response))
+        .containsEntry("userId", String.valueOf(this.learnerUserId))
+        .containsEntry("allowed", true);
+    assertThat(this.gateway.speakingChanges)
+        .contains("lecture-" + lectureId + "/user-" + this.learnerUserId + "/true");
+  }
+
+  @Test
+  void 담당이_아닌_강사에게는_발언_권한_대상_수업을_숨긴다() {
+    String lectureId = lectureJoinedByLearner(true);
+
+    assertError(
+        send(
+            "PUT",
+            speakingPath(lectureId, this.learnerUserId),
+            "{\"allowed\":true}",
+            tokenFor(UserRole.INSTRUCTOR)),
+        404,
+        "LECTURE_NOT_FOUND");
+  }
+
+  @Test
+  void 학습자는_발언_권한을_바꿀_수_없다() {
+    String lectureId = lectureJoinedByLearner(true);
+
+    assertError(
+        send(
+            "PUT",
+            speakingPath(lectureId, this.learnerUserId),
+            "{\"allowed\":true}",
+            this.learnerToken),
+        403,
+        "INSTRUCTOR_ACCESS_REQUIRED");
+  }
+
+  @Test
+  void 시작_전_수업에서는_발언을_허용할_수_없다() {
+    String lectureId = lectureJoinedByLearner(false);
+
+    assertError(
+        send(
+            "PUT",
+            speakingPath(lectureId, this.learnerUserId),
+            "{\"allowed\":true}",
+            this.instructorToken),
+        409,
+        "INVALID_LECTURE_STATE");
+  }
+
+  @Test
+  void 참여하지_않은_학습자는_발언_권한_대상이_아니다() {
+    String lectureId = lectureJoinedByLearner(true);
+
+    assertError(
+        send(
+            "PUT",
+            speakingPath(lectureId, this.otherLearnerUserId),
+            "{\"allowed\":true}",
+            this.instructorToken),
+        404,
+        "LECTURE_PARTICIPANT_NOT_FOUND");
+  }
+
   // ---------- 파라미터·본문 검증 ----------
 
   @Test
@@ -217,6 +340,16 @@ class LectureAuthenticatedApiIntegrationTest {
         "INVALID_REQUEST_PARAMETER");
   }
 
+  @Test
+  void 제약_경로와_함께_받은_allowed_없는_발언_body는_400이다() {
+    String lectureId = lectureJoinedByLearner(true);
+
+    assertError(
+        send("PUT", speakingPath(lectureId, this.learnerUserId), "{}", this.instructorToken),
+        400,
+        "INVALID_REQUEST_PARAMETER");
+  }
+
   // ---------- 테스트 대역 ----------
 
   @TestConfiguration(proxyBeanMethods = false)
@@ -233,7 +366,23 @@ class LectureAuthenticatedApiIntegrationTest {
   static class FakeLiveRoomGateway implements LiveRoomGateway {
 
     final List<String> openedRooms = new CopyOnWriteArrayList<>();
+
+    /** {@code "{room}/{currentProblemId}"} — 현재 문제가 없으면 {@code "null"}. */
+    final List<String> openedMetadata = new CopyOnWriteArrayList<>();
+
+    /** true면 방 조작이 503으로 실패한다. context를 공유하므로 쓴 테스트가 finally에서 되돌린다. */
+    volatile boolean failRoomOperations;
+
     final List<String> deletedRooms = new CopyOnWriteArrayList<>();
+
+    /** {@code "{room}/{identity}/{allowed}"}. 같은 context를 여러 테스트가 공유하므로 고유한 수업 ID로 찾는다. */
+    final List<String> speakingChanges = new CopyOnWriteArrayList<>();
+
+    /** {@code "{room}/{identity}/{problemId}"}. */
+    final List<String> answerSignals = new CopyOnWriteArrayList<>();
+
+    /** true면 제출 알림이 503으로 실패한다. 쓴 테스트가 finally에서 되돌린다. */
+    volatile boolean failSignals;
 
     @Override
     public IssuedMediaToken issueToken(MediaTokenRequest request) {
@@ -242,13 +391,31 @@ class LectureAuthenticatedApiIntegrationTest {
     }
 
     @Override
-    public void openRoom(String roomName) {
+    public void openRoom(String roomName, Long currentProblemId) {
+      if (this.failRoomOperations) {
+        throw new BusinessException(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
+      }
       this.openedRooms.add(roomName);
+      this.openedMetadata.add(roomName + "/" + currentProblemId);
     }
 
     @Override
     public void deleteRoom(String roomName) {
       this.deletedRooms.add(roomName);
+    }
+
+    @Override
+    public boolean setSpeaking(String roomName, String identity, boolean allowed) {
+      this.speakingChanges.add(roomName + "/" + identity + "/" + allowed);
+      return true;
+    }
+
+    @Override
+    public void notifyAnswerSubmitted(String roomName, String identity, long problemId) {
+      if (this.failSignals) {
+        throw new BusinessException(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
+      }
+      this.answerSignals.add(roomName + "/" + identity + "/" + problemId);
     }
   }
 }

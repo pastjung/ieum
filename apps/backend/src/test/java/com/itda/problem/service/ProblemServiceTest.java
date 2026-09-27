@@ -16,6 +16,8 @@ import com.itda.curriculum.domain.CurriculumStage;
 import com.itda.curriculum.domain.CurriculumStageRepository;
 import com.itda.global.FastApiClient;
 import com.itda.global.error.BusinessException;
+import com.itda.global.error.CandidatesBusinessException;
+import com.itda.global.error.CandidatesBusinessException.Candidate;
 import com.itda.global.error.ErrorCode;
 import com.itda.global.security.AuthenticatedUser;
 import com.itda.learning.domain.LearningSession;
@@ -99,6 +101,7 @@ class ProblemServiceTest {
   @Mock private UserSkillErrorCountRepository userSkillErrorCountRepository;
   @Mock private FastApiClient fastApiClient;
   @Mock private UserJpaRepository userJpaRepository;
+  @Mock private LinkedProblemReader linkedProblemReader;
 
   @InjectMocks private ProblemService problemService;
 
@@ -216,9 +219,11 @@ class ProblemServiceTest {
   }
 
   @Test
-  void 진행_중이_아닌_수업에는_문제를_등록할_수_없다() {
-    Lecture scheduled = Lecture.schedule(INSTRUCTOR_ID, "점자 기초", null, "123456", null, NOW);
-    given(lectureRepository.findById(LECTURE_ID)).willReturn(Optional.of(scheduled));
+  void 종료된_수업에는_문제를_연결할_수_없다() {
+    Lecture closed = Lecture.schedule(INSTRUCTOR_ID, "점자 기초", null, "123456", null, NOW);
+    closed.open(NOW);
+    closed.close(NOW);
+    given(lectureRepository.findById(LECTURE_ID)).willReturn(Optional.of(closed));
 
     assertError(
         () ->
@@ -228,6 +233,316 @@ class ProblemServiceTest {
 
     verify(fastApiClient, never()).analyze(any());
     verify(problemRepository, never()).save(any());
+  }
+
+  @Test
+  void 시작_전_수업에도_문제를_연결한다() {
+    Lecture scheduled = Lecture.schedule(INSTRUCTOR_ID, "점자 기초", null, "123456", null, NOW);
+    given(lectureRepository.findById(LECTURE_ID)).willReturn(Optional.of(scheduled));
+    Problem word = problem(Level.WORD, "그리고", 501L);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("그리고", BARE_LEVELS))
+        .willReturn(List.of(word));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("그리고"));
+
+    verify(lectureProblemRepository).save(lectureProblemCaptor.capture());
+    assertThat(lectureProblemCaptor.getValue().getProblem()).isSameAs(word);
+  }
+
+  // ---------- 셀 상한 (API 명세 8.2.1절, 사용자 결정) ----------
+
+  @Test
+  void 기존_문제의_셀_수가_12를_넘으면_연결하지_않는다() {
+    givenLecture();
+    Problem tooLong = problem(Level.WORD, "그리고", 501L);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("그리고", BARE_LEVELS))
+        .willReturn(List.of(tooLong));
+    given(problemCellRepository.countByProblem_Id(501L)).willReturn(13L);
+
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("그리고")),
+        ErrorCode.PROBLEM_TOO_LONG);
+
+    verify(lectureProblemRepository, never()).save(any());
+  }
+
+  @Test
+  void AI가_13칸을_돌려주면_문제를_만들지_않는다() {
+    givenLecture();
+    givenAnalysis(
+        Level.WORD, List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13), List.of(skillSet("ㄱ")));
+
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방")),
+        ErrorCode.PROBLEM_TOO_LONG);
+
+    verify(problemRepository, never()).save(any());
+    verify(lectureProblemRepository, never()).save(any());
+  }
+
+  @Test
+  void AI가_12칸을_돌려주면_연결한다() {
+    givenLecture();
+    givenAnalysis(
+        Level.WORD, List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), List.of(skillSet("ㄱ")));
+    givenSkills(skill("ㄱ"));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가방"));
+
+    verify(problemRepository).save(any());
+    verify(lectureProblemRepository).save(any());
+  }
+
+  // ---------- 입력 해석 (API 명세 8.2.1절) ----------
+
+  @Test
+  void 초성_구분어는_첫소리_요소에_연결된_자음을_고른다() {
+    givenLecture();
+    Problem onset = problem(Level.CONSONANT, "ㄱ", 26578L);
+    given(
+            problemRepository.findAllByTargetTextAndLevelAndSkillType(
+                "ㄱ", Level.CONSONANT, SkillType.SKILL_01))
+        .willReturn(List.of(onset));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("초성 ㄱ"));
+
+    assertThat(savedLinkProblem()).isSameAs(onset);
+    verify(fastApiClient, never()).analyze(any());
+  }
+
+  @Test
+  void 받침_구분어는_받침_요소에_연결된_자음을_고른다() {
+    givenLecture();
+    Problem coda = problem(Level.CONSONANT, "ㄱ", 26600L);
+    given(
+            problemRepository.findAllByTargetTextAndLevelAndSkillType(
+                "ㄱ", Level.CONSONANT, SkillType.SKILL_03))
+        .willReturn(List.of(coda));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("받침 ㄱ"));
+
+    assertThat(savedLinkProblem()).isSameAs(coda);
+  }
+
+  @Test
+  void 모음_구분어는_모음_문제를_고른다() {
+    givenLecture();
+    Problem vowel = problem(Level.VOWEL, "ㅏ", 26591L);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("ㅏ", List.of(Level.VOWEL)))
+        .willReturn(List.of(vowel));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("모음 ㅏ"));
+
+    assertThat(savedLinkProblem()).isSameAs(vowel);
+  }
+
+  @Test
+  void 음절_구분어는_약자_문제를_고른다() {
+    givenLecture();
+    Problem contraction = problem(Level.CONTRACTION, "가", 26620L);
+    given(
+            problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc(
+                "가", List.of(Level.CONTRACTION)))
+        .willReturn(List.of(contraction));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("음절 가"));
+
+    assertThat(savedLinkProblem()).isSameAs(contraction);
+  }
+
+  @Test
+  void 구분어가_붙은_입력에_문제가_없으면_404이고_AI로_만들지_않는다() {
+    givenLecture();
+
+    assertError(
+        () ->
+            problemService.registerProblem(
+                INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("받침 ㅃ")),
+        ErrorCode.PROBLEM_NOT_FOUND);
+
+    verify(fastApiClient, never()).analyze(any());
+    verify(lectureProblemRepository, never()).save(any());
+  }
+
+  @Test
+  void 구분어_없는_낱자에_후보가_둘이면_후보를_돌려주고_연결하지_않는다() {
+    givenLecture();
+    List<Problem> candidates =
+        List.of(problem(Level.CONSONANT, "ㄱ", 1L), problem(Level.CONSONANT, "ㄱ", 2L));
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("ㄱ", JAMO_LEVELS))
+        .willReturn(candidates);
+    given(linkedProblemReader.readAll(candidates))
+        .willReturn(List.of(linked(1L, "초성 ㄱ"), linked(2L, "받침 ㄱ")));
+
+    assertThatThrownBy(
+            () ->
+                problemService.registerProblem(
+                    INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("ㄱ")))
+        .isInstanceOfSatisfying(
+            CandidatesBusinessException.class,
+            e -> {
+              assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PROBLEM_TEXT_AMBIGUOUS);
+              assertThat(e.getCandidates())
+                  .containsExactly(new Candidate("초성 ㄱ", "초성 ㄱ"), new Candidate("받침 ㄱ", "받침 ㄱ"));
+            });
+    verify(lectureProblemRepository, never()).save(any());
+  }
+
+  /**
+   * 자음이 SKILL_01·SKILL_03 어디에도 안 걸려 있으면 ProblemDisplay가 표시 문구로 입력 글자를 그대로 낸다. 그 후보를 그대로 후보 목록에 실으면
+   * 강사가 그 문구를 다시 보내 같은 409를 반복하게 된다 — 후보에서 뺀다.
+   */
+  @Test
+  void 구분어를_못_붙이는_후보는_제외하고_남은_하나를_연결한다() {
+    givenLecture();
+    Problem unprefixable = problem(Level.CONSONANT, "ㄱ", 1L);
+    Problem onset = problem(Level.CONSONANT, "ㄱ", 2L);
+    List<Problem> candidates = List.of(unprefixable, onset);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("ㄱ", JAMO_LEVELS))
+        .willReturn(candidates);
+    given(linkedProblemReader.readAll(candidates))
+        .willReturn(List.of(linked(1L, "ㄱ"), linked(2L, "초성 ㄱ")));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("ㄱ"));
+
+    assertThat(savedLinkProblem()).isSameAs(onset);
+  }
+
+  @Test
+  void 후보가_모두_구분어를_못_붙이면_404다() {
+    givenLecture();
+    List<Problem> candidates =
+        List.of(problem(Level.CONSONANT, "ㄱ", 1L), problem(Level.CONSONANT, "ㄱ", 2L));
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("ㄱ", JAMO_LEVELS))
+        .willReturn(candidates);
+    given(linkedProblemReader.readAll(candidates))
+        .willReturn(List.of(linked(1L, "ㄱ"), linked(2L, "ㄱ")));
+
+    assertError(
+        () ->
+            problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("ㄱ")),
+        ErrorCode.PROBLEM_NOT_FOUND);
+
+    verify(lectureProblemRepository, never()).save(any());
+  }
+
+  @Test
+  void 구분어_없는_낱자에_후보가_하나면_바로_연결한다() {
+    givenLecture();
+    Problem vowel = problem(Level.VOWEL, "ㅏ", 26591L);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("ㅏ", JAMO_LEVELS))
+        .willReturn(List.of(vowel));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("ㅏ"));
+
+    assertThat(savedLinkProblem()).isSameAs(vowel);
+  }
+
+  @Test
+  void 표시_문구가_같은_중복_후보는_하나로_보고_id가_작은_것을_연결한다() {
+    givenLecture();
+    Problem first = problem(Level.VOWEL, "ㅏ", 10L);
+    List<Problem> candidates = List.of(first, problem(Level.VOWEL, "ㅏ", 11L));
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("ㅏ", JAMO_LEVELS))
+        .willReturn(candidates);
+    given(linkedProblemReader.readAll(candidates))
+        .willReturn(List.of(linked(10L, "모음 ㅏ"), linked(11L, "모음 ㅏ")));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("ㅏ"));
+
+    assertThat(savedLinkProblem()).isSameAs(first);
+  }
+
+  @Test
+  void 구분어_없는_낱자에_후보가_없으면_404다() {
+    givenLecture();
+
+    assertError(
+        () ->
+            problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("ㄳ")),
+        ErrorCode.PROBLEM_NOT_FOUND);
+
+    verify(fastApiClient, never()).analyze(any());
+  }
+
+  @Test
+  void 구분어_없는_글자는_낱말_단계를_먼저_고른다() {
+    givenLecture();
+    Problem word = problem(Level.WORD, "가", 20L);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("가", BARE_LEVELS))
+        .willReturn(List.of(word));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("가"));
+
+    assertThat(savedLinkProblem()).isSameAs(word);
+    verify(problemRepository, never()).findAllByTargetTextOrderByIdAsc(any());
+    verify(fastApiClient, never()).analyze(any());
+  }
+
+  @Test
+  void 낱말_단계에_없으면_다른_단계의_같은_글자를_고른다() {
+    givenLecture();
+    Problem contraction = problem(Level.CONTRACTION, "억", 30L);
+    given(problemRepository.findAllByTargetTextOrderByIdAsc("억")).willReturn(List.of(contraction));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("억"));
+
+    assertThat(savedLinkProblem()).isSameAs(contraction);
+    verify(fastApiClient, never()).analyze(any());
+  }
+
+  @Test
+  void 앞뒤_공백을_지운_글자로_AI에_묻고_저장한다() {
+    givenLecture();
+    givenAnalysis(Level.WORD, List.of(0b000001), List.of(skillSet("ㄱ")));
+    givenSkills(skill("ㄱ"));
+
+    problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("  가방  "));
+
+    ArgumentCaptor<RegisterProblemRequest> asked =
+        ArgumentCaptor.forClass(RegisterProblemRequest.class);
+    verify(fastApiClient).analyze(asked.capture());
+    assertThat(asked.getValue().targetText()).isEqualTo("가방");
+    verify(problemRepository).save(problemCaptor.capture());
+    assertThat(problemCaptor.getValue().getTargetText()).isEqualTo("가방");
+  }
+
+  // ---------- 중복 연결 ----------
+
+  @Test
+  void 이미_연결된_문제면_저장하지_않고_기존_연결로_답한다() {
+    Lecture lecture = givenLecture();
+    Problem word = problem(Level.WORD, "그리고", 501L);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("그리고", BARE_LEVELS))
+        .willReturn(List.of(word));
+    given(lectureProblemRepository.findByLecture_IdAndProblem_Id(any(), eq(501L)))
+        .willReturn(Optional.of(new LectureProblem(lecture, word)));
+
+    RegisteredProblem result =
+        problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("그리고"));
+
+    assertThat(result.created()).isFalse();
+    verify(lectureProblemRepository, never()).save(any());
+  }
+
+  @Test
+  void 새로_연결하면_created이고_읽은_문제_정보를_돌려준다() {
+    givenLecture();
+    Problem word = problem(Level.WORD, "그리고", 501L);
+    given(problemRepository.findAllByTargetTextAndLevelInOrderByIdAsc("그리고", BARE_LEVELS))
+        .willReturn(List.of(word));
+    LinkedProblem read = new LinkedProblem(501L, "그리고", "그리고", Level.WORD, List.of(1, 2));
+    given(linkedProblemReader.read(word)).willReturn(read);
+
+    RegisteredProblem result =
+        problemService.registerProblem(INSTRUCTOR, LECTURE_ID, new RegisterProblemRequest("그리고"));
+
+    assertThat(result.created()).isTrue();
+    assertThat(result.problem()).isSameAs(read);
   }
 
   @Test
@@ -773,6 +1088,25 @@ class ProblemServiceTest {
 
   private static UserWrongProblem wrongProblem(User user, Problem problem) {
     return new UserWrongProblem(user, problem, Level.WORD);
+  }
+
+  private static final List<Level> BARE_LEVELS =
+      List.of(Level.WORD, Level.CONTRACTION_WORD, Level.SENTENCE);
+  private static final List<Level> JAMO_LEVELS = List.of(Level.CONSONANT, Level.VOWEL);
+
+  private static Problem problem(Level level, String targetText, long id) {
+    Problem problem = new Problem(level, targetText);
+    ReflectionTestUtils.setField(problem, "id", id);
+    return problem;
+  }
+
+  private static LinkedProblem linked(long id, String displayText) {
+    return new LinkedProblem(id, "ㄱ", displayText, Level.CONSONANT, List.of(8));
+  }
+
+  private Problem savedLinkProblem() {
+    verify(lectureProblemRepository).save(lectureProblemCaptor.capture());
+    return lectureProblemCaptor.getValue().getProblem();
   }
 
   private Lecture givenLecture() {

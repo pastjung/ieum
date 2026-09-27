@@ -19,7 +19,6 @@ import com.itda.problem.repository.ProblemCellRepository;
 import com.itda.problem.repository.ProblemRepository;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -42,7 +41,7 @@ class BrailleDictionaryServiceTest {
   void 등록된_문제면_정답_칸을_그대로_돌려주고_AI를_부르지_않는다() {
     Problem problem = new Problem(Level.CONTRACTION, "가방");
     ReflectionTestUtils.setField(problem, "id", 31L);
-    given(problemRepository.findByTargetText("가방")).willReturn(Optional.of(problem));
+    given(problemRepository.findAllByTargetTextOrderByIdAsc("가방")).willReturn(List.of(problem));
     given(problemCellRepository.findByProblemIdOrderByCellIndexAsc(31L))
         .willReturn(
             List.of(
@@ -62,7 +61,7 @@ class BrailleDictionaryServiceTest {
 
   @Test
   void 없는_단어는_AI로_바꿔_요소_이름과_함께_돌려준다() {
-    given(problemRepository.findByTargetText("바보")).willReturn(Optional.empty());
+    given(problemRepository.findAllByTargetTextOrderByIdAsc("바보")).willReturn(List.of());
     given(fastApiClient.lookupBraille(any()))
         .willReturn(
             new BrailleLookupFastApiResponse(
@@ -84,7 +83,7 @@ class BrailleDictionaryServiceTest {
 
   @Test
   void AI가_한글이_아니라고_거절하면_422로_알린다() {
-    given(problemRepository.findByTargetText("abc")).willReturn(Optional.empty());
+    given(problemRepository.findAllByTargetTextOrderByIdAsc("abc")).willReturn(List.of());
     given(fastApiClient.lookupBraille(any()))
         .willThrow(
             HttpClientErrorException.create(
@@ -98,7 +97,7 @@ class BrailleDictionaryServiceTest {
 
   @Test
   void AI에_닿지_못하면_503으로_알린다() {
-    given(problemRepository.findByTargetText("우유")).willReturn(Optional.empty());
+    given(problemRepository.findAllByTargetTextOrderByIdAsc("우유")).willReturn(List.of());
     given(fastApiClient.lookupBraille(any())).willThrow(new ResourceAccessException("down"));
 
     assertThatThrownBy(() -> service.lookup("우유"))

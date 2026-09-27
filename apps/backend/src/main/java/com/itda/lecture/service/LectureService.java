@@ -33,6 +33,7 @@ public class LectureService {
   private final ParticipantRepository participantRepository;
   private final ParticipationCodeGenerator codeGenerator;
   private final LiveRoomGateway liveRoomGateway;
+  private final LectureProblemQuery problemQuery;
   private final TransactionOperations transactionOperations;
 
   /**
@@ -45,12 +46,14 @@ public class LectureService {
       ParticipantRepository participantRepository,
       ParticipationCodeGenerator codeGenerator,
       LiveRoomGateway liveRoomGateway,
+      LectureProblemQuery problemQuery,
       PlatformTransactionManager transactionManager) {
     this(
         lectureRepository,
         participantRepository,
         codeGenerator,
         liveRoomGateway,
+        problemQuery,
         new TransactionTemplate(transactionManager));
   }
 
@@ -60,11 +63,13 @@ public class LectureService {
       ParticipantRepository participantRepository,
       ParticipationCodeGenerator codeGenerator,
       LiveRoomGateway liveRoomGateway,
+      LectureProblemQuery problemQuery,
       TransactionOperations transactionOperations) {
     this.lectureRepository = lectureRepository;
     this.participantRepository = participantRepository;
     this.codeGenerator = codeGenerator;
     this.liveRoomGateway = liveRoomGateway;
+    this.problemQuery = problemQuery;
     this.transactionOperations = transactionOperations;
   }
 
@@ -90,12 +95,12 @@ public class LectureService {
   public LectureSnapshot find(AuthenticatedUser user, long lectureId) {
     Lecture lecture = lectureRepository.findById(lectureId).orElseThrow(LectureService::notFound);
     if (isOwner(user, lecture)) {
-      return LectureSnapshot.ofInstructor(lecture);
+      return problemQuery.instructor(lecture);
     }
     if (user.role() == UserRole.LEARNER) {
       return participantRepository
           .findById(ParticipantId.of(lectureId, user.userId()))
-          .map(participant -> LectureSnapshot.ofLearner(lecture, participant))
+          .map(participant -> problemQuery.learner(lecture, participant))
           .orElseThrow(LectureService::notFound);
     }
     throw notFound();
@@ -108,14 +113,17 @@ public class LectureService {
    */
   public LectureSnapshot changeStatus(
       AuthenticatedUser user, long lectureId, LectureStatus target) {
-    Lecture lecture = transactionOperations.execute(tx -> transition(user, lectureId, target));
+    LectureSnapshot snapshot =
+        transactionOperations.execute(
+            tx -> problemQuery.instructor(transition(user, lectureId, target)));
     String room = LectureRoom.nameOf(lectureId);
     if (target == LectureStatus.OPEN) {
-      liveRoomGateway.openRoom(room);
+      // 같은 OPEN 재요청으로 방을 복구할 때 현재 문제도 되살린다 (API 명세 8.5.2절).
+      liveRoomGateway.openRoom(room, snapshot.currentProblemId());
     } else {
       liveRoomGateway.deleteRoom(room);
     }
-    return LectureSnapshot.ofInstructor(lecture);
+    return snapshot;
   }
 
   private Lecture transition(AuthenticatedUser user, long lectureId, LectureStatus target) {

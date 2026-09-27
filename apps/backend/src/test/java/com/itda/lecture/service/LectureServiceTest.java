@@ -43,6 +43,7 @@ class LectureServiceTest {
   @Mock private LectureRepository lectureRepository;
   @Mock private ParticipantRepository participantRepository;
   @Mock private ParticipationCodeGenerator codeGenerator;
+  @Mock private LectureProblemQuery problemQuery;
 
   private RecordingLiveRoomGateway gateway;
   private LectureService service;
@@ -56,8 +57,14 @@ class LectureServiceTest {
             participantRepository,
             codeGenerator,
             gateway,
+            problemQuery,
             TransactionOperations.withoutTransaction());
     given(lectureRepository.save(any(Lecture.class))).willAnswer(call -> call.getArgument(0));
+    // 문제 쪽 조립은 LectureProblemQuery가 맡는다. 여기서는 수업 상태만 본다.
+    given(problemQuery.instructor(any(Lecture.class)))
+        .willAnswer(call -> LectureSnapshot.ofInstructor(call.getArgument(0)));
+    given(problemQuery.learner(any(Lecture.class), any(Participant.class)))
+        .willAnswer(call -> LectureSnapshot.ofLearner(call.getArgument(0), call.getArgument(1)));
   }
 
   private Lecture lecture(long instructorId) {
@@ -206,5 +213,23 @@ class LectureServiceTest {
     assertThatThrownBy(() -> service.changeStatus(OTHER_INSTRUCTOR, LECTURE_ID, LectureStatus.OPEN))
         .extracting("errorCode")
         .isEqualTo(ErrorCode.LECTURE_NOT_FOUND);
+  }
+
+  @Test
+  void 시작하면_현재_문제를_방_metadata에_싣는다() {
+    Lecture lecture = lecture(7L);
+    given(problemQuery.instructor(lecture))
+        .willAnswer(
+            call ->
+                LectureSnapshot.ofInstructor(
+                    lecture,
+                    new com.itda.problem.service.LinkedProblem(
+                        26578L, "ㄱ", "초성 ㄱ", com.itda.problem.domain.Level.CONSONANT, List.of(8)),
+                    List.of()));
+
+    service.changeStatus(
+        new AuthenticatedUser(7L, UserRole.INSTRUCTOR), LECTURE_ID, LectureStatus.OPEN);
+
+    assertThat(gateway.openedCurrentProblemIds).containsExactly(26578L);
   }
 }

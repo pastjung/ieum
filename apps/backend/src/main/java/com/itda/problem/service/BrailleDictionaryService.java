@@ -43,7 +43,9 @@ public class BrailleDictionaryService {
   @Transactional(readOnly = true)
   public BrailleDictionaryResponse lookup(String rawWord) {
     String word = normalize(rawWord);
-    Optional<Problem> problem = problemRepository.findByTargetText(word);
+    // 같은 글자가 여러 문제에 있을 수 있다(초성·받침 ㄱ, 낱말·약자 가) — 단건 조회는 예외가 나므로 가장 먼저 등록된 문제를 쓴다
+    Optional<Problem> problem =
+        problemRepository.findAllByTargetTextOrderByIdAsc(word).stream().findFirst();
     if (problem.isPresent()) {
       List<ProblemCell> cells =
           problemCellRepository.findByProblemIdOrderByCellIndexAsc(problem.get().getId());

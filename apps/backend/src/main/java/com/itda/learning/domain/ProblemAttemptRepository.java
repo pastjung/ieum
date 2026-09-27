@@ -1,6 +1,7 @@
 package com.itda.learning.domain;
 
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,11 +12,19 @@ public interface ProblemAttemptRepository extends JpaRepository<ProblemAttempt, 
 
   List<ProblemAttempt> findAllByLearningSessionIdOrderBySessionItemNoAsc(Long learningSessionId);
 
-  /** "내 실력" 화면의 푼 문제 수 */
-  long countByUserId(Long userId);
+  /** LIVE 풀이 한 건. (lecture_id, user_id, problem_id) UNIQUE이므로 많아야 한 건이다 (API 명세 8.1절). */
+  Optional<ProblemAttempt> findByLectureIdAndUserIdAndProblemId(
+      Long lectureId, Long userId, Long problemId);
 
-  /** 정답률의 분자. 분모는 {@link #countByUserId} */
-  long countByUserIdAndCorrectTrue(Long userId);
+  /** 강사 답안 목록. 제출 시각 오름차순, 같은 시각이면 id 오름차순 (API 명세 8.2.2절). */
+  List<ProblemAttempt> findAllByLectureIdAndProblemIdOrderByAttemptedAtAscIdAsc(
+      Long lectureId, Long problemId);
+
+  /** "내 실력" 화면의 푼 문제 수. LIVE 풀이는 뺀다 — 수업 중 풀이는 개인 정답률 통계에 넣지 않는다(API 명세 8.1절). */
+  long countByUserIdAndAttemptMode(Long userId, AttemptMode attemptMode);
+
+  /** 정답률의 분자. 분모는 {@link #countByUserIdAndAttemptMode} */
+  long countByUserIdAndAttemptModeAndCorrectTrue(Long userId, AttemptMode attemptMode);
 
   /**
    * 커리큘럼 단계별 풀이·정답 수.
@@ -46,8 +55,8 @@ public interface ProblemAttemptRepository extends JpaRepository<ProblemAttempt, 
    *
    * <p>{@code ProblemAttempt}는 문제를 연관관계가 아니라 {@code problemId} 컬럼으로 들고 있어 엔티티 조인을 쓴다.
    *
-   * <p>실시간 수업(LIVE) 풀이를 걸러내지 않는다. 같은 화면의 전체 "푼 문제"·"정답률"을 내는 {@link #countByUserId}가 걸러내지 않으므로, 여기만
-   * 좁히면 한 화면 안에서 전체 합과 단계 합이 갈린다.
+   * <p>실시간 수업(LIVE) 풀이는 세지 않는다(API 명세 8.1절). 같은 화면의 전체 "푼 문제"·"정답률"을 내는 {@link
+   * #countByUserIdAndAttemptMode}도 개인 학습(FREE)만 세므로, 여기서도 걸러야 한 화면 안에서 전체 합과 단계 합이 같다.
    */
   @Query(
       """
@@ -56,7 +65,7 @@ public interface ProblemAttemptRepository extends JpaRepository<ProblemAttempt, 
            SUM(CASE WHEN a.correct = true THEN 1L ELSE 0L END) AS correctCount
     FROM ProblemAttempt a
       JOIN Problem p ON p.id = a.problemId
-    WHERE a.userId = :userId
+    WHERE a.userId = :userId AND a.attemptMode = com.itda.learning.domain.AttemptMode.FREE
     GROUP BY p.level
     """)
   List<LevelAttemptCount> countByLevel(@Param("userId") Long userId);

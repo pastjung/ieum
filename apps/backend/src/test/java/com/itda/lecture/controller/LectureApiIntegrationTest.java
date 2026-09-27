@@ -63,4 +63,32 @@ class LectureApiIntegrationTest {
   void 토큰_없이_음성_토큰을_받으면_401이다() {
     assertThat(status("POST", "/lectures/1/media-tokens", null)).isEqualTo(401);
   }
+
+  @Test
+  void 토큰_없이_발언_권한을_바꾸면_401이다() {
+    assertThat(status("PUT", "/lectures/1/participants/2/speaking", "{\"allowed\":true}"))
+        .isEqualTo(401);
+  }
+
+  @Test
+  void 토큰_없이_문제를_연결하면_401이다() {
+    assertThat(status("POST", "/lectures/1/problems", "{\"targetText\":\"가\"}")).isEqualTo(401);
+  }
+
+  @Test
+  void 토큰_없이_출제하면_401이다() {
+    assertThat(status("PUT", "/lectures/1/current-problem", "{\"problemId\":\"1\"}"))
+        .isEqualTo(401);
+  }
+
+  @Test
+  void 토큰_없이_답안을_내면_401이다() {
+    assertThat(status("POST", "/lectures/1/problems/1/answers", "{\"cells\":[1],\"durationMs\":0}"))
+        .isEqualTo(401);
+  }
+
+  @Test
+  void 토큰_없이_답안_목록을_보면_401이다() {
+    assertThat(status("GET", "/lectures/1/problems/1/answers", null)).isEqualTo(401);
+  }
 }

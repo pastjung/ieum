@@ -39,6 +39,7 @@ class LectureMediaServiceTest {
   @Mock private LectureRepository lectureRepository;
   @Mock private ParticipantRepository participantRepository;
   @Mock private UserJpaRepository userJpaRepository;
+  @Mock private LectureProblemQuery problemQuery;
 
   private RecordingLiveRoomGateway gateway;
   private LectureMediaService service;
@@ -49,7 +50,7 @@ class LectureMediaServiceTest {
     gateway = new RecordingLiveRoomGateway();
     service =
         new LectureMediaService(
-            lectureRepository, participantRepository, userJpaRepository, gateway);
+            lectureRepository, participantRepository, userJpaRepository, gateway, problemQuery);
     lecture = Lecture.schedule(7L, "약자 4회차", null, "012345", null, NOW);
     ReflectionTestUtils.setField(lecture, "id", LECTURE_ID);
     given(lectureRepository.findById(LECTURE_ID)).willReturn(Optional.of(lecture));
@@ -160,5 +161,15 @@ class LectureMediaServiceTest {
     assertThatThrownBy(() -> service.issue(LEARNER, LECTURE_ID))
         .extracting("errorCode")
         .isEqualTo(ErrorCode.INVALID_LECTURE_STATE);
+  }
+
+  @Test
+  void 강사가_재접속해_방을_다시_열면_현재_문제를_metadata에_싣는다() {
+    lecture.open(NOW);
+    given(problemQuery.currentProblemId(lecture)).willReturn(26578L);
+
+    service.issue(new AuthenticatedUser(7L, UserRole.INSTRUCTOR), LECTURE_ID);
+
+    assertThat(gateway.openedCurrentProblemIds).containsExactly(26578L);
   }
 }

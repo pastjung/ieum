@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.InvalidParameterException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
@@ -34,6 +35,17 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ErrorResponse> handleBusiness(
       BusinessException e, HttpServletRequest request) {
     return ErrorHttpResponseFactory.create(request, e.getErrorCode());
+  }
+
+  /** 공통 body에 candidates만 더한다. Accept가 JSON을 허용하지 않으면 다른 오류처럼 상태만 두고 body를 생략한다. */
+  @ExceptionHandler(CandidatesBusinessException.class)
+  public ResponseEntity<CandidatesErrorResponse> handleCandidates(
+      CandidatesBusinessException e, HttpServletRequest request) {
+    ResponseEntity.BodyBuilder builder = ResponseEntity.status(e.getErrorCode().getStatus());
+    if (!ErrorHttpResponseFactory.acceptsJson(request)) {
+      return builder.build();
+    }
+    return builder.contentType(MediaType.APPLICATION_JSON).body(CandidatesErrorResponse.of(e));
   }
 
   /** JSON 문법 오류, 빈 body, 필드 타입 불일치 — body를 요청 DTO로 읽지 못했다. */

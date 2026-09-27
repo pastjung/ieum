@@ -11,9 +11,20 @@ import java.util.List;
 class RecordingLiveRoomGateway implements LiveRoomGateway {
 
   final List<String> openedRooms = new ArrayList<>();
+
+  /** openRoom마다 받은 현재 문제 id(없으면 null). openedRooms와 같은 순서다. */
+  final List<Long> openedCurrentProblemIds = new ArrayList<>();
+
   final List<String> deletedRooms = new ArrayList<>();
   final List<MediaTokenRequest> issuedRequests = new ArrayList<>();
+  final List<SpeakingChange> speakingChanges = new ArrayList<>();
   boolean failRoomOperations;
+
+  /** {@code "{room}/{identity}/{problemId}"}. */
+  final List<String> answerSignals = new ArrayList<>();
+
+  /** true면 OpenVidu가 그 참가자를 모르는 경우(404)를 흉내 낸다. */
+  boolean participantDisconnected;
 
   @Override
   public IssuedMediaToken issueToken(MediaTokenRequest request) {
@@ -22,9 +33,10 @@ class RecordingLiveRoomGateway implements LiveRoomGateway {
   }
 
   @Override
-  public void openRoom(String roomName) {
+  public void openRoom(String roomName, Long currentProblemId) {
     failIfRequested();
     openedRooms.add(roomName);
+    openedCurrentProblemIds.add(currentProblemId);
   }
 
   @Override
@@ -32,6 +44,24 @@ class RecordingLiveRoomGateway implements LiveRoomGateway {
     failIfRequested();
     deletedRooms.add(roomName);
   }
+
+  @Override
+  public boolean setSpeaking(String roomName, String identity, boolean allowed) {
+    failIfRequested();
+    if (participantDisconnected) {
+      return false;
+    }
+    speakingChanges.add(new SpeakingChange(roomName, identity, allowed));
+    return true;
+  }
+
+  @Override
+  public void notifyAnswerSubmitted(String roomName, String identity, long problemId) {
+    failIfRequested();
+    answerSignals.add(roomName + "/" + identity + "/" + problemId);
+  }
+
+  record SpeakingChange(String roomName, String identity, boolean allowed) {}
 
   private void failIfRequested() {
     if (failRoomOperations) {

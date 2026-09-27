@@ -1,13 +1,16 @@
 import { ApiError } from "@ieum/api-client";
 import {
   learnerLectureSchema,
+  liveAnswerRequestSchema,
+  liveAnswerSchema,
   mediaTokenSchema,
+  type LearnerCurrentProblem,
   type LearnerLecture,
-  type LearningSession,
   type LectureStatus,
+  type LiveAnswer,
+  type LiveAnswerRequest,
   type MediaToken,
 } from "@ieum/contracts";
-import { dotsToCell } from "@ieum/domain";
 import { api } from "./apiClient";
 
 export interface ClassInfo {
@@ -16,13 +19,18 @@ export interface ClassInfo {
   status: LectureStatus;
 }
 
+/** 문제 상태 조회 결과 — 화면이 대기·풀이·제출 대기를 정하는 데 쓴다 */
+export interface LectureProblemSnapshot {
+  status: LectureStatus;
+  currentProblem: LearnerCurrentProblem | null;
+  myResult: LiveAnswer | null;
+}
+
 function toClassInfo(lecture: LearnerLecture): ClassInfo {
   return { lectureId: lecture.lectureId, title: lecture.title, status: lecture.status };
 }
 
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/** 수업(LIVE) 서비스 — 입장·스냅샷·음성 토큰은 실제 API, 문제 출제와 복습 후보는 아직 목이다 */
+/** 수업(LIVE) 서비스 — 입장·스냅샷·음성 토큰·현재 문제·답안 제출은 실제 API, 최근 참여와 복습 후보는 아직 목이다 */
 export const classService = {
   /** 6자리 참여 코드로 입장한다. 최초 입장이든 재입장이든 같은 스냅샷을 받는다 (API 명세 8.2절) */
   async joinByCode(code: string): Promise<ClassInfo> {
@@ -42,21 +50,30 @@ export const classService = {
     return mediaTokenSchema.parse(payload);
   },
 
-  /* ─── 아래는 아직 목이다. 대응 엔드포인트(문제 출제·복습 연결)가 없다 ─── */
-
-  async getClassSession(): Promise<LearningSession> {
-    await delay(300);
-    return {
-      id: "class-abbrev-4",
-      title: "약자 4회차",
-      problems: [
-        { id: "c1", prompt: "'그래서'를 입력하세요", target: "그래서", expectedCells: [dotsToCell([1]), dotsToCell([2, 3, 4])] },
-        { id: "c2", prompt: "'그리고'를 입력하세요", target: "그리고", expectedCells: [dotsToCell([1]), dotsToCell([1, 3, 6])] },
-        { id: "c3", prompt: "'그러나'를 입력하세요", target: "그러나", expectedCells: [dotsToCell([1]), dotsToCell([1, 4])] },
-        { id: "c4", prompt: "'그러면'을 입력하세요", target: "그러면", expectedCells: [dotsToCell([1]), dotsToCell([2, 5])] },
-      ],
-    };
+  /** 현재 문제와 내 결과. 출제 신호(방 metadata)·입장·재접속 때 부른다. 정답 점형은 오지 않는다 */
+  async getLectureProblem(lectureId: string): Promise<LectureProblemSnapshot> {
+    const lecture = learnerLectureSchema.parse(await api.get<unknown>(`/lectures/${lectureId}`));
+    return { status: lecture.status, currentProblem: lecture.currentProblem, myResult: lecture.myResult };
   },
+
+  /**
+   * 현재 문제의 답안을 낸다. 서버가 채점해 결과를 돌려준다.
+   * idempotencyKey는 문제마다 새로 만들고, 같은 문제를 다시 보낼 때(응답 유실·재시도)는 같은 값을 쓴다.
+   */
+  async submitLiveAnswer(
+    lectureId: string,
+    problemId: string,
+    answer: LiveAnswerRequest,
+    idempotencyKey: string,
+  ): Promise<LiveAnswer> {
+    const body = liveAnswerRequestSchema.parse(answer);
+    const payload = await api.post<unknown>(`/lectures/${lectureId}/problems/${problemId}/answers`, body, {
+      headers: { "Idempotency-Key": idempotencyKey },
+    });
+    return liveAnswerSchema.parse(payload);
+  },
+
+  /* ─── 아래는 아직 목이다. 대응 엔드포인트(최근 참여·복습 연결)가 없다 ─── */
 
   /** 최근 참여 기록 (목) */
   recentClass: { title: "약자 3회차", when: "어제" },

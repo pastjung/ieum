@@ -4,10 +4,18 @@ import type { ApiClient, ApiClientConfig, RequestOptions } from "./types";
 export function createClient(config: ApiClientConfig): ApiClient {
   const fetchFn = config.fetchFn ?? fetch;
 
+  // 요청별 헤더가 못 덮는 이름들. 대소문자를 바꿔 보내면(예: "authorization") 객체 키가 달라
+  // 스프레드로는 안 걸러진다 — 소문자로 비교해 여기서 미리 뺀다 (M6)
+  const RESERVED_HEADER_NAMES = new Set(["authorization", "x-client-platform", "content-type"]);
+
   function buildHeaders(options: RequestOptions): Record<string, string> {
-    const headers: Record<string, string> = {
-      "X-Client-Platform": config.platform,
-    };
+    const headers: Record<string, string> = {};
+    if (options.headers) {
+      for (const [key, value] of Object.entries(options.headers)) {
+        if (!RESERVED_HEADER_NAMES.has(key.toLowerCase())) headers[key] = value;
+      }
+    }
+    headers["X-Client-Platform"] = config.platform;
     // body가 없는 요청에 Content-Type을 붙이지 않는다 — 보낼 표현이 없다
     if (options.body !== undefined) {
       headers["Content-Type"] = "application/json";
@@ -50,6 +58,7 @@ export function createClient(config: ApiClientConfig): ApiClient {
         response.status,
         body.code ?? "UNKNOWN_ERROR",
         body.message ?? "요청을 처리하지 못했어요.",
+        payload,
       );
     }
     return payload as T;
