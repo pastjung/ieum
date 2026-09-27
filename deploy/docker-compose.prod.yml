@@ -13,6 +13,9 @@
 #
 # 설정: backend는 같은 폴더의 .env.config(원본: Jenkins Secret file itda-env-config)를
 #   env_file로 통째로 받는다 — 키 목록은 docs/infra/deploy.md 6.2.1절.
+#   그중 SPRING_PROFILES_ACTIVE는 compose 치환(environment)에도 다시 참조해 필수로
+#   검사한다 — .env.config가 없거나 형식이 어긋나면 Redis 단계 이전, compose 해석
+#   시점에 실패해 트래픽이 옮겨가기 전에 멈춘다.
 #   이미지 태그(WEB/BACKEND/AI_TAG)는 deploy.sh가 갱신하는 .env.tags에서 치환된다.
 # ==========================================================================
 name: itda
@@ -36,6 +39,8 @@ services:
     image: ${REGISTRY_PREFIX:-}itda-backend:${BACKEND_TAG:?BACKEND_TAG is required}
     restart: unless-stopped
     env_file: .env.config
+    environment:
+      SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:?itda-env-config must use the docs/infra/deploy.md 6.2.1 format}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -45,6 +50,8 @@ services:
     image: ${REGISTRY_PREFIX:-}itda-backend:${BACKEND_TAG:?BACKEND_TAG is required}
     restart: unless-stopped
     env_file: .env.config
+    environment:
+      SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:?itda-env-config must use the docs/infra/deploy.md 6.2.1 format}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

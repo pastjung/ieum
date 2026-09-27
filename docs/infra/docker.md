@@ -78,7 +78,7 @@ docker compose up --build --watch
 
 ## 5. 운영 Compose
 
-`deploy/docker-compose.prod.yml`은 이미지 태그만 참조한다. 태그는 `.env.tags`(deploy.sh가 갱신)에서 치환되고, backend는 `.env.config`를 `env_file`로 통째로 받는다(키 목록: deploy.md 6.2.1절).
+`deploy/docker-compose.prod.yml`은 이미지 태그만 참조한다. 태그는 `.env.tags`(deploy.sh가 갱신)에서 치환되고, backend는 `.env.config`를 `env_file`로 통째로 받는다(키 목록: deploy.md 6.2.1절). 그중 `SPRING_PROFILES_ACTIVE`는 compose `environment`에서도 필수값으로 다시 참조하므로, `.env.config`가 없거나 그 키가 빠지면 컨테이너를 띄우기 전 compose 해석 단계에서 바로 실패한다.
 
 ```bash
 # 기동은 서비스 단위로만 한다 (scripts/deploy.sh가 수행)
