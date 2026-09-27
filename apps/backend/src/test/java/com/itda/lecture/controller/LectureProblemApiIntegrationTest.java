@@ -253,4 +253,36 @@ class LectureProblemApiIntegrationTest {
   void 빈_targetText는_400이다() {
     assertError(register(createLecture(), " ", this.instructor), 400, "INVALID_REQUEST_PARAMETER");
   }
+
+  // ---------- Snapshot (API 명세 8.2절) ----------
+
+  @Test
+  void 강사_Snapshot은_연결_순서대로_문제를_담고_출제_전_현재_문제는_null이다() {
+    String lectureId = createLecture();
+    Problem first = seedWord(List.of(1));
+    Problem second = seedWord(List.of(2, 4));
+    register(lectureId, first.getTargetText(), this.instructor);
+    register(lectureId, second.getTargetText(), this.instructor);
+
+    Map<String, Object> view =
+        HttpTestClient.json(send("GET", "/lectures/" + lectureId, null, this.instructor));
+
+    assertThat(view.get("currentProblem")).isNull();
+    assertThat(list(view.get("linkedProblems")))
+        .extracting(problem -> map(problem).get("problemId"))
+        .containsExactly(String.valueOf(first.getId()), String.valueOf(second.getId()));
+    assertThat(map(list(view.get("linkedProblems")).get(1)))
+        .containsEntry("expectedPattern", List.of(2, 4));
+  }
+
+  @Test
+  void 학습자_Snapshot은_출제_전_현재_문제와_결과가_null이다() {
+    String lectureId = createLecture();
+    join(lectureId, this.learner);
+
+    Map<String, Object> view =
+        HttpTestClient.json(send("GET", "/lectures/" + lectureId, null, this.learner));
+
+    assertThat(view).containsEntry("currentProblem", null).containsEntry("myResult", null);
+  }
 }

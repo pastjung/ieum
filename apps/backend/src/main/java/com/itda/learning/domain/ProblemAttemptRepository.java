@@ -1,6 +1,7 @@
 package com.itda.learning.domain;
 
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,6 +11,10 @@ import org.springframework.stereotype.Repository;
 public interface ProblemAttemptRepository extends JpaRepository<ProblemAttempt, Long> {
 
   List<ProblemAttempt> findAllByLearningSessionIdOrderBySessionItemNoAsc(Long learningSessionId);
+
+  /** LIVE 풀이 한 건. (lecture_id, user_id, problem_id) UNIQUE이므로 많아야 한 건이다 (API 명세 8.1절). */
+  Optional<ProblemAttempt> findByLectureIdAndUserIdAndProblemId(
+      Long lectureId, Long userId, Long problemId);
 
   /** "내 실력" 화면의 푼 문제 수 */
   long countByUserId(Long userId);
