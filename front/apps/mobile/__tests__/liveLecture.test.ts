@@ -98,7 +98,7 @@ const mockedAudio = AudioSession as unknown as {
 };
 
 function handlers() {
-  return { onOpen: jest.fn(), onExit: jest.fn(), onSpeakingChanged: jest.fn() };
+  return { onOpen: jest.fn(), onExit: jest.fn(), onSpeakingChanged: jest.fn(), onCurrentProblemChanged: jest.fn() };
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void } {
@@ -782,5 +782,87 @@ describe("liveLecture 손들기·마이크", () => {
     await expect(turningOn).resolves.toBe(false);
     expect(mockedPauseItda).toHaveBeenLastCalledWith(false);
     expect(useLectureVoiceStore.getState().micOn).toBe(false);
+  });
+});
+
+describe("liveLecture 현재 문제", () => {
+  const withProblem = (id: string) => JSON.stringify({ status: "OPEN", currentProblemId: id });
+
+  it("방 metadata의 현재 문제가 바뀔 때만 알린다", async () => {
+    const { h, room } = await joinOpen();
+
+    room.emit("roomMetadataChanged", withProblem("26578"));
+    room.emit("roomMetadataChanged", withProblem("26578")); // 같은 값의 재기록(강사 재시도)은 되풀이하지 않는다
+
+    expect(h.onCurrentProblemChanged).toHaveBeenCalledTimes(1);
+    expect(h.onCurrentProblemChanged).toHaveBeenCalledWith("26578");
+
+    room.emit("roomMetadataChanged", withProblem("26579"));
+
+    expect(h.onCurrentProblemChanged).toHaveBeenCalledTimes(2);
+    expect(h.onCurrentProblemChanged).toHaveBeenLastCalledWith("26579");
+  });
+
+  it("현재 문제가 사라지면 null로 알린다", async () => {
+    const { h, room } = await joinOpen();
+    room.emit("roomMetadataChanged", withProblem("7"));
+
+    room.emit("roomMetadataChanged", '{"status":"OPEN"}');
+
+    expect(h.onCurrentProblemChanged).toHaveBeenLastCalledWith(null);
+  });
+
+  it("입장할 때 이미 있던 현재 문제는 알리지 않고 기준값으로 둔다", async () => {
+    mockConnectReached = () => {
+      mockRooms[0]!.metadata = withProblem("7");
+    };
+    const { h, room } = await joinOpen();
+
+    expect(h.onCurrentProblemChanged).not.toHaveBeenCalled();
+
+    room.emit("roomMetadataChanged", withProblem("7"));
+    expect(h.onCurrentProblemChanged).not.toHaveBeenCalled();
+
+    room.emit("roomMetadataChanged", withProblem("8"));
+    expect(h.onCurrentProblemChanged).toHaveBeenCalledWith("8");
+  });
+
+  it("JSON이 아닌 metadata는 문제 없음으로 보고, 시작 판정도 그대로 둔다", async () => {
+    mockedClass.getLecture.mockResolvedValue({ lectureId: "42", title: "t", status: "SCHEDULED" });
+    const h = handlers();
+    await liveLecture.join("42", h);
+    const room = mockRooms[0]!;
+
+    room.emit("roomMetadataChanged", "not-json");
+    expect(h.onCurrentProblemChanged).not.toHaveBeenCalled();
+    expect(h.onOpen).not.toHaveBeenCalled();
+
+    room.emit("roomMetadataChanged", withProblem("3"));
+    expect(h.onOpen).toHaveBeenCalledTimes(1);
+    expect(h.onCurrentProblemChanged).toHaveBeenCalledWith("3");
+  });
+
+  it("다시 입장하면 이전 방의 metadata 변경은 누구에게도 알리지 않는다", async () => {
+    const { h: first, room: oldRoom } = await joinOpen();
+    // discardSilently의 removeAllListeners()가 목 방의 리스너도 지우므로, 그 부수효과가 아니라
+    // 코드 안의 isLive 가드가 막는지 보려고 해제 전에 리스너를 붙잡아 두었다가 직접 부른다
+    const staleListener = oldRoom.listeners.get("roomMetadataChanged")![0]!;
+    const second = handlers();
+    await liveLecture.join("42", second);
+
+    staleListener(withProblem("99"));
+
+    expect(first.onCurrentProblemChanged).not.toHaveBeenCalled();
+    expect(second.onCurrentProblemChanged).not.toHaveBeenCalled();
+  });
+
+  it("나간 뒤 늦게 닿은 metadata 변경은 알리지 않는다", async () => {
+    const { h, room } = await joinOpen();
+    const staleListener = room.listeners.get("roomMetadataChanged")![0]!;
+
+    await liveLecture.leave();
+    staleListener(withProblem("99"));
+
+    expect(h.onCurrentProblemChanged).not.toHaveBeenCalled();
   });
 });

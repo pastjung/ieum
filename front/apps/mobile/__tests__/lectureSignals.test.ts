@@ -1,6 +1,7 @@
 import {
   canSpeak,
   classifyDisconnect,
+  currentProblemIdFrom,
   handFromAttributes,
   isLectureOpen,
   isUserBackAction,
@@ -91,5 +92,26 @@ describe("handFromAttributes", () => {
     expect(handFromAttributes({ speaking: "allowed" })).toBe("down");
     expect(handFromAttributes({})).toBe("down");
     expect(handFromAttributes(undefined)).toBe("down");
+  });
+});
+
+describe("currentProblemIdFrom", () => {
+  it("metadata의 현재 문제 ID를 읽는다", () => {
+    expect(currentProblemIdFrom('{"status":"OPEN","currentProblemId":"26578"}')).toBe("26578");
+  });
+
+  it("현재 문제가 없거나 null이면 null이다", () => {
+    expect(currentProblemIdFrom('{"status":"OPEN"}')).toBeNull();
+    expect(currentProblemIdFrom('{"status":"OPEN","currentProblemId":null}')).toBeNull();
+    expect(currentProblemIdFrom('{"status":"OPEN","currentProblemId":""}')).toBeNull();
+  });
+
+  it("문자열이 아닌 ID·JSON이 아닌 값·빈 값은 null이다", () => {
+    expect(currentProblemIdFrom('{"currentProblemId":26578}')).toBeNull();
+    expect(currentProblemIdFrom("not-json")).toBeNull();
+    expect(currentProblemIdFrom('"26578"')).toBeNull();
+    expect(currentProblemIdFrom("")).toBeNull();
+    expect(currentProblemIdFrom(undefined)).toBeNull();
+    expect(currentProblemIdFrom(null)).toBeNull();
   });
 });

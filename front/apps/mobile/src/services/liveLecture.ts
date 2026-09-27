@@ -5,7 +5,14 @@ import { Room, RoomEvent } from "livekit-client";
 import { useLectureVoiceStore } from "@/stores/lectureVoiceStore";
 import { classService } from "./classService";
 import { pauseItdaForLecture } from "./itda";
-import { canSpeak, classifyDisconnect, handFromAttributes, isLectureOpen, type RoomExit } from "./lectureSignals";
+import {
+  canSpeak,
+  classifyDisconnect,
+  currentProblemIdFrom,
+  handFromAttributes,
+  isLectureOpen,
+  type RoomExit,
+} from "./lectureSignals";
 
 export interface LiveLectureHandlers {
   /** 수업이 시작됐다 (접속 1회당 최대 1번) */
@@ -14,6 +21,8 @@ export interface LiveLectureHandlers {
   onExit: (exit: RoomExit) => void;
   /** 선생님이 발언을 허용(true)하거나 거뒀다(false). 값이 바뀔 때만 부른다 — 화면을 옮겨도 불린다 */
   onSpeakingChanged: (allowed: boolean) => void;
+  /** 강사가 출제해 방 metadata의 현재 문제가 바뀌었다(없어지면 null). 값이 바뀔 때만 부른다 — 화면을 옮겨도 불린다 */
+  onCurrentProblemChanged: (problemId: string | null) => void;
 }
 
 interface Session {
@@ -33,6 +42,8 @@ interface Session {
   handUp: boolean;
   /** setMicrophone이 진행 중이다 — 겹친 켜기·끄기를 막는다 */
   micBusy: boolean;
+  /** 마지막으로 본 metadata의 현재 문제 — 같은 값의 재기록을 걸러낸다 */
+  currentProblemId: string | null;
 }
 
 /**
@@ -104,6 +115,13 @@ function applySpeaking(current: Session, allowed: boolean): void {
   applyAudioProfile(current, allowed);
   syncVoice(current);
   current.handlers.onSpeakingChanged(allowed);
+}
+
+/** metadata의 현재 문제가 실제로 바뀔 때만 알린다. 낡은 세대·퇴장한 세션은 알리지 않는다 */
+function applyCurrentProblem(current: Session, problemId: string | null): void {
+  if (!isLive(current) || current.currentProblemId === problemId) return;
+  current.currentProblemId = problemId;
+  current.handlers.onCurrentProblemChanged(problemId);
 }
 
 /** 이 세대가 오디오를 소유하고 있을 때만 끈다. 더 최신 세대가 이미 소유했다면 손대지 않는다 */
@@ -207,10 +225,12 @@ export const liveLecture = {
       micOn: false,
       handUp: false,
       micBusy: false,
+      currentProblemId: null,
     };
 
     room.on(RoomEvent.RoomMetadataChanged, (metadata: string) => {
       if (isLectureOpen(metadata)) markOpen(current);
+      applyCurrentProblem(current, currentProblemIdFrom(metadata));
     });
     room.on(RoomEvent.Disconnected, (reason?: number) => {
       finish(current, classifyDisconnect(reason, current.leavingByUser));
@@ -254,6 +274,10 @@ export const liveLecture = {
       abandon(room, generation);
       return;
     }
+
+    // 접속 시점의 현재 문제는 알리지 않고 기준값으로만 둔다 — 화면이 입장·재접속 때 스냅샷을 직접 조회한다.
+    // 이후 값이 달라질 때만 onCurrentProblemChanged가 불린다
+    current.currentProblemId = currentProblemIdFrom(room.metadata);
 
     // 토큰 권한의 스냅샷 — 학습자 토큰은 canPublish=false라 보통 아무 일도 없다
     applySpeaking(current, canSpeak(room.localParticipant.permissions));

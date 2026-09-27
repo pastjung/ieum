@@ -5,10 +5,9 @@ import { ApiError } from "@ieum/api-client";
 import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
-import { classService } from "@/services/classService";
 import { liveLecture } from "@/services/liveLecture";
+import { lectureProblemSync } from "@/services/lectureProblemSync";
 import { isUserBackAction } from "@/services/lectureSignals";
-import { useSessionStore } from "@/stores/sessionStore";
 import { announce, hapticSuccess, speakAsync } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 import { speakingAllowedAnnouncement, SPEAKING_REVOKED_MESSAGE } from "@/services/lectureVoiceControls";
@@ -18,14 +17,13 @@ export default function ClassWaiting() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const { lectureId, title } = useLocalSearchParams<{ lectureId: string; title?: string }>();
-  const start = useSessionStore((s) => s.start);
   const className = title ?? "수업";
   // 파라미터가 없거나 비어 있으면 입장할 방을 알 수 없다 — undefined로 join하지 않는다
   const validLectureId = typeof lectureId === "string" && lectureId.trim() !== "" ? lectureId : null;
   // retryable이 false면 다시 시도해도 같은 결과라 "다시 시도" 대신 나가기만 권한다
   const [failed, setFailed] = useState<{ message: string; retryable: boolean } | null>(null);
-  // 언마운트(풀이 화면으로 이동 등) 뒤에는 상태를 바꾸거나 화면을 옮기지 않는다. onExit은
-  // 그대로 살려 둔다 — 대기 화면을 떠난 뒤에도 liveLecture 쪽 handlers는 계속 불릴 수 있다.
+  // 언마운트(풀이 화면으로 이동 등) 뒤에는 상태를 바꾸거나 화면을 옮기지 않는다. onExit·onSpeakingChanged·
+  // onCurrentProblemChanged는 그대로 살려 둔다 — 대기 화면을 떠난 뒤에도 liveLecture 쪽 handlers는 계속 불린다.
   const mountedRef = useRef(true);
   // "입장 완료" 안내는 화면에 들어올 때 한 번만 읽는다. 다시 시도할 때마다 되풀이하지 않는다.
   // 실패 안내는 이 낭독이 끝난 뒤에 읽는다 — 겹치면 announce가 입장 안내를 중간에 끊는다
@@ -68,21 +66,19 @@ export default function ClassWaiting() {
         if (mountedRef.current) announce(message);
       });
     };
+    // 문제 상태를 이 수업으로 맞춘다. 같은 수업의 재접속이면 지금까지의 정오 집계는 남는다
+    lectureProblemSync.begin(validLectureId);
     liveLecture
       .join(validLectureId, {
         onOpen: () => {
-          // 문제 출제는 아직 목이다 — 수업이 시작되면 목 문제로 풀이를 시작한다
-          void classService.getClassSession().then((session) => {
-            // getClassSession은 300ms 뒤에 응답한다 — 그 사이 방이 끊겨 onExit이 이미
-            // /class/end나 /class/disconnected로 옮겼을 수 있다. 이 화면이 언마운트됐거나
-            // liveLecture가 더 이상 이 lectureId를 살아 있는 세션으로 보지 않으면(onExit이
-            // 나가면서 지운다) 늦게 온 시작 알림을 버린다 — 아니면 끝난 수업으로 되돌아간다.
-            if (!mountedRef.current || liveLecture.currentLectureId() !== validLectureId) return;
-            start(session, "class");
-            router.replace("/class/play");
-          });
+          // 수업이 시작되면 풀이 화면으로 간다. 그 화면은 "문제를 기다리는 중" 대기 상태로 시작해
+          // 현재 문제를 한 번 조회한다. 그 사이 방이 끊겨 이미 다른 화면으로 옮겼으면 버린다
+          if (!mountedRef.current || liveLecture.currentLectureId() !== validLectureId) return;
+          router.replace("/class/play");
         },
         onExit: (exit) => {
+          // 방을 나온 뒤 늦게 온 조회·제출 응답이 종료·끊김 화면 위에서 문제를 읽지 않게 멈춘다
+          lectureProblemSync.stop();
           if (exit === "ended") router.replace("/class/end");
           else if (exit === "lost") router.replace({ pathname: "/class/disconnected", params: { lectureId: validLectureId, title } });
         },
@@ -91,6 +87,11 @@ export default function ClassWaiting() {
           // 마이크 버튼은 풀이 화면에만 있으므로, 그 화면이 아니면 누르라는 말은 하지 않는다 (M5)
           if (allowed) void hapticSuccess();
           announce(allowed ? speakingAllowedAnnouncement() : SPEAKING_REVOKED_MESSAGE);
+        },
+        onCurrentProblemChanged: () => {
+          // 신호는 "다시 조회하라"는 뜻일 뿐이다. 문제 내용·제출 여부는 스냅샷으로 받는다.
+          // 풀이·채점 어느 화면에 있어도 같은 경로로 상태가 바뀌고 안내된다
+          void lectureProblemSync.refresh();
         },
       })
       .catch((error: unknown) => {
@@ -102,7 +103,7 @@ export default function ClassWaiting() {
         }
         fail("음성 수업에 연결하지 못했어요. 다시 시도해 주세요.", true);
       });
-  }, [validLectureId, title, className, start]);
+  }, [validLectureId, title, className]);
 
   useEffect(() => {
     attempt();
@@ -110,6 +111,7 @@ export default function ClassWaiting() {
 
   const leaveAndBack = async () => {
     await liveLecture.leave();
+    lectureProblemSync.reset();
     router.back();
   };
 

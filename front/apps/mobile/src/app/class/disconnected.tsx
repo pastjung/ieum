@@ -5,7 +5,7 @@ import { ScreenShell } from "@/components/ScreenShell";
 import { IeumFace } from "@/components/IeumFace";
 import { AppButton } from "@/components/AppButton";
 import { liveLecture } from "@/services/liveLecture";
-import { useSessionStore } from "@/stores/sessionStore";
+import { lectureProblemSync } from "@/services/lectureProblemSync";
 import { announce, hapticError } from "@/a11y";
 import { useFontScale, useTheme } from "@/theme";
 
@@ -15,7 +15,6 @@ export default function ClassDisconnected() {
   const theme = useTheme();
   const fontScale = useFontScale();
   const { lectureId, title } = useLocalSearchParams<{ lectureId: string; title?: string }>();
-  const reset = useSessionStore((s) => s.reset);
   // 다시 연결할 방을 모르면 "다시 연결"을 내놓지 않는다 — undefined로 입장하게 된다
   const canReconnect = typeof lectureId === "string" && lectureId.trim() !== "";
   // 자동으로 다시 잇지 않고 답도 서버에 저장하지 않으므로 그렇게 약속하지 않는다 — 할 일만 안내한다
@@ -52,7 +51,7 @@ export default function ClassDisconnected() {
           onPress={() =>
             void (async () => {
               await liveLecture.leave();
-              reset();
+              lectureProblemSync.reset();
               router.replace("/(tabs)");
             })()
           }

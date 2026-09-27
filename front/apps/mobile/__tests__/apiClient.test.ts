@@ -303,3 +303,66 @@ describe("api-client 401 자동 갱신", () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("api-client 요청별 헤더", () => {
+  function clientWith(fetchFn: jest.Mock) {
+    const { store } = memoryTokenStore("access-1", "refresh-1");
+    return createClient({
+      baseUrl: "http://localhost:8080/api/v1",
+      platform: "MOBILE",
+      tokens: store,
+      onSessionExpired: () => {},
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+  }
+
+  it("요청별 헤더를 인증·플랫폼 헤더와 함께 보낸다 (Idempotency-Key)", async () => {
+    const fetchFn = jest.fn(async () => fakeResponse(201, { ok: true }));
+
+    await clientWith(fetchFn).post(
+      "/lectures/42/problems/7/answers",
+      { cells: [8], durationMs: 0 },
+      { headers: { "Idempotency-Key": "k-1" } },
+    );
+
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Idempotency-Key"]).toBe("k-1");
+    expect(headers.Authorization).toBe("Bearer access-1");
+    expect(headers["X-Client-Platform"]).toBe("MOBILE");
+    expect(headers["Content-Type"]).toBe("application/json");
+  });
+
+  it("요청별 헤더가 인증·플랫폼 헤더를 덮지 못한다", async () => {
+    const fetchFn = jest.fn(async () => fakeResponse(200, {}));
+
+    await clientWith(fetchFn).get("/users/me", {
+      headers: { Authorization: "Bearer other", "X-Client-Platform": "WEB" },
+    });
+
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer access-1");
+    expect(headers["X-Client-Platform"]).toBe("MOBILE");
+  });
+
+  it("이름의 대소문자를 바꿔도 인증·플랫폼·Content-Type 헤더를 덮지 못한다 (M6)", async () => {
+    const fetchFn = jest.fn(async () => fakeResponse(200, {}));
+
+    await clientWith(fetchFn).post(
+      "/users/me",
+      { a: 1 },
+      { headers: { authorization: "Bearer other", "x-client-platform": "WEB", "content-type": "text/plain" } },
+    );
+
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer access-1");
+    expect(headers["X-Client-Platform"]).toBe("MOBILE");
+    expect(headers["Content-Type"]).toBe("application/json");
+    // 소문자 이름 자체도 새 키로 남아 있으면 안 된다 — 두 헤더가 같이 나가는 것도 우회다
+    expect(headers.authorization).toBeUndefined();
+    expect(headers["x-client-platform"]).toBeUndefined();
+    expect(headers["content-type"]).toBeUndefined();
+  });
+});

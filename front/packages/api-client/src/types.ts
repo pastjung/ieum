@@ -22,6 +22,8 @@ export interface RequestOptions {
   body?: unknown;
   /** 기본 true. false면 Authorization을 붙이지 않고 401 자동 갱신도 하지 않는다 */
   auth?: boolean;
+  /** 요청별 헤더(예: Idempotency-Key). 플랫폼·Content-Type·Authorization은 덮지 못한다 */
+  headers?: Readonly<Record<string, string>>;
 }
 
 export interface ApiClientConfig {
