@@ -4,7 +4,6 @@ import com.itda.global.security.AuthenticatedUser;
 import com.itda.voice.dto.VoiceCloneResponse;
 import com.itda.voice.dto.VoiceSpeechRequest;
 import com.itda.voice.service.VoiceSynthesisService;
-import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -36,10 +35,8 @@ public class VoiceController {
   public ResponseEntity<VoiceCloneResponse> cloneVoice(
       @AuthenticationPrincipal AuthenticatedUser user,
       @RequestPart(name = "clip", required = false) MultipartFile clip,
-      @RequestParam(name = "name", required = false) String name)
-      throws IOException {
-    byte[] clipBytes = clip == null ? new byte[0] : clip.getBytes();
-    String voiceId = this.voiceSynthesisService.cloneVoice(user, clipBytes, name);
+      @RequestParam(name = "name", required = false) String name) {
+    String voiceId = this.voiceSynthesisService.cloneVoice(user, clip, name);
     return ResponseEntity.status(HttpStatus.CREATED).body(new VoiceCloneResponse(voiceId));
   }
 

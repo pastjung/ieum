@@ -7,12 +7,15 @@ import com.itda.user.domain.UserRole;
 import com.itda.voice.cartesia.VoiceSynthesisException;
 import com.itda.voice.cartesia.VoiceSynthesisGateway;
 import com.itda.voice.repository.VoiceRateLimiter;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 목소리 복제·합성 대리 호출 (API 명세 12절).
@@ -45,16 +48,18 @@ public class VoiceSynthesisService {
   /**
    * @return 외부 서비스의 voice id
    */
-  public String cloneVoice(AuthenticatedUser user, byte[] clip, String name) {
+  public String cloneVoice(AuthenticatedUser user, MultipartFile clip, String name) {
     requireLearner(user);
     requireAvailable();
-    if (!isWav(clip)) {
+    byte[] header = readHeader(clip);
+    if (!isWav(clip, header)) {
       throw invalidInput();
     }
     String voiceName = voiceName(name);
     consumeBudget(user);
+    byte[] clipBytes = readFullBytes(clip);
     try {
-      return this.gateway.cloneVoice(clip, voiceName);
+      return this.gateway.cloneVoice(clipBytes, voiceName);
     } catch (VoiceSynthesisException e) {
       throw new BusinessException(ErrorCode.VOICE_SYNTHESIS_FAILED);
     }
@@ -104,11 +109,35 @@ public class VoiceSynthesisService {
     }
   }
 
-  private static boolean isWav(byte[] clip) {
+  /**
+   * 역할·키 판정을 통과한 뒤 WAV 여부만 가리기 위해 앞쪽 {@value #WAV_HEADER_PREFIX} 바이트만 읽는다. 나머지(최대 10MB)는 사용량을 확인한
+   * 뒤에야 읽는다 — 거절될 요청을 위해 전체를 메모리에 올리지 않는다.
+   */
+  private static byte[] readHeader(MultipartFile clip) {
+    if (clip == null || clip.isEmpty()) {
+      return new byte[0];
+    }
+    try (InputStream in = clip.getInputStream()) {
+      return in.readNBytes(WAV_HEADER_PREFIX);
+    } catch (IOException e) {
+      throw invalidInput();
+    }
+  }
+
+  private static byte[] readFullBytes(MultipartFile clip) {
+    try {
+      return clip.getBytes();
+    } catch (IOException e) {
+      throw invalidInput();
+    }
+  }
+
+  private static boolean isWav(MultipartFile clip, byte[] header) {
     return clip != null
-        && clip.length > WAV_HEADER_PREFIX
-        && Arrays.equals(clip, 0, 4, RIFF, 0, 4)
-        && Arrays.equals(clip, 8, 12, WAVE, 0, 4);
+        && clip.getSize() > WAV_HEADER_PREFIX
+        && header.length == WAV_HEADER_PREFIX
+        && Arrays.equals(header, 0, 4, RIFF, 0, 4)
+        && Arrays.equals(header, 8, 12, WAVE, 0, 4);
   }
 
   private static String voiceName(String name) {

@@ -13,11 +13,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.web.multipart.MultipartFile;
 
 class VoiceSynthesisServiceTest {
 
   private static final AuthenticatedUser LEARNER = new AuthenticatedUser(7L, UserRole.LEARNER);
-  private static final byte[] CLIP = VoiceTestClips.wav(64);
+  private static final byte[] CLIP_BYTES = VoiceTestClips.wav(64);
 
   private final RecordingVoiceSynthesisGateway gateway = new RecordingVoiceSynthesisGateway();
   private final StubVoiceRateLimiter rateLimiter = new StubVoiceRateLimiter();
@@ -25,6 +26,11 @@ class VoiceSynthesisServiceTest {
 
   private static ErrorCode errorOf(ThrowingCallable call) {
     return catchThrowableOfType(BusinessException.class, call).getErrorCode();
+  }
+
+  /** {@code content} 가 null이면 파트 자체가 없는 요청을 흉내낸다. */
+  private static MultipartFile clip(byte[] content) {
+    return content == null ? null : new RecordingMultipartFile(content);
   }
 
   // ---------- 역할·설정 ----------
@@ -36,7 +42,7 @@ class VoiceSynthesisServiceTest {
   void 학습자가_아니면_LEARNER_ACCESS_REQUIRED이고_사용량을_세지_않는다(UserRole role) {
     AuthenticatedUser user = new AuthenticatedUser(8L, role);
 
-    assertThat(errorOf(() -> service.cloneVoice(user, CLIP, null)))
+    assertThat(errorOf(() -> service.cloneVoice(user, clip(CLIP_BYTES), null)))
         .isEqualTo(ErrorCode.LEARNER_ACCESS_REQUIRED);
     assertThat(errorOf(() -> service.synthesize(user, "voice-1", "안녕")))
         .isEqualTo(ErrorCode.LEARNER_ACCESS_REQUIRED);
@@ -44,23 +50,47 @@ class VoiceSynthesisServiceTest {
   }
 
   @Test
+  void 학습자가_아니면_복제_요청의_녹음_바이트를_전혀_읽지_않는다() {
+    AuthenticatedUser instructor = new AuthenticatedUser(8L, UserRole.INSTRUCTOR);
+    RecordingMultipartFile clip = new RecordingMultipartFile(CLIP_BYTES);
+
+    assertThat(errorOf(() -> service.cloneVoice(instructor, clip, null)))
+        .isEqualTo(ErrorCode.LEARNER_ACCESS_REQUIRED);
+
+    assertThat(clip.getInputStreamCalls).hasValue(0);
+    assertThat(clip.getBytesCalls).hasValue(0);
+  }
+
+  @Test
   void 키가_없으면_입력_검증보다_먼저_503이다() {
     gateway.available = false;
 
-    assertThat(errorOf(() -> service.cloneVoice(LEARNER, new byte[0], null)))
+    assertThat(errorOf(() -> service.cloneVoice(LEARNER, clip(new byte[0]), null)))
         .isEqualTo(ErrorCode.VOICE_SYNTHESIS_UNAVAILABLE);
     assertThat(errorOf(() -> service.synthesize(LEARNER, "", "")))
         .isEqualTo(ErrorCode.VOICE_SYNTHESIS_UNAVAILABLE);
     assertThat(rateLimiter.acquiredBy).isEmpty();
   }
 
+  @Test
+  void 키가_없으면_복제_요청의_녹음_바이트를_전혀_읽지_않는다() {
+    gateway.available = false;
+    RecordingMultipartFile clip = new RecordingMultipartFile(CLIP_BYTES);
+
+    assertThat(errorOf(() -> service.cloneVoice(LEARNER, clip, null)))
+        .isEqualTo(ErrorCode.VOICE_SYNTHESIS_UNAVAILABLE);
+
+    assertThat(clip.getInputStreamCalls).hasValue(0);
+    assertThat(clip.getBytesCalls).hasValue(0);
+  }
+
   // ---------- 복제 입력 ----------
 
   @Test
   void 이름을_생략하거나_공백만_보내면_내_목소리로_복제한다() {
-    assertThat(service.cloneVoice(LEARNER, CLIP, null))
+    assertThat(service.cloneVoice(LEARNER, clip(CLIP_BYTES), null))
         .isEqualTo(RecordingVoiceSynthesisGateway.VOICE_ID);
-    service.cloneVoice(LEARNER, CLIP, "   ");
+    service.cloneVoice(LEARNER, clip(CLIP_BYTES), "   ");
 
     assertThat(gateway.clonedNames).containsExactly("내 목소리", "내 목소리");
     assertThat(gateway.clonedClipSizes).containsExactly(64, 64);
@@ -71,14 +101,14 @@ class VoiceSynthesisServiceTest {
   void 이름은_앞뒤_공백을_지우고_50자까지_받는다() {
     String fifty = "가".repeat(50);
 
-    service.cloneVoice(LEARNER, CLIP, "  " + fifty + "  ");
+    service.cloneVoice(LEARNER, clip(CLIP_BYTES), "  " + fifty + "  ");
 
     assertThat(gateway.clonedNames).containsExactly(fifty);
   }
 
   @Test
   void 이름이_50자를_넘으면_400이고_사용량을_세지_않는다() {
-    assertThat(errorOf(() -> service.cloneVoice(LEARNER, CLIP, "가".repeat(51))))
+    assertThat(errorOf(() -> service.cloneVoice(LEARNER, clip(CLIP_BYTES), "가".repeat(51))))
         .isEqualTo(ErrorCode.INVALID_REQUEST_PARAMETER);
     assertThat(rateLimiter.acquiredBy).isEmpty();
     assertThat(gateway.clonedNames).isEmpty();
@@ -90,12 +120,22 @@ class VoiceSynthesisServiceTest {
     byte[] rifx = VoiceTestClips.wav(64);
     rifx[3] = 'X';
 
-    for (byte[] clip :
+    for (byte[] content :
         new byte[][] {null, new byte[0], "RIFF".getBytes(StandardCharsets.US_ASCII), mp3, rifx}) {
-      assertThat(errorOf(() -> service.cloneVoice(LEARNER, clip, null)))
+      assertThat(errorOf(() -> service.cloneVoice(LEARNER, clip(content), null)))
           .isEqualTo(ErrorCode.INVALID_REQUEST_PARAMETER);
     }
     assertThat(rateLimiter.acquiredBy).isEmpty();
+  }
+
+  @Test
+  void 입력_검증은_머리글만_읽고_사용량_확인_전까지_전체_바이트를_읽지_않는다() {
+    RecordingMultipartFile clip = new RecordingMultipartFile(CLIP_BYTES);
+
+    service.cloneVoice(LEARNER, clip, null);
+
+    assertThat(clip.getInputStreamCalls).hasValue(1);
+    assertThat(clip.getBytesCalls).hasValue(1);
   }
 
   // ---------- 합성 입력 ----------
@@ -139,7 +179,7 @@ class VoiceSynthesisServiceTest {
   void 사용량을_넘으면_429이고_Cartesia를_부르지_않는다() {
     rateLimiter.allowing = false;
 
-    assertThat(errorOf(() -> service.cloneVoice(LEARNER, CLIP, null)))
+    assertThat(errorOf(() -> service.cloneVoice(LEARNER, clip(CLIP_BYTES), null)))
         .isEqualTo(ErrorCode.VOICE_RATE_LIMITED);
     assertThat(errorOf(() -> service.synthesize(LEARNER, "voice-1", "안녕")))
         .isEqualTo(ErrorCode.VOICE_RATE_LIMITED);
@@ -162,7 +202,7 @@ class VoiceSynthesisServiceTest {
 
     BusinessException clone =
         catchThrowableOfType(
-            BusinessException.class, () -> service.cloneVoice(LEARNER, CLIP, null));
+            BusinessException.class, () -> service.cloneVoice(LEARNER, clip(CLIP_BYTES), null));
     BusinessException speech =
         catchThrowableOfType(
             BusinessException.class, () -> service.synthesize(LEARNER, "voice-1", "안녕"));
