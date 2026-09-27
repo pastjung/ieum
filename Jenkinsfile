@@ -11,7 +11,7 @@
 //   자기 호스트에 SSH(ec2-deploy-key)로 접속해 실행한다.
 //   → 사람이 수동 배포할 때와 100% 같은 스크립트, 같은 경로.
 //
-// 단계: Plan → Sync(compose·scripts·nginx 2사이트) → Build → Redis(itda-redis 보장) → Deploy → Cleanup
+// 단계: Plan → Sync(compose·scripts·nginx 사이트 파일 2개 + connection-upgrade.conf(3개 파일)) → Build → Redis(itda-redis 보장) → Deploy → Cleanup
 // =========================================================================
 // Mattermost 알림 — 전송 실패는 로그만 남기고 빌드 결과에 영향을 주지 않는다
 def notifyMM(String text) {
@@ -173,9 +173,18 @@ pipeline {
                             sudo cp /etc/nginx/sites-available/itda /tmp/itda.rollback
                             sudo cp /etc/nginx/sites-available/openvidu.conf /tmp/openvidu.rollback
                             sudo cp /etc/nginx/conf.d/connection-upgrade.conf /tmp/connection-upgrade.rollback
-                            sudo cp /tmp/itda.conf /etc/nginx/sites-available/itda
-                            sudo cp /tmp/openvidu.conf /etc/nginx/sites-available/openvidu.conf
-                            sudo cp /tmp/connection-upgrade.conf /etc/nginx/conf.d/connection-upgrade.conf
+                            if ! (
+                                set -e
+                                sudo cp /tmp/itda.conf /etc/nginx/sites-available/itda
+                                sudo cp /tmp/openvidu.conf /etc/nginx/sites-available/openvidu.conf
+                                sudo cp /tmp/connection-upgrade.conf /etc/nginx/conf.d/connection-upgrade.conf
+                            ); then
+                                echo "[sync] nginx 설정 파일 복사 실패 — 세 파일을 이전 설정으로 복원하고 배포를 중단한다"
+                                sudo cp /tmp/itda.rollback /etc/nginx/sites-available/itda
+                                sudo cp /tmp/openvidu.rollback /etc/nginx/sites-available/openvidu.conf
+                                sudo cp /tmp/connection-upgrade.rollback /etc/nginx/conf.d/connection-upgrade.conf
+                                exit 1
+                            fi
                             if sudo nginx -t; then
                                 sudo systemctl reload nginx
                             else

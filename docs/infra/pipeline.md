@@ -126,7 +126,7 @@ release/* push  또는  v* 태그 push (GitLab)
   → Webhook (Push events: release/* 필터 / Tag push events)
   → Jenkins 잡 itda-deploy
       1. Plan    : 무엇을 어떤 태그로 배포할지 결정 (아래 표)
-      2. Sync    : 인프라 파일(compose·scripts·nginx 사이트 2개)을 서버로 동기화
+      2. Sync    : 인프라 파일(compose·scripts·nginx 사이트 파일 2개 + connection-upgrade.conf, 3개 파일)을 서버로 동기화
       3. Build   : 대상 서비스 이미지 빌드 (호스트 Docker 저장소에 저장 = 롤백 지점)
       4. Redis   : 운영 Redis(itda-redis)를 up -d로 보장하고 PONG 확인 (blue-green 대상 아님)
       5. Deploy  : 자기 호스트에 SSH → 서비스마다 deploy.sh 실행 (blue-green)
