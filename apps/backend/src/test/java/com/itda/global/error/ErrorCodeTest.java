@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.http.HttpStatus;
 
 /** 외부 code 형식은 docs/conventions/code/api.md "에러 응답"을 따른다. */
 class ErrorCodeTest {
@@ -46,5 +47,13 @@ class ErrorCodeTest {
   void 점자_패턴_범위_위반은_기존_상태와_message를_유지한다() {
     assertThat(ErrorCode.PATTERN_OUT_OF_RANGE.getStatus().value()).isEqualTo(400);
     assertThat(ErrorCode.PATTERN_OUT_OF_RANGE.getMessage()).isEqualTo("패턴 값이 허용 범위(0~63)를 벗어났습니다.");
+  }
+
+  @Test
+  void 음성_합성_오류는_API_명세_12절의_상태를_쓴다() {
+    assertThat(ErrorCode.VOICE_SYNTHESIS_UNAVAILABLE.getStatus())
+        .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(ErrorCode.VOICE_RATE_LIMITED.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+    assertThat(ErrorCode.VOICE_SYNTHESIS_FAILED.getStatus()).isEqualTo(HttpStatus.BAD_GATEWAY);
   }
 }
