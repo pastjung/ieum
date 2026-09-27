@@ -37,10 +37,6 @@ export function canUseClonedVoice(): boolean {
 export async function speakWithClonedVoice(text: string): Promise<boolean> {
   const { clonedVoice } = useSettingsStore.getState();
 
-  if (!isCartesiaConfigured()) {
-    outcome = { clonedVoice: false, detail: "Cartesia API 키가 없어요" };
-    return false;
-  }
   if (!clonedVoice) {
     outcome = { clonedVoice: false, detail: "복제한 목소리가 없어요" };
     return false;
@@ -108,8 +104,7 @@ export async function selfTest(
   text = "안녕하세요, 잇다예요. 이제 이 목소리로 안내해 드릴게요.",
 ): Promise<string> {
   const { clonedVoice } = useSettingsStore.getState();
-  if (!isCartesiaConfigured()) return "실패 ① API 키가 비어 있어요 (.env 확인 후 다시 빌드)";
-  if (!clonedVoice) return "실패 ② 복제한 목소리가 저장돼 있지 않아요";
+  if (!clonedVoice) return "실패 ① 복제한 목소리가 저장돼 있지 않아요";
 
   const startedAt = Date.now();
   try {
@@ -122,6 +117,6 @@ export async function selfTest(
     await playToEnd(active);
     return `성공 — voice ${clonedVoice.id.slice(0, 8)} · ${elapsed}ms`;
   } catch (error) {
-    return `실패 ③ ${error instanceof Error ? error.message : String(error)}`;
+    return `실패 ② ${error instanceof Error ? error.message : String(error)}`;
   }
 }

@@ -5,7 +5,7 @@ import { BackHeader } from "@/components/BackHeader";
 import { AppButton } from "@/components/AppButton";
 import { ListRow } from "@/components/ListRow";
 import { announce, clonedVoiceSelfTest, hapticError, hapticSuccess } from "@/a11y";
-import { clearSynthesisCache, cloneVoice, isCartesiaConfigured } from "@/services/cartesia";
+import { clearSynthesisCache, cloneVoice } from "@/services/cartesia";
 import { startItda, stopItda } from "@/services/itda";
 import { SAMPLE_MAX_MS, VoiceSampleRecorder } from "@/services/voiceSample";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -18,7 +18,7 @@ const READ_ALOUD =
   "저는 점자를 배우고 있습니다. 여섯 개의 점으로 글자를 만들고, 손끝으로 읽습니다.";
 
 /**
- * 내 목소리 복제 — 샘플을 녹음해 Cartesia에 올리고, 그 목소리로 잇다가 답하게 한다.
+ * 내 목소리 복제 — 샘플을 녹음해 서버(백엔드가 Cartesia를 대신 부른다)에 올리고, 그 목소리로 잇다가 답하게 한다.
  *
  * 녹음 중에는 **음성 안내를 하지 않는다.** 안내가 마이크로 다시 들어가면 그 목소리까지
  * 같이 복제되기 때문이다. 그동안의 피드백은 진동과 화면 글씨로만 준다.
@@ -32,9 +32,7 @@ export default function VoiceClone() {
   const recorder = useRef(new VoiceSampleRecorder());
   const [phase, setPhase] = useState<Phase>("idle");
   const [seconds, setSeconds] = useState(0);
-  const [status, setStatus] = useState(
-    isCartesiaConfigured() ? "" : "Cartesia API 키가 없어요. .env를 채우고 다시 빌드해 주세요.",
-  );
+  const [status, setStatus] = useState("");
 
   useEffect(() => {
     announce("내 목소리 설정이에요. 녹음 버튼을 누르고 화면의 문장을 읽어 주세요.");
@@ -71,9 +69,10 @@ export default function VoiceClone() {
       void hapticSuccess();
       announce("목소리를 복제했어요. 이제 잇다가 이 목소리로 말해요.");
     } catch (error) {
-      setStatus(`복제 실패: ${reason(error)}`);
+      const message = reason(error);
+      setStatus(`복제하지 못했어요. ${message}`);
       void hapticError();
-      announce("목소리 복제에 실패했어요. 다시 시도해 주세요.");
+      announce(`목소리 복제에 실패했어요. ${message}`);
     } finally {
       setPhase("idle");
     }
