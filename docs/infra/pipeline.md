@@ -126,13 +126,14 @@ release/* push  또는  v* 태그 push (GitLab)
   → Webhook (Push events: release/* 필터 / Tag push events)
   → Jenkins 잡 itda-deploy
       1. Plan    : 무엇을 어떤 태그로 배포할지 결정 (아래 표)
-      2. Sync    : 인프라 파일(compose·scripts·nginx 설정)을 서버로 동기화
+      2. Sync    : 인프라 파일(compose·scripts·nginx 사이트 2개)을 서버로 동기화
       3. Build   : 대상 서비스 이미지 빌드 (호스트 Docker 저장소에 저장 = 롤백 지점)
-      4. Deploy  : 자기 호스트에 SSH → 서비스마다 deploy.sh 실행 (blue-green)
-      5. Cleanup : 이미지 보존 정책 집행 (rc/v* 각 최근 3개)
+      4. Redis   : 운영 Redis(itda-redis)를 up -d로 보장하고 PONG 확인 (blue-green 대상 아님)
+      5. Deploy  : 자기 호스트에 SSH → 서비스마다 deploy.sh 실행 (blue-green)
+      6. Cleanup : 이미지 보존 정책 집행 (rc/v* 각 최근 3개)
 ```
 
-Sync 스테이지가 있어 **인프라 파일의 서버 반영도 자동이다** — repo에서 `deploy/docker-compose.prod.yml`, `scripts/*.sh`, `deploy/nginx/itda.conf`를 고치면 다음 배포에 실려 서버에 반영된다 (nginx 설정은 `nginx -t` 통과 시에만 reload, 실패 시 이전 설정 복원 후 배포 중단). 운영 설정 `.env.config`도 Sync가 배포한다 — 원본은 Jenkins Secret file `itda-env-config`이며, 값 변경은 서버가 아니라 credential 교체 + 재배포로 한다(README 3.5절). 동기화하지 **않는** 것: `.env.tags`(배포 태그 상태 — deploy.sh가 갱신, 서버가 원본), `nginx/inc/*.inc`(활성 슬롯 상태 — 서버가 원본), `deploy/jenkins/*`(Jenkins가 배포 중 자기 자신을 재생성할 수 없어 수동 반영). 최초 1회 배치(deploy.md 5절)만 수동이고, 이후 변경은 전부 이 스테이지가 처리한다.
+Sync 스테이지가 있어 **인프라 파일의 서버 반영도 자동이다** — repo에서 `deploy/docker-compose.prod.yml`, `scripts/*.sh`, `deploy/nginx/itda.conf`·`openvidu.conf`·`connection-upgrade.conf`를 고치면 다음 배포에 실려 서버에 반영된다 (세 파일을 모두 백업한 뒤 덮고, `nginx -t` 통과 시에만 reload, 실패 시 셋 다 복원 후 배포 중단). 앱 배포 폴더 `/home/ubuntu/app/downloads/`는 없으면 만들기만 한다. 운영 설정 `.env.config`도 Sync가 배포한다 — 원본은 Jenkins Secret file `itda-env-config`이며, 값 변경은 서버가 아니라 credential 교체 + 재배포로 한다(README 3.5절). 동기화하지 **않는** 것: `.env.tags`(배포 태그 상태 — deploy.sh가 갱신, 서버가 원본), `nginx/inc/*.inc`(활성 슬롯 상태 — 서버가 원본), `deploy/jenkins/*`(Jenkins가 배포 중 자기 자신을 재생성할 수 없어 수동 반영), `downloads/` 안의 파일(학습자 앱 — `release-app.sh`가 원본, deploy.md 9절). 최초 1회 배치(deploy.md 5절)만 수동이고, 이후 변경은 전부 이 스테이지가 처리한다.
 
 | 트리거 | 대상 서비스 | 이미지 태그 | 의미 |
 | --- | --- | --- | --- |
@@ -277,8 +278,10 @@ itda-rollback은 생성 후 "지금 빌드"를 한 번 실행해 파라미터 �
 
 | 이름 | URL | Trigger | Secret token |
 | --- | --- | --- | --- |
-| `jenkins-mr-verify` | `https://j15b201.p.ssafy.io/jenkins/project/itda-mr-verify` | Merge request events | itda-mr-verify의 것 |
-| `jenkins-deploy` | `https://j15b201.p.ssafy.io/jenkins/project/itda-deploy` | Push events (Wildcard `release/*`) + Tag push events | itda-deploy의 것 |
+| `jenkins-mr-verify` | `https://i-eum.site/jenkins/project/itda-mr-verify` | Merge request events | itda-mr-verify의 것 |
+| `jenkins-deploy` | `https://i-eum.site/jenkins/project/itda-deploy` | Push events (Wildcard `release/*`) + Tag push events | itda-deploy의 것 |
+
+옛 도메인(`j15b201.p.ssafy.io`) 주소는 nginx가 301로 넘기지만 웹훅 POST는 넘어가지 않을 수 있으므로 반드시 i-eum.site 주소를 쓴다.
 
 각 웹훅 저장 후 Test → Push events로 200 확인. 403이면 Secret token 불일치(트러블슈팅 참조).
 

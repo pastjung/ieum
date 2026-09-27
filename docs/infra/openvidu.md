@@ -4,8 +4,8 @@
 backend는 음성 토큰 발급과 방 생성·삭제만 하고, 음성 데이터는 브라우저·앱과 OpenVidu 사이를 직접 오간다.
 API 계약은 [docs/product/api-spec.md](../product/api-spec.md) 8.5절을 따른다.
 
-> 이 문서의 서버 설정(OpenVidu 설치본, ufw, 서버 nginx의 openvidu 블록)은 **repo가 관리하지 않는다.**
-> 배포 Sync가 덮어쓰지 않는 대신, 서버를 새로 만들면 이 문서대로 사람이 다시 해야 한다.
+> 서버 nginx의 `openvidu.i-eum.site` 블록은 **repo `deploy/nginx/openvidu.conf`가 원본**이며 배포 Sync가 매번 반영한다.
+> OpenVidu 설치본(`/opt/openvidu`), ufw 규칙, `livekit.yaml` 변경은 repo가 관리하지 않는다 — 서버를 새로 만들면 이 문서대로 사람이 다시 해야 한다.
 
 ## 1. 구성
 
@@ -24,8 +24,7 @@ backend ──https──▶ openvidu.i-eum.site (토큰 서명은 로컬, 방 �
 | 신호 주소 | `wss://openvidu.i-eum.site` (클라이언트), `https://openvidu.i-eum.site` (backend) |
 | 공인 IP | `3.34.139.114` (= `openvidu.i-eum.site`, `turn.i-eum.site`) |
 
-호스트 nginx에는 `openvidu.i-eum.site` 서버 블록(443, Let's Encrypt)이 `127.0.0.1:7880`으로 프록시한다.
-이 블록은 현재 **서버에만 있고 repo의 `deploy/nginx/itda.conf`에는 없다** — 7절 참고.
+호스트 nginx의 `openvidu.i-eum.site` 서버 블록(80→443, Let's Encrypt)이 `127.0.0.1:7880`으로 프록시한다. 원본은 repo `deploy/nginx/openvidu.conf`(서버 `/etc/nginx/sites-available/openvidu.conf`).
 
 ## 2. 포트
 
@@ -95,5 +94,40 @@ docker logs openvidu --since 1m 2>&1 | grep "starting LiveKit server"   # "nodeI
 
 ## 7. 남은 과제
 
-- 서버 nginx의 `i-eum.site`·`openvidu.i-eum.site` 블록이 repo `deploy/nginx/itda.conf`(`j15b201.p.ssafy.io`)와 다르다. Sync 배포가 `itda.conf`로 서버 설정을 덮으므로, openvidu 블록이 같은 파일에 있다면 다음 배포에서 사라질 수 있다 — repo로 옮기는 작업이 필요하다.
 - ufw 규칙과 `livekit.yaml` 변경은 서버 재구축 시 수동 재적용이 필요하다.
+
+## 8. OpenVidu Meet·MinIO (사람이 실행, 수업 없는 시간에)
+
+2026-09-27 점검에서 `openvidu-meet`(재시작 1,507회)과 `minio`(1,320회)가 S3 연결 실패로 재시작을 반복했다. 우리 음성은 LiveKit API를 직접 쓰므로 Meet이 필요 없다.
+
+### 8.1 Meet 끄기
+
+OpenVidu 3.8 단일 노드는 `/opt/openvidu/config/openvidu.env`의 `ENABLED_MODULES`로 선택 모듈(Community: `openviduMeet`, `observability`)을 켠다. `openviduMeet`만 빼고 재시작한다. **재시작 동안 진행 중인 수업 음성이 끊긴다.**
+
+```bash
+sudo cp /opt/openvidu/config/openvidu.env /opt/openvidu/config/openvidu.env.bak-$(date +%Y%m%d)
+grep -n '^ENABLED_MODULES' /opt/openvidu/config/openvidu.env        # 예: ENABLED_MODULES=observability,openviduMeet
+sudo sed -i -E '/^ENABLED_MODULES=/{s/(^|,)openviduMeet(,|$)/\1\2/; s/,,/,/; s/=,/=/; s/,$//}' /opt/openvidu/config/openvidu.env
+grep -n '^ENABLED_MODULES' /opt/openvidu/config/openvidu.env        # openviduMeet이 빠졌는지 (observability는 남긴다)
+sudo systemctl restart openvidu
+```
+
+확인:
+
+```bash
+docker ps --format '{{.Names}}\t{{.Status}}' | grep -E 'openvidu-meet|minio|openvidu$'   # openvidu-meet이 없어야 한다
+docker logs openvidu --since 2m 2>&1 | grep "starting LiveKit server"                    # "nodeIP": "3.34.139.114" (3절 설정 유지)
+```
+
+이어서 5절 동작 확인(신호·음성)을 한다. 되돌리기: 백업한 `openvidu.env.bak-<날짜>`를 되돌려 놓고 `sudo systemctl restart openvidu`.
+
+### 8.2 MinIO
+
+MinIO는 선택 모듈이 아니라 기본 구성(녹화 등의 S3 저장소)이라 끄는 공식 설정이 없다. Meet을 끈 뒤에도 재시작이 이어지는지 먼저 본다:
+
+```bash
+docker inspect minio --format '{{.RestartCount}} {{.State.Status}}'
+docker logs --tail 50 minio
+```
+
+재시작이 계속되면 로그의 원인(데이터 폴더 권한·자격 증명 등)을 기록해 팀과 조치를 정한다. 녹화·egress를 쓰지 않으므로 음성에는 영향이 없다.
