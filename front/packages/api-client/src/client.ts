@@ -50,6 +50,7 @@ export function createClient(config: ApiClientConfig): ApiClient {
         response.status,
         body.code ?? "UNKNOWN_ERROR",
         body.message ?? "요청을 처리하지 못했어요.",
+        payload,
       );
     }
     return payload as T;

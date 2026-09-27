@@ -1,6 +1,7 @@
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client'
 import type { MediaToken } from '../model/types'
 import { buildRoster, type RosterStudent } from './roster'
+import { parseLectureSignal } from './lectureSignal'
 
 export type RoomState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 
@@ -9,6 +10,8 @@ export interface RoomListeners {
   onRoster?: (students: RosterStudent[]) => void
   /** 브라우저가 학생 소리 재생을 막으면 false, 풀리면 true */
   onAudioPlayback?: (playing: boolean) => void
+  /** 학습자가 답안을 제출했다는 서버 신호(topic `lecture`). 화면은 이 problemId의 답안 목록을 다시 조회한다 */
+  onAnswerSubmitted?: (problemId: string) => void
   /**
    * true면 이 접속은 더 이상 필요 없다(언마운트되었거나 다음 접속에 밀려났다).
    * 마이크 권한 프롬프트가 열려 있는 동안에도 확인하므로, 그 사이 구독된 학생 오디오를 붙이지 않고
@@ -101,6 +104,14 @@ export async function connectInstructorRoom(
     if (attached.delete(track)) track.detach()
   })
   room.on(RoomEvent.AudioPlaybackStatusChanged, (playing) => listeners.onAudioPlayback?.(playing))
+
+  // 답안 제출 신호. 서버가 보낸 메시지는 participant가 undefined라 보낸 사람으로 거르지 않는다 —
+  // 신호는 재조회 트리거일 뿐이고 답안은 권한 검사를 거친 HTTP로만 받으므로 위조돼도 무해하다
+  room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
+    if (listeners.isStale?.()) return
+    const signal = parseLectureSignal(payload, topic)
+    if (signal) listeners.onAnswerSubmitted?.(signal.problemId)
+  })
 
   emit('connecting')
   try {
