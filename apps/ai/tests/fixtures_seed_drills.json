@@ -1,0 +1,712 @@
+[
+{
+"text": "초성 ㄱ",
+"expectedPatterns": [
+8
+],
+"skillIds": [
+1
+]
+},
+{
+"text": "초성 ㄴ",
+"expectedPatterns": [
+9
+],
+"skillIds": [
+2
+]
+},
+{
+"text": "초성 ㄷ",
+"expectedPatterns": [
+10
+],
+"skillIds": [
+3
+]
+},
+{
+"text": "초성 ㄹ",
+"expectedPatterns": [
+16
+],
+"skillIds": [
+4
+]
+},
+{
+"text": "초성 ㅁ",
+"expectedPatterns": [
+17
+],
+"skillIds": [
+5
+]
+},
+{
+"text": "초성 ㅂ",
+"expectedPatterns": [
+24
+],
+"skillIds": [
+6
+]
+},
+{
+"text": "초성 ㅅ",
+"expectedPatterns": [
+32
+],
+"skillIds": [
+7
+]
+},
+{
+"text": "초성 ㅈ",
+"expectedPatterns": [
+40
+],
+"skillIds": [
+8
+]
+},
+{
+"text": "초성 ㅊ",
+"expectedPatterns": [
+48
+],
+"skillIds": [
+9
+]
+},
+{
+"text": "초성 ㅋ",
+"expectedPatterns": [
+11
+],
+"skillIds": [
+10
+]
+},
+{
+"text": "초성 ㅌ",
+"expectedPatterns": [
+19
+],
+"skillIds": [
+11
+]
+},
+{
+"text": "초성 ㅍ",
+"expectedPatterns": [
+25
+],
+"skillIds": [
+12
+]
+},
+{
+"text": "초성 ㅎ",
+"expectedPatterns": [
+26
+],
+"skillIds": [
+13
+]
+},
+{
+"text": "모음 ㅏ",
+"expectedPatterns": [
+35
+],
+"skillIds": [
+43
+]
+},
+{
+"text": "모음 ㅑ",
+"expectedPatterns": [
+28
+],
+"skillIds": [
+44
+]
+},
+{
+"text": "모음 ㅓ",
+"expectedPatterns": [
+14
+],
+"skillIds": [
+45
+]
+},
+{
+"text": "모음 ㅕ",
+"expectedPatterns": [
+49
+],
+"skillIds": [
+46
+]
+},
+{
+"text": "모음 ㅗ",
+"expectedPatterns": [
+37
+],
+"skillIds": [
+47
+]
+},
+{
+"text": "모음 ㅛ",
+"expectedPatterns": [
+44
+],
+"skillIds": [
+48
+]
+},
+{
+"text": "모음 ㅜ",
+"expectedPatterns": [
+13
+],
+"skillIds": [
+49
+]
+},
+{
+"text": "모음 ㅠ",
+"expectedPatterns": [
+41
+],
+"skillIds": [
+50
+]
+},
+{
+"text": "모음 ㅡ",
+"expectedPatterns": [
+42
+],
+"skillIds": [
+51
+]
+},
+{
+"text": "모음 ㅣ",
+"expectedPatterns": [
+21
+],
+"skillIds": [
+52
+]
+},
+{
+"text": "모음 ㅐ",
+"expectedPatterns": [
+23
+],
+"skillIds": [
+53
+]
+},
+{
+"text": "모음 ㅒ",
+"expectedPatterns": [
+28,
+23
+],
+"skillIds": [
+54
+]
+},
+{
+"text": "모음 ㅔ",
+"expectedPatterns": [
+29
+],
+"skillIds": [
+55
+]
+},
+{
+"text": "모음 ㅖ",
+"expectedPatterns": [
+12
+],
+"skillIds": [
+56
+]
+},
+{
+"text": "모음 ㅘ",
+"expectedPatterns": [
+39
+],
+"skillIds": [
+57
+]
+},
+{
+"text": "모음 ㅙ",
+"expectedPatterns": [
+39,
+23
+],
+"skillIds": [
+58
+]
+},
+{
+"text": "모음 ㅚ",
+"expectedPatterns": [
+61
+],
+"skillIds": [
+59
+]
+},
+{
+"text": "모음 ㅝ",
+"expectedPatterns": [
+15
+],
+"skillIds": [
+60
+]
+},
+{
+"text": "모음 ㅞ",
+"expectedPatterns": [
+15,
+23
+],
+"skillIds": [
+61
+]
+},
+{
+"text": "모음 ㅟ",
+"expectedPatterns": [
+13,
+23
+],
+"skillIds": [
+62
+]
+},
+{
+"text": "모음 ㅢ",
+"expectedPatterns": [
+58
+],
+"skillIds": [
+63
+]
+},
+{
+"text": "받침 ㄱ",
+"expectedPatterns": [
+1
+],
+"skillIds": [
+16
+]
+},
+{
+"text": "받침 ㄴ",
+"expectedPatterns": [
+18
+],
+"skillIds": [
+17
+]
+},
+{
+"text": "받침 ㄷ",
+"expectedPatterns": [
+20
+],
+"skillIds": [
+18
+]
+},
+{
+"text": "받침 ㄹ",
+"expectedPatterns": [
+2
+],
+"skillIds": [
+19
+]
+},
+{
+"text": "받침 ㅁ",
+"expectedPatterns": [
+34
+],
+"skillIds": [
+20
+]
+},
+{
+"text": "받침 ㅂ",
+"expectedPatterns": [
+3
+],
+"skillIds": [
+21
+]
+},
+{
+"text": "받침 ㅅ",
+"expectedPatterns": [
+4
+],
+"skillIds": [
+22
+]
+},
+{
+"text": "받침 ㅇ",
+"expectedPatterns": [
+54
+],
+"skillIds": [
+23
+]
+},
+{
+"text": "받침 ㅈ",
+"expectedPatterns": [
+5
+],
+"skillIds": [
+24
+]
+},
+{
+"text": "받침 ㅊ",
+"expectedPatterns": [
+6
+],
+"skillIds": [
+25
+]
+},
+{
+"text": "받침 ㅋ",
+"expectedPatterns": [
+22
+],
+"skillIds": [
+26
+]
+},
+{
+"text": "받침 ㅌ",
+"expectedPatterns": [
+38
+],
+"skillIds": [
+27
+]
+},
+{
+"text": "받침 ㅍ",
+"expectedPatterns": [
+50
+],
+"skillIds": [
+28
+]
+},
+{
+"text": "받침 ㅎ",
+"expectedPatterns": [
+52
+],
+"skillIds": [
+29
+]
+},
+{
+"text": "받침 ㅆ",
+"expectedPatterns": [
+12
+],
+"skillIds": [
+31
+]
+},
+{
+"text": "약자 ㄱㅏ",
+"expectedPatterns": [
+43
+],
+"skillIds": [
+66
+]
+},
+{
+"text": "약자 ㄴㅏ",
+"expectedPatterns": [
+9
+],
+"skillIds": [
+67
+]
+},
+{
+"text": "약자 ㄷㅏ",
+"expectedPatterns": [
+10
+],
+"skillIds": [
+68
+]
+},
+{
+"text": "약자 ㅁㅏ",
+"expectedPatterns": [
+17
+],
+"skillIds": [
+69
+]
+},
+{
+"text": "약자 ㅂㅏ",
+"expectedPatterns": [
+24
+],
+"skillIds": [
+70
+]
+},
+{
+"text": "약자 ㅅㅏ",
+"expectedPatterns": [
+7
+],
+"skillIds": [
+71
+]
+},
+{
+"text": "약자 ㅈㅏ",
+"expectedPatterns": [
+40
+],
+"skillIds": [
+72
+]
+},
+{
+"text": "약자 ㅋㅏ",
+"expectedPatterns": [
+11
+],
+"skillIds": [
+73
+]
+},
+{
+"text": "약자 ㅌㅏ",
+"expectedPatterns": [
+19
+],
+"skillIds": [
+74
+]
+},
+{
+"text": "약자 ㅍㅏ",
+"expectedPatterns": [
+25
+],
+"skillIds": [
+75
+]
+},
+{
+"text": "약자 ㅎㅏ",
+"expectedPatterns": [
+26
+],
+"skillIds": [
+76
+]
+},
+{
+"text": "약자 억",
+"expectedPatterns": [
+57
+],
+"skillIds": [
+78
+]
+},
+{
+"text": "약자 언",
+"expectedPatterns": [
+62
+],
+"skillIds": [
+79
+]
+},
+{
+"text": "약자 얼",
+"expectedPatterns": [
+30
+],
+"skillIds": [
+80
+]
+},
+{
+"text": "약자 연",
+"expectedPatterns": [
+33
+],
+"skillIds": [
+81
+]
+},
+{
+"text": "약자 열",
+"expectedPatterns": [
+51
+],
+"skillIds": [
+82
+]
+},
+{
+"text": "약자 영",
+"expectedPatterns": [
+59
+],
+"skillIds": [
+83
+]
+},
+{
+"text": "약자 옥",
+"expectedPatterns": [
+45
+],
+"skillIds": [
+84
+]
+},
+{
+"text": "약자 온",
+"expectedPatterns": [
+55
+],
+"skillIds": [
+85
+]
+},
+{
+"text": "약자 옹",
+"expectedPatterns": [
+63
+],
+"skillIds": [
+86
+]
+},
+{
+"text": "약자 운",
+"expectedPatterns": [
+27
+],
+"skillIds": [
+87
+]
+},
+{
+"text": "약자 울",
+"expectedPatterns": [
+47
+],
+"skillIds": [
+88
+]
+},
+{
+"text": "약자 은",
+"expectedPatterns": [
+53
+],
+"skillIds": [
+89
+]
+},
+{
+"text": "약자 을",
+"expectedPatterns": [
+46
+],
+"skillIds": [
+90
+]
+},
+{
+"text": "약자 인",
+"expectedPatterns": [
+31
+],
+"skillIds": [
+91
+]
+},
+{
+"text": "음절 아",
+"expectedPatterns": [
+35
+],
+"skillIds": [
+14,
+43
+]
+},
+{
+"text": "음절 이",
+"expectedPatterns": [
+21
+],
+"skillIds": [
+14,
+52
+]
+},
+{
+"text": "음절 오",
+"expectedPatterns": [
+37
+],
+"skillIds": [
+14,
+47
+]
+},
+{
+"text": "음절 우",
+"expectedPatterns": [
+13
+],
+"skillIds": [
+14,
+49
+]
+}
+]

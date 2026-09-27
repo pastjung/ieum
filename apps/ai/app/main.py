@@ -1,0 +1,40 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.config import get_settings
+from app.presentation.api.backend import router as backend_router
+from app.presentation.api.v1 import convert_router
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+
+    app = FastAPI(
+        title=settings.app_name,
+        version="0.1.0",
+        debug=settings.debug,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://localhost:8080"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.include_router(convert_router.router, prefix=settings.api_prefix)
+    # 백엔드 FastApiClient 는 baseUrl 바로 아래 /analyze, /reviewAnalyze, /attempt-analyze,
+    # /session-summary 를 부른다 (래퍼 없음). 그 baseUrl(AI_BASE_URL)이 이미 api_prefix 로 끝나므로
+    # (docker-compose.yml, deploy/docker-compose.prod.yml, deploy/.env.config.example)
+    # 이 라우터도 같은 접두어 아래에 있어야 한다 — 접두어 없이 두면 네 경로 전부 404 다.
+    app.include_router(backend_router.router, prefix=settings.api_prefix)
+
+    @app.get(f"{settings.api_prefix}/health", tags=["health"])
+    def health() -> dict:
+        return {"success": True, "data": {"status": "UP", "service": settings.app_name}}
+
+    return app
+
+
+app = create_app()

@@ -1,0 +1,95 @@
+// =========================================================================
+// 롤백 파이프라인 (itda-rollback 잡에서 사용)
+//
+// 트리거 없음 — 사람이 Jenkins에서 "Build with Parameters"로 수동 실행한다.
+//   SERVICE : 롤백할 서비스 (web | backend | ai)
+//   TAG     : 되돌릴 이미지 태그. 비워두고 실행하면 보관된 태그 목록만
+//             출력하고 중단한다 (뭘로 되돌릴지 모를 때 먼저 실행).
+//
+// 동작: 배포와 같은 경로(SSH → deploy.sh)로 지정 태그를 재배포한다.
+//   deploy.sh 입장에서 롤백은 "이전 태그로의 배포"와 동일하다 —
+//   별도 롤백 로직이 없으므로 롤백 절차가 배포만큼 자주 검증되는 셈.
+//
+// 참고: 배포 직후의 즉시 롤백(수 초)은 서버에서 Nginx 포트를 되돌리는
+//   방법이 더 빠르다 (deploy.md 7.3절). 이 잡은 태그 단위 롤백용.
+// =========================================================================
+// Mattermost 알림 — 전송 실패는 로그만 남기고 빌드 결과에 영향을 주지 않는다
+def notifyMM(String text) {
+    try {
+        withCredentials([string(credentialsId: 'mattermost-webhook', variable: 'MM_URL')]) {
+            writeFile file: '.mm-payload.json', text: groovy.json.JsonOutput.toJson([text: text])
+            sh 'curl -sf -X POST -H "Content-Type: application/json" -d @.mm-payload.json "$MM_URL" >/dev/null; rm -f .mm-payload.json'
+        }
+    } catch (e) {
+        echo "Mattermost 알림 실패(무시): ${e}"
+    }
+}
+
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        timeout(time: 15, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+    }
+
+    parameters {
+        choice(name: 'SERVICE', choices: ['backend', 'web', 'ai'],
+               description: '롤백할 서비스')
+        string(name: 'TAG', defaultValue: '',
+               description: '되돌릴 이미지 태그 (예: v1.0.0, 1.0.0-rc.3-abc1234). 비우면 보관된 태그 목록만 출력.')
+    }
+
+    environment {
+        DEPLOY_HOST   = 'host.docker.internal'
+        DEPLOY_SCRIPT = '/home/ubuntu/app/scripts/deploy.sh'
+    }
+
+    stages {
+        stage('Rollback') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ec2-deploy-key',
+                                                   keyFileVariable: 'SSH_KEY',
+                                                   usernameVariable: 'SSH_USER')]) {
+                    script {
+                        def SSH = 'ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$SSH_USER"@' + env.DEPLOY_HOST
+                        def image = "itda-${params.SERVICE}:${params.TAG}"
+
+                        if (!params.TAG?.trim()) {
+                            echo "TAG가 비어 있음 — ${params.SERVICE}의 보관된 태그 목록:"
+                            sh "${SSH} 'docker images itda-${params.SERVICE} --format \"{{.Tag}}  ({{.CreatedSince}})\"'"
+                            currentBuild.description = "태그 목록 조회 (${params.SERVICE})"
+                            error('되돌릴 TAG를 지정해 다시 실행하세요.')
+                        }
+
+                        // 서버에 해당 태그 이미지가 있는지 먼저 확인
+                        def exists = sh(returnStatus: true,
+                                        script: "${SSH} 'docker image inspect ${image} >/dev/null 2>&1'") == 0
+                        if (!exists) {
+                            echo "서버에 ${image} 이미지가 없음. 보관된 태그:"
+                            sh "${SSH} 'docker images itda-${params.SERVICE} --format \"{{.Tag}}  ({{.CreatedSince}})\"'"
+                            error("존재하지 않는 태그: ${params.TAG}")
+                        }
+
+                        currentBuild.description = "rollback ${params.SERVICE} → ${params.TAG}"
+                        env.ROLLBACK_STARTED = '1'   // 실패 알림 가드 (태그 목록 조회 실패는 알리지 않음)
+                        sh "${SSH} '${DEPLOY_SCRIPT} ${params.SERVICE} ${params.TAG}'"
+                        notifyMM("↩️ **롤백 실행** — ${params.SERVICE} → `${params.TAG}`\n[빌드 로그](${env.BUILD_URL}console)")
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            script {
+                if (env.ROLLBACK_STARTED) {
+                    notifyMM("🔴 **롤백 실패** — ${params.SERVICE} → `${params.TAG}`\n수동 조치가 필요할 수 있습니다 (deploy.md 7.3절).\n[빌드 로그](${env.BUILD_URL}console)")
+                }
+            }
+        }
+    }
+}

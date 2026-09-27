@@ -1,0 +1,535 @@
+"""백엔드(Spring FastApiClient) 전용 라우터 — 루트 경로, 래퍼 없음.
+
+RestClient.baseUrl = AI_BASE_URL(기본 http://localhost:8000), uri("/analyze") / uri("/reviewAnalyze").
+응답 몸통을 그대로 ProblemAnalyzeResponse / ReviewAnalyzeResponse 로 읽으므로 {success,data} 로 감싸지 않는다.
+필드명은 Java record 컴포넌트명과 동일(camelCase, errorCounts 키만 snake_case).
+"""
+
+from datetime import UTC, datetime
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
+
+from app.application.backend_services import (
+    ProblemAnalyzeService,
+    ReviewAnalyzeService,
+    UnsupportedTextError,
+)
+from app.application.braille_lookup import lookup_braille
+from app.application.session_services import Attempt, SessionService, SkillResult, SkillState
+from app.infrastructure.braille_core.estimate import BKTEstimator, default_estimator
+from app.infrastructure.rule_engine import get_skill_catalog
+
+router = APIRouter(tags=["backend"])
+
+ERROR_TYPES = (
+    "dot_missing",
+    "dot_extra",
+    "dot_mixed",
+    "mirror",
+    "vflip",
+    "rot180",
+    "shift_down",
+    "shift_up",
+    "jamo_confusion",
+    "cell_omitted",
+    "cell_inserted",
+    "transposition",
+    "abbr_expanded",
+    "abbr_overused",
+    "marker_missing",
+    "silent_onset_written",
+)
+
+
+class CamelModel(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
+
+
+# ── /analyze ─────────────────────────────────────────────────────────────────
+class ProblemAnalyzeRequest(CamelModel):
+    """Java RegisterProblemRequest(String targetText)"""
+
+    target_text: str = Field(min_length=1, max_length=50)
+
+
+class SkillSetSchema(CamelModel):
+    skill_type: str
+    metadata: str
+
+
+class ProblemAnalyzeResponse(CamelModel):
+    """Java ProblemAnalyzeResponse(Level level, List<Integer> cells, List<SkillSet> skillSets)"""
+
+    level: str
+    cells: list[int]
+    skill_sets: list[SkillSetSchema]
+
+
+# ── /reviewAnalyze ───────────────────────────────────────────────────────────
+class ErrorCountSchema(BaseModel):
+    """Java ErrorCount — 컴포넌트명이 snake_case 라 alias 없이 그대로. 빠진 키는 0."""
+
+    model_config = ConfigDict(extra="ignore")
+    dot_missing: int = 0
+    dot_extra: int = 0
+    dot_mixed: int = 0
+    mirror: int = 0
+    vflip: int = 0
+    rot180: int = 0
+    shift_down: int = 0
+    shift_up: int = 0
+    jamo_confusion: int = 0
+    cell_omitted: int = 0
+    cell_inserted: int = 0
+    transposition: int = 0
+    abbr_expanded: int = 0
+    abbr_overused: int = 0
+    marker_missing: int = 0
+    silent_onset_written: int = 0
+
+
+class SkillStateSchema(CamelModel):
+    """Java SkillState(Long learningSkillId, Integer nAttempts, Integer nCorrect,
+    LocalDateTime lastPracticedAt, Double masteryProb, ErrorCount errorCounts)"""
+
+    learning_skill_id: int
+    n_attempts: int = 0
+    n_correct: int = 0
+    last_practiced_at: datetime | None = None  # LocalDateTime(타임존 없음) → UTC 로 해석
+    mastery_prob: float | None = None
+    error_counts: ErrorCountSchema | None = None
+    recent_results: str | None = Field(
+        default=None, max_length=5, pattern=r"^[01]*$"
+    )  # 선택. 없으면 빈 문자열
+
+
+class ReviewAnalyzeRequest(CamelModel):
+    """Java ReviewAnalyzeRequest(List<SkillState> skillStates)"""
+
+    skill_states: list[SkillStateSchema] = Field(default_factory=list)
+
+
+class ReviewAnalyzeResponse(CamelModel):
+    """Java ReviewAnalyzeResponse(List<Long> learningSkillIds) — level 없음(문항 풀은 Spring 이 사용자 레벨로 결정)"""
+
+    learning_skill_ids: list[int]
+
+
+# ── /attempt-analyze, /session-summary (2026-09-25 확정) ───────────────────
+class AttemptSchema(CamelModel):
+    target_text: str = Field(min_length=1, max_length=50)
+    expected_patterns: list[int] = Field(default_factory=list)
+    input_patterns: list[int] = Field(default_factory=list, max_length=12)
+
+
+class AttemptAnalyzeRequest(CamelModel):
+    """{ attempt: {targetText, expectedPatterns, inputPatterns}, skillStates: [] }"""
+
+    attempt: AttemptSchema
+    skill_states: list[SkillStateSchema] = Field(default_factory=list)
+
+
+class FeedbackSchema(CamelModel):
+    tts: str
+    detail: str
+
+
+class SkillResultSchema(CamelModel):
+    """이 문항의 요소별 정오. errorCounts 는 이번 문항에서 낸 오류만(맞으면 빈 객체)."""
+
+    learning_skill_id: int
+    correct: bool
+    error_counts: dict[str, int]
+
+
+class SkillStateOutSchema(CamelModel):
+    learning_skill_id: int
+    n_attempts: int
+    n_correct: int
+    last_practiced_at: str  # LocalDateTime 형식(Z 없음), UTC
+    mastery_prob: float
+    error_counts: dict[str, int]
+    recent_results: str  # 최근 5회 정오 ('01101'), 오래된 것부터. Spring 은 저장·전달만
+
+
+class CellSkillSchema(CamelModel):
+    """정답 칸 하나의 학습 요소. cellIndex 는 1부터(attempt_cells.cell_index 와 같음)."""
+
+    cell_index: int
+    learning_skill_id: int
+    label: str
+
+
+class FeedbackStepSchema(CamelModel):
+    """오답의 '틀린 곳' 하나. 칸을 맞춘 뒤의 오류라 칸을 더 넣거나 빼도 뒤 칸이 밀리지 않는다.
+    expectedCellIndex·expectedPattern 이 null 이면 정답 칸이 없는 자리(없어야 할 칸을 넣음) — label 은 '빈칸'."""
+
+    expected_cell_index: int | None
+    expected_pattern: int | None
+    input_pattern: int | None
+    missing_dots: list[int]
+    extra_dots: list[int]
+    label: str
+    error_type: str
+    tts: str
+
+
+class AttemptAnalyzeResponse(CamelModel):
+    """{ feedback, skillResults[], updatedSkillStates[], cellSkills[] }
+    updatedSkillStates 는 이번 문항에 나온 요소만(변경분). cellSkills 는 정답 칸마다 요소 라벨("약자 바")."""
+
+    feedback: FeedbackSchema
+    skill_results: list[SkillResultSchema]
+    updated_skill_states: list[SkillStateOutSchema]
+    cell_skills: list[CellSkillSchema] = Field(default_factory=list)
+    feedback_steps: list[FeedbackStepSchema] = Field(
+        default_factory=list
+    )  # 오답일 때 틀린 곳마다 한 장
+
+
+class SessionSummaryRequest(CamelModel):
+    """{ attempts: [...], skillStates: [] } — skillStates 는 마지막 attempt-analyze 의 updatedSkillStates 를 반영한 현재 상태"""
+
+    attempts: list[AttemptSchema] = Field(default_factory=list, max_length=50)
+    skill_states: list[SkillStateSchema] = Field(default_factory=list)
+
+
+class WeakSkillSchema(CamelModel):
+    learning_skill_id: int
+    mastery_prob: float
+    label: str
+    dominant_error_type: str | None
+    explanation: str
+
+
+class SessionSummaryResponse(CamelModel):
+    """{ summary, ttsText, errorTypeCounts, weakSkills[] } — 읽기 전용(상태 갱신 없음).
+    errorTypeCounts 는 항상 객체다(오류가 없으면 {}). Java Map<String, Long> 이 null 이 되지 않게."""
+
+    summary: str
+    tts_text: str
+    error_type_counts: dict[str, int] = Field(default_factory=dict)
+    weak_skills: list[WeakSkillSchema]
+
+
+def _utc_naive(dt: datetime | None) -> datetime | None:
+    """시각을 'UTC 기준, 타임존 없는' 값으로. Z·+09:00 같은 오프셋이 붙어 오면 UTC 로 환산한 뒤 떼고,
+    오프셋이 없으면(LocalDateTime) 이미 UTC 라고 보고 그대로 쓴다."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(UTC)
+    return dt.replace(tzinfo=None)
+
+
+def _to_error_counts(schema: ErrorCountSchema | None) -> dict[str, int]:
+    """빠진 키는 0으로 채워져 오므로 0을 걷어낸다 (_to_states 와 같은 규칙)."""
+    if schema is None:
+        return {}
+    return {k: v for k, v in schema.model_dump().items() if v}
+
+
+def _to_states(items: list[SkillStateSchema]) -> list[SkillState]:
+    out: list[SkillState] = []
+    for s in items:
+        errs = s.error_counts.model_dump() if s.error_counts else {}
+        out.append(
+            SkillState(
+                learning_skill_id=s.learning_skill_id,
+                n_attempts=s.n_attempts,
+                n_correct=s.n_correct,
+                last_practiced_at=_utc_naive(s.last_practiced_at),
+                mastery_prob=s.mastery_prob,
+                error_counts={k: v for k, v in errs.items() if v},
+                recent_results=s.recent_results or "",
+            )
+        )
+    return out
+
+
+def _state_out(s: SkillState) -> SkillStateOutSchema:
+    return SkillStateOutSchema(
+        learning_skill_id=s.learning_skill_id,
+        n_attempts=s.n_attempts,
+        n_correct=s.n_correct,
+        last_practiced_at=(
+            s.last_practiced_at.replace(microsecond=0).isoformat() if s.last_practiced_at else ""
+        ),
+        mastery_prob=s.mastery_prob if s.mastery_prob is not None else 0.0,
+        error_counts=dict(s.error_counts),
+        recent_results=s.recent_results,
+    )
+
+
+# ── DI ───────────────────────────────────────────────────────────────────────
+def get_problem_service() -> ProblemAnalyzeService:
+    return ProblemAnalyzeService(catalog=get_skill_catalog())
+
+
+def get_review_service() -> ReviewAnalyzeService:
+    return ReviewAnalyzeService(catalog=get_skill_catalog(), estimator=default_estimator())
+
+
+def get_session_service() -> SessionService:
+    return SessionService(catalog=get_skill_catalog(), estimator=BKTEstimator())
+
+
+# ── endpoints ────────────────────────────────────────────────────────────────
+@router.post("/analyze", response_model=ProblemAnalyzeResponse, response_model_by_alias=True)
+def analyze_problem(
+    request: ProblemAnalyzeRequest,
+    service: ProblemAnalyzeService = Depends(get_problem_service),
+) -> ProblemAnalyzeResponse:
+    try:
+        result = service.analyze(request.target_text)
+    except UnsupportedTextError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return ProblemAnalyzeResponse(
+        level=result.level,
+        cells=result.cells,
+        skill_sets=[
+            SkillSetSchema(skill_type=s.skill_type, metadata=s.metadata) for s in result.skill_sets
+        ],
+    )
+
+
+@router.post("/reviewAnalyze", response_model=ReviewAnalyzeResponse, response_model_by_alias=True)
+def analyze_review(
+    request: ReviewAnalyzeRequest,
+    service: ReviewAnalyzeService = Depends(get_review_service),
+) -> ReviewAnalyzeResponse:
+    states: list[dict[str, Any]] = []
+    for s in request.skill_states:
+        errs = s.error_counts.model_dump() if s.error_counts else {}
+        states.append(
+            {
+                "learning_skill_id": s.learning_skill_id,
+                "n_attempts": s.n_attempts,
+                "n_correct": s.n_correct,
+                "last_practice": (
+                    lp.isoformat() if (lp := _utc_naive(s.last_practiced_at)) else None
+                ),
+                "mastery_prob": s.mastery_prob,
+                "n_errors_by_type": {k: v for k, v in errs.items() if v},
+            }
+        )
+    result = service.analyze(states)
+    return ReviewAnalyzeResponse(learning_skill_ids=result.learning_skill_ids)
+
+
+@router.post(
+    "/attempt-analyze", response_model=AttemptAnalyzeResponse, response_model_by_alias=True
+)
+def attempt_analyze(
+    request: AttemptAnalyzeRequest,
+    service: SessionService = Depends(get_session_service),
+) -> AttemptAnalyzeResponse:
+    """문항 하나 제출 직후: 채점 → 피드백 문장 → 요소별 정오 → 학습자 상태 갱신(변경분)."""
+    a = request.attempt
+    if any(not 0 <= v <= 63 for v in a.input_patterns + a.expected_patterns):
+        raise HTTPException(status_code=400, detail="셀 값은 0~63 정수여야 해요")
+    try:
+        result = service.analyze_attempt(
+            Attempt(a.target_text.strip(), a.expected_patterns, a.input_patterns),
+            _to_states(request.skill_states),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=422, detail=f"순수 한글 어절만 채점할 수 있어요: {e}"
+        ) from e
+    return AttemptAnalyzeResponse(
+        feedback=FeedbackSchema(tts=result.feedback_tts, detail=result.feedback_detail),
+        skill_results=[
+            SkillResultSchema(
+                learning_skill_id=r.learning_skill_id,
+                correct=r.correct,
+                error_counts=dict(r.error_counts),
+            )
+            for r in result.skill_results
+        ],
+        updated_skill_states=[_state_out(s) for s in result.updated_skill_states],
+        cell_skills=[
+            CellSkillSchema(
+                cell_index=c.cell_index, learning_skill_id=c.learning_skill_id, label=c.label
+            )
+            for c in result.cell_skills
+        ],
+        feedback_steps=[
+            FeedbackStepSchema(
+                expected_cell_index=f.expected_cell_index,
+                expected_pattern=f.expected_pattern,
+                input_pattern=f.input_pattern,
+                missing_dots=f.missing_dots,
+                extra_dots=f.extra_dots,
+                label=f.label,
+                error_type=f.error_type,
+                tts=f.tts,
+            )
+            for f in result.feedback_steps
+        ],
+    )
+
+
+class SkillMasterySchema(CamelModel):
+    learning_skill_id: int
+    mastery_prob: float
+    label: str
+
+
+class SkillSummaryRequest(CamelModel):
+    skill_states: list[SkillStateSchema] = Field(default_factory=list)
+
+
+class SkillSummaryResponse(CamelModel):
+    """약한 것부터 정렬된 요소별 숙련 상태."""
+
+    skills: list[SkillMasterySchema]
+
+
+@router.post("/skill-summary", response_model=SkillSummaryResponse, response_model_by_alias=True)
+def summarize_skills(
+    request: SkillSummaryRequest,
+    service: SessionService = Depends(get_session_service),
+) -> SkillSummaryResponse:
+    """세션 밖에서 요소별 숙련 상태를 읽는다. 상태를 바꾸지 않는다."""
+    return SkillSummaryResponse(
+        skills=[
+            SkillMasterySchema(
+                learning_skill_id=m.learning_skill_id,
+                mastery_prob=m.mastery_prob,
+                label=m.label,
+            )
+            for m in service.summarize_skills(_to_states(request.skill_states))
+        ]
+    )
+
+
+class SkillOutcomeSchema(CamelModel):
+    """요소 하나의 채점 결과. Spring 의 SkillResult 와 같은 모양이다."""
+
+    learning_skill_id: int
+    correct: bool
+    error_counts: ErrorCountSchema | None = None
+
+
+class SkillStatesRequest(CamelModel):
+    """현재 상태 + 이번 채점 결과."""
+
+    skill_states: list[SkillStateSchema] = Field(default_factory=list)
+    results: list[SkillOutcomeSchema] = Field(default_factory=list)
+
+
+class SkillStatesResponse(CamelModel):
+    """attempt-analyze 의 updatedSkillStates 와 같은 모양 — Spring 이 같은 변환기를 쓴다."""
+
+    updated_skill_states: list[SkillStateOutSchema]
+
+
+@router.post("/skill-states", response_model=SkillStatesResponse, response_model_by_alias=True)
+def update_skill_states(
+    request: SkillStatesRequest,
+    service: SessionService = Depends(get_session_service),
+) -> SkillStatesResponse:
+    """글자 없이 숙련도만 갱신한다.
+
+    자음·모음 단계 문항은 낱자라 점역기가 분해하지 못해(non-Hangul) Spring 이 직접
+    채점한다. 숙련도(BKT)는 여기에만 있어 그 경로에서는 갱신할 수 없었고, 그 탓에
+    자음·모음은 약한 요소로 뽑히지 않아 복습에 나오지 않았다.
+    """
+    updated = service.apply_results(
+        [
+            SkillResult(r.learning_skill_id, r.correct, _to_error_counts(r.error_counts))
+            for r in request.results
+        ],
+        _to_states(request.skill_states),
+    )
+    return SkillStatesResponse(updated_skill_states=[_state_out(s) for s in updated])
+
+
+@router.post(
+    "/session-summary", response_model=SessionSummaryResponse, response_model_by_alias=True
+)
+def session_summary(
+    request: SessionSummaryRequest,
+    service: SessionService = Depends(get_session_service),
+) -> SessionSummaryResponse:
+    """12문항을 다 푼 뒤 결과 화면용 요약. 상태를 바꾸지 않는다(여러 번 호출 가능)."""
+    for a in request.attempts:
+        if any(not 0 <= v <= 63 for v in a.input_patterns + a.expected_patterns):
+            raise HTTPException(status_code=400, detail="셀 값은 0~63 정수여야 해요")
+    try:
+        result = service.summarize_session(
+            [
+                Attempt(a.target_text.strip(), a.expected_patterns, a.input_patterns)
+                for a in request.attempts
+            ],
+            _to_states(request.skill_states),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=422, detail=f"순수 한글 어절만 채점할 수 있어요: {e}"
+        ) from e
+    return SessionSummaryResponse(
+        summary=result.summary,
+        tts_text=result.tts_text,
+        error_type_counts=dict(result.error_type_counts),
+        weak_skills=[
+            WeakSkillSchema(
+                learning_skill_id=w.learning_skill_id,
+                mastery_prob=w.mastery_prob,
+                label=w.label,
+                dominant_error_type=w.dominant_error_type,
+                explanation=w.explanation,
+            )
+            for w in result.weak_skills
+        ],
+    )
+
+
+# ── /braille-lookup — 점자 사전 ───────────────────────────────────────────────
+class BrailleLookupRequest(CamelModel):
+    """점자 사전 검색어. 한글 단어(띄어쓰기로 여러 단어 가능) 또는 낱자('ㄱ', 'ㅙ')."""
+
+    text: str = Field(min_length=1, max_length=40)
+
+
+class LookupCellSchema(CamelModel):
+    cell_index: int  # 1부터
+    pattern: int  # 0~63. 띄어쓰기는 0
+    learning_skill_id: int | None  # 띄어쓰기는 None
+    label: str  # "약자 바", "첫소리 ㅂ", "띄어쓰기"
+
+
+class BrailleLookupResponse(CamelModel):
+    """{ text, braille, cells[] } — braille 은 유니코드 점자(⠫⠘⠶), cells 는 칸마다 점형과 요소 이름."""
+
+    text: str
+    braille: str
+    cells: list[LookupCellSchema]
+
+
+@router.post("/braille-lookup", response_model=BrailleLookupResponse, response_model_by_alias=True)
+def braille_lookup(request: BrailleLookupRequest) -> BrailleLookupResponse:
+    """사전에 없는 단어를 점자로 변환한다. 상태·DB 를 건드리지 않는다(문제로 등록하지 않음)."""
+    try:
+        result = lookup_braille(request.text, get_skill_catalog())
+    except ValueError as e:
+        raise HTTPException(
+            status_code=422, detail=f"한글 단어나 낱자만 찾을 수 있어요: {e}"
+        ) from e
+    return BrailleLookupResponse(
+        text=result["text"],
+        braille=result["braille"],
+        cells=[
+            LookupCellSchema(
+                cell_index=c["cell_index"],
+                pattern=c["pattern"],
+                learning_skill_id=c["learning_skill_id"],
+                label=c["label"],
+            )
+            for c in result["cells"]
+        ],
+    )

@@ -1,0 +1,108 @@
+// =========================================================================
+// MR 검증 파이프라인 — GitLab Merge Request 이벤트로 실행된다.
+// 변경된 서비스만 테스트하고 결과를 MR 커밋 상태로 회신한다. 배포는 하지 않는다.
+// 잡 설정: Pipeline from SCM, Script Path = Jenkinsfile.mr,
+//          Branch Specifier = origin/${gitlabSourceBranch}
+// =========================================================================
+pipeline {
+    agent any
+
+    options {
+        gitLabConnection('ssafy-gitlab')          // Manage Jenkins → System 의 GitLab 연결 이름
+        disableConcurrentBuilds()
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+    }
+
+    environment {
+        GMS_URI   = 'https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions'
+        GMS_MODEL = 'gpt-5.4-mini'   // 리뷰 품질/비용 균형. 조정은 이 한 줄 (모델 ID는 GMS 카탈로그 표기 확인)
+    }
+
+    stages {
+        stage('Changes') {
+            steps {
+                updateGitlabCommitStatus name: 'verify', state: 'running'
+                script {
+                    // MR 대상 브랜치(dev 등)와의 diff로 변경된 서비스를 판별한다.
+                    // (changeset 조건은 브랜치 첫 빌드에서 빈 결과가 나오는 함정이 있어 사용하지 않음)
+                    // checkout이 +refs/heads/* refspec으로 모든 브랜치를 이미 가져오므로
+                    // origin/<target>은 추가 fetch 없이 존재한다 (sh에는 git 자격증명이 없어 fetch 불가)
+                    def target = env.gitlabTargetBranch ?: 'dev'
+                    def base = "origin/${target}"
+                    def changedFiles = sh(
+                        returnStdout: true,
+                        script: "git diff --name-only ${base}...HEAD"
+                    ).trim().readLines()
+
+                    env.CH_BACKEND = changedFiles.any {
+                        it.startsWith('apps/backend/')
+                    }.toString()
+
+                    env.CH_FRONT = changedFiles.any {
+                        it.startsWith('front/')
+                    }.toString()
+
+                    env.CH_AI = changedFiles.any {
+                        it.startsWith('apps/ai/')
+                    }.toString()
+
+                    echo """
+                    변경 감지 → backend=${env.CH_BACKEND}, \
+                    front=${env.CH_FRONT}, \
+                    ai=${env.CH_AI}
+                    """
+                }
+            }
+        }
+
+        stage('Verify') {
+            parallel {
+                stage('backend') {
+                    when { environment name: 'CH_BACKEND', value: 'true' }
+                    steps { sh 'docker build --target test apps/backend' }   // 테스트 실패 = 빌드 실패
+                }
+                stage('frontend') {
+                   when { environment name: 'CH_FRONT', value: 'true' }
+                    steps {
+                        sh 'docker build --target test front'
+                    }
+                }
+                stage('ai') {
+                    when { environment name: 'CH_AI', value: 'true' }
+                    steps { sh 'docker build --target test apps/ai' }        // pytest 실행
+                }
+            }
+        }
+
+        stage('AI Review') {
+            when { expression { env.gitlabMergeRequestIid } }
+            steps {
+                // 리뷰 실패(GMS 장애 등)는 스테이지만 실패로 표시하고 빌드는 성공 유지 (비차단 원칙)
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    withCredentials([
+                        string(credentialsId: 'gms-api-key', variable: 'GMS_API_KEY'),
+                        // 'GitLab API token' 타입은 string 바인딩 불가 — 같은 값을 Secret text로 별도 등록해 사용
+                        string(credentialsId: 'gitlab-api-token-text', variable: 'GITLAB_TOKEN'),
+                    ]) {
+                        // 스크립트를 stdin으로 주입 — 볼륨 마운트 불필요(DooD 경로 문제 회피), 표준 라이브러리만 사용
+                        sh '''docker run --rm -i \
+                              -e GITLAB_URL=https://lab.ssafy.com \
+                              -e PROJECT_PATH=s15-bigdata-recom-sub1/S15P21B201 \
+                              -e MR_IID=$gitlabMergeRequestIid \
+                              -e SOURCE_BRANCH=$gitlabSourceBranch \
+                              -e GITLAB_TOKEN -e GMS_API_KEY -e GMS_URI -e GMS_MODEL \
+                              python:3.12-slim python - < scripts/ai-review.py'''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success { updateGitlabCommitStatus name: 'verify', state: 'success' }
+        failure { updateGitlabCommitStatus name: 'verify', state: 'failed' }
+        aborted { updateGitlabCommitStatus name: 'verify', state: 'canceled' }
+    }
+}
