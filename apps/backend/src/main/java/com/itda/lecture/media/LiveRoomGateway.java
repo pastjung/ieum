@@ -31,6 +31,13 @@ public interface LiveRoomGateway {
   boolean setSpeaking(String roomName, String identity, boolean allowed);
 
   /**
+   * 담당 강사 한 명에게 "답안이 들어왔다"는 데이터 메시지를 보낸다(topic {@code lecture}, reliable, payload {@code
+   * {"type":"ANSWER_SUBMITTED","problemId":"<id>"}}). 답 내용은 싣지 않는다. 실패하면 MEDIA_SERVER_UNAVAILABLE을
+   * 던지며 호출자가 로그만 남긴다 (API 명세 8.5.2절).
+   */
+  void notifyAnswerSubmitted(String roomName, String identity, long problemId);
+
+  /**
    * @param publisher true면 마이크 음성 송출 권한(강사), false면 수신과 자기 속성 갱신만(학습자 — 발언은 {@link #setSpeaking}으로
    *     따로 허용)
    */

@@ -378,6 +378,12 @@ class LectureAuthenticatedApiIntegrationTest {
     /** {@code "{room}/{identity}/{allowed}"}. 같은 context를 여러 테스트가 공유하므로 고유한 수업 ID로 찾는다. */
     final List<String> speakingChanges = new CopyOnWriteArrayList<>();
 
+    /** {@code "{room}/{identity}/{problemId}"}. */
+    final List<String> answerSignals = new CopyOnWriteArrayList<>();
+
+    /** true면 제출 알림이 503으로 실패한다. 쓴 테스트가 finally에서 되돌린다. */
+    volatile boolean failSignals;
+
     @Override
     public IssuedMediaToken issueToken(MediaTokenRequest request) {
       return new IssuedMediaToken(
@@ -402,6 +408,14 @@ class LectureAuthenticatedApiIntegrationTest {
     public boolean setSpeaking(String roomName, String identity, boolean allowed) {
       this.speakingChanges.add(roomName + "/" + identity + "/" + allowed);
       return true;
+    }
+
+    @Override
+    public void notifyAnswerSubmitted(String roomName, String identity, long problemId) {
+      if (this.failSignals) {
+        throw new BusinessException(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
+      }
+      this.answerSignals.add(roomName + "/" + identity + "/" + problemId);
     }
   }
 }

@@ -13,6 +13,7 @@ import io.livekit.server.RoomName;
 import io.livekit.server.RoomServiceClient;
 import io.livekit.server.VideoGrant;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import livekit.LivekitModels.DataPacket;
 import livekit.LivekitModels.ParticipantPermission;
 import livekit.LivekitModels.TrackSource;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +42,9 @@ public class LiveKitRoomGateway implements LiveRoomGateway {
   private static final int EMPTY_TIMEOUT_SECONDS = 600;
 
   private static final int NOT_FOUND = 404;
+
+  /** 데이터 메시지 topic (API 명세 8.5.2절). 웹이 이 값으로 걸러 받는다. */
+  static final String DATA_TOPIC = "lecture";
 
   /** 참가자 속성 규약 (API 명세 8.5.1절). 웹·앱이 같은 키·값을 읽는다. */
   static final String HAND_ATTRIBUTE = "hand";
@@ -136,6 +141,19 @@ public class LiveKitRoomGateway implements LiveRoomGateway {
             roomName, identity, null, null, permission.build(), attributes),
         "updateParticipant",
         true);
+  }
+
+  @Override
+  public void notifyAnswerSubmitted(String roomName, String identity, long problemId) {
+    byte[] payload =
+        ("{\"type\":\"ANSWER_SUBMITTED\",\"problemId\":\"" + problemId + "\"}")
+            .getBytes(StandardCharsets.UTF_8);
+    // destinationSids는 null을 받지 않는다(SDK non-null 파라미터) — 비워 두고 identity로만 고른다.
+    execute(
+        roomServiceClient.sendData(
+            roomName, payload, DataPacket.Kind.RELIABLE, List.of(), List.of(identity), DATA_TOPIC),
+        "sendData",
+        false);
   }
 
   /**

@@ -3,6 +3,9 @@ package com.itda.lecture.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.itda.lecture.controller.LectureAuthenticatedApiIntegrationTest.FakeLiveRoomGateway;
+import com.itda.lecture.domain.Participant;
+import com.itda.lecture.domain.ParticipantId;
+import com.itda.lecture.repository.ParticipantRepository;
 import com.itda.problem.domain.LearningSkill;
 import com.itda.problem.domain.Level;
 import com.itda.problem.domain.Problem;
@@ -25,6 +28,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +58,7 @@ class LectureProblemApiIntegrationTest {
   @Autowired private ProblemCellRepository problemCellRepository;
   @Autowired private LearningSkillRepository learningSkillRepository;
   @Autowired private ProblemSkillRepository problemSkillRepository;
+  @Autowired private ParticipantRepository participantRepository;
 
   private HttpTestClient client;
   private Account instructor;
@@ -419,5 +424,223 @@ class LectureProblemApiIntegrationTest {
         .isEqualTo(201);
 
     assertThat(metadataWrites(live)).isEqualTo(2);
+  }
+
+  // ---------- LIVE 답안 (API 명세 8.2.2절) ----------
+
+  private Live deliveredWord(List<Integer> cells) {
+    Live live = openLectureWithLinkedWord(cells);
+    assertThat(deliver(live.lectureId(), live.problemId(), this.instructor).statusCode())
+        .isEqualTo(200);
+    return live;
+  }
+
+  private HttpResponse<String> submit(Live live, Account who, String cellsJson) {
+    return submitRaw(
+        live,
+        who,
+        "{\"cells\":" + cellsJson + ",\"durationMs\":1900}",
+        "Idempotency-Key",
+        UUID.randomUUID().toString());
+  }
+
+  /** 헤더를 직접 고른다 — 멱등 키 누락·형식 오류 사례용. */
+  private HttpResponse<String> submitRaw(Live live, Account who, String body, String... headers) {
+    return send(
+        "POST",
+        "/lectures/" + live.lectureId() + "/problems/" + live.problemId() + "/answers",
+        body,
+        who,
+        headers);
+  }
+
+  private long signals(Live live) {
+    String entry =
+        "lecture-"
+            + live.lectureId()
+            + "/user-"
+            + this.instructor.userId()
+            + "/"
+            + live.problemId();
+    return this.gateway.answerSignals.stream().filter(entry::equals).count();
+  }
+
+  @Test
+  void 학습자가_정답을_내면_201과_채점_결과를_받고_강사에게_알림이_간다() {
+    Live live = deliveredWord(List.of(8, 3));
+
+    HttpResponse<String> response = submit(live, this.learner, "[8,3]");
+
+    assertThat(response.statusCode()).isEqualTo(201);
+    Map<String, Object> body = HttpTestClient.json(response);
+    assertThat(body)
+        .containsEntry("lectureId", live.lectureId())
+        .containsEntry("problemId", String.valueOf(live.problemId()))
+        .containsEntry("isCorrect", true)
+        .containsEntry("score", 100)
+        .containsKey("attemptId")
+        .containsKey("attemptedAt");
+    assertThat(list(body.get("cells")))
+        .extracting(cell -> map(cell).get("cellIndex"))
+        .containsExactly(1, 2);
+    assertThat(signals(live)).isEqualTo(1);
+  }
+
+  @Test
+  void 오답은_칸별_diffMask와_부분_점수를_받는다() {
+    Live live = deliveredWord(List.of(8, 3));
+
+    Map<String, Object> body = HttpTestClient.json(submit(live, this.learner, "[8]"));
+
+    assertThat(body).containsEntry("isCorrect", false).containsEntry("score", 50);
+    assertThat(map(list(body.get("cells")).get(1)))
+        .containsEntry("cellIndex", 2)
+        .containsEntry("inputPattern", 0)
+        .containsEntry("expectedPattern", 3)
+        .containsEntry("diffMask", 3)
+        .containsEntry("isCorrect", false);
+  }
+
+  @Test
+  void 같은_cells를_다시_보내면_200과_기존_결과이고_알림은_다시_가지_않는다() {
+    Live live = deliveredWord(List.of(8));
+    HttpResponse<String> first = submit(live, this.learner, "[8]");
+
+    HttpResponse<String> again = submit(live, this.learner, "[8]");
+
+    assertThat(again.statusCode()).isEqualTo(200);
+    assertThat(HttpTestClient.json(again).get("attemptId"))
+        .isEqualTo(HttpTestClient.json(first).get("attemptId"));
+    assertThat(signals(live)).isEqualTo(1);
+  }
+
+  @Test
+  void 다른_cells를_다시_보내면_409다() {
+    Live live = deliveredWord(List.of(8));
+    submit(live, this.learner, "[8]");
+
+    assertError(submit(live, this.learner, "[9]"), 409, "LECTURE_PROBLEM_ALREADY_ANSWERED");
+  }
+
+  @Test
+  void 제출하면_학습자_Snapshot에_submitted와_myResult가_담긴다() {
+    Live live = deliveredWord(List.of(8));
+    Object attemptId = HttpTestClient.json(submit(live, this.learner, "[9]")).get("attemptId");
+
+    Map<String, Object> view =
+        HttpTestClient.json(send("GET", "/lectures/" + live.lectureId(), null, this.learner));
+
+    assertThat(map(view.get("currentProblem"))).containsEntry("submitted", true);
+    assertThat(map(view.get("myResult")))
+        .containsEntry("attemptId", attemptId)
+        .containsEntry("isCorrect", false);
+  }
+
+  @Test
+  void 현재_문제가_아니면_409다() {
+    Live live = deliveredWord(List.of(8));
+    Problem next = seedWord(List.of(1));
+    register(live.lectureId(), next.getTargetText(), this.instructor);
+    deliver(live.lectureId(), next.getId(), this.instructor);
+
+    assertError(submit(live, this.learner, "[8]"), 409, "LECTURE_PROBLEM_NOT_CURRENT");
+  }
+
+  @Test
+  void 퇴장한_학습자는_403이다() {
+    Live live = deliveredWord(List.of(8));
+    Participant participant =
+        this.participantRepository
+            .findById(ParticipantId.of(Long.parseLong(live.lectureId()), this.learner.userId()))
+            .orElseThrow();
+    participant.leave(LocalDateTime.now(ZoneOffset.UTC));
+    this.participantRepository.save(participant);
+
+    assertError(submit(live, this.learner, "[8]"), 403, "LECTURE_PARTICIPATION_REQUIRED");
+  }
+
+  @Test
+  void 종료된_수업에는_제출할_수_없다() {
+    Live live = deliveredWord(List.of(8));
+    changeStatus(live.lectureId(), "CLOSED");
+
+    assertError(submit(live, this.learner, "[8]"), 409, "INVALID_LECTURE_STATE");
+  }
+
+  @Test
+  void 강사는_답안을_낼_수_없다() {
+    Live live = deliveredWord(List.of(8));
+
+    assertError(submit(live, this.instructor, "[8]"), 403, "LEARNER_ACCESS_REQUIRED");
+  }
+
+  @Test
+  void 참여하지_않은_학습자에게는_수업을_숨긴다() {
+    Live live = deliveredWord(List.of(8));
+
+    assertError(submit(live, this.otherLearner, "[8]"), 404, "LECTURE_NOT_FOUND");
+  }
+
+  @Test
+  void 비었거나_범위를_벗어나거나_12칸을_넘는_cells는_422다() {
+    Live live = deliveredWord(List.of(8));
+
+    assertError(submit(live, this.learner, "[]"), 422, "INVALID_ANSWER_CELLS");
+    assertError(submit(live, this.learner, "[64]"), 422, "INVALID_ANSWER_CELLS");
+    assertError(
+        submit(live, this.learner, "[1,1,1,1,1,1,1,1,1,1,1,1,1]"), 422, "INVALID_ANSWER_CELLS");
+  }
+
+  @Test
+  void Idempotency_Key가_없거나_UUID_v4가_아니면_400이다() {
+    Live live = deliveredWord(List.of(8));
+    String body = "{\"cells\":[8],\"durationMs\":0}";
+
+    assertError(submitRaw(live, this.learner, body), 400, "INVALID_REQUEST_PARAMETER");
+    assertError(
+        submitRaw(live, this.learner, body, "Idempotency-Key", "not-a-uuid"),
+        400,
+        "INVALID_REQUEST_PARAMETER");
+    assertError(
+        // RFC 4122 예시 UUID(v3)다. gitleaks가 고엔트로피 문자열로 오탐하므로 줄 단위로 눈감긴다(비밀값 아님).
+        submitRaw(
+            live,
+            this.learner,
+            body,
+            "Idempotency-Key",
+            "123e4567-e89b-12d3-a456-426614174000"), // gitleaks:allow
+        400,
+        "INVALID_REQUEST_PARAMETER");
+  }
+
+  @Test
+  void durationMs가_없거나_음수면_400이다() {
+    Live live = deliveredWord(List.of(8));
+
+    assertError(
+        submitRaw(
+            live,
+            this.learner,
+            "{\"cells\":[8],\"durationMs\":-1}",
+            "Idempotency-Key",
+            UUID.randomUUID().toString()),
+        400,
+        "INVALID_REQUEST_PARAMETER");
+    assertError(
+        submitRaw(
+            live, this.learner, "{\"cells\":[8]}", "Idempotency-Key", UUID.randomUUID().toString()),
+        400,
+        "INVALID_REQUEST_PARAMETER");
+  }
+
+  @Test
+  void 알림이_실패해도_제출은_201이다() {
+    Live live = deliveredWord(List.of(8));
+    this.gateway.failSignals = true;
+    try {
+      assertThat(submit(live, this.learner, "[8]").statusCode()).isEqualTo(201);
+    } finally {
+      this.gateway.failSignals = false;
+    }
   }
 }

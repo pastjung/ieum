@@ -25,6 +25,7 @@ import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import livekit.LivekitModels.DataPacket;
 import livekit.LivekitModels.ParticipantInfo;
 import livekit.LivekitModels.ParticipantPermission;
 import livekit.LivekitModels.Room;
@@ -249,6 +250,43 @@ class LiveKitRoomGatewayTest {
     given(roomClient.updateRoomMetadata(any(), any())).willReturn(failed);
 
     assertThatThrownBy(() -> speakingGateway.openRoom("lecture-42", 26578L))
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
+  }
+
+  // ---------- 제출 알림 (API 명세 8.5.2절) ----------
+
+  @SuppressWarnings("unchecked")
+  private void dataCall(Response<Void> response) throws IOException {
+    Call<Void> call = mock(Call.class);
+    given(call.execute()).willReturn(response);
+    given(roomClient.sendData(any(), any(), any(), any(), any(), any())).willReturn(call);
+  }
+
+  @Test
+  void 제출_알림은_강사_identity에게만_lecture_topic으로_보낸다() throws Exception {
+    dataCall(Response.<Void>success(null));
+
+    speakingGateway.notifyAnswerSubmitted("lecture-42", "user-7", 26578L);
+
+    ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
+    verify(roomClient)
+        .sendData(
+            eq("lecture-42"),
+            payload.capture(),
+            eq(DataPacket.Kind.RELIABLE),
+            eq(List.of()),
+            eq(List.of("user-7")),
+            eq("lecture"));
+    assertThat(new String(payload.getValue(), StandardCharsets.UTF_8))
+        .isEqualTo("{\"type\":\"ANSWER_SUBMITTED\",\"problemId\":\"26578\"}");
+  }
+
+  @Test
+  void 제출_알림이_실패하면_503을_던진다() throws Exception {
+    dataCall(Response.error(500, ResponseBody.create("", null)));
+
+    assertThatThrownBy(() -> speakingGateway.notifyAnswerSubmitted("lecture-42", "user-7", 1L))
         .extracting("errorCode")
         .isEqualTo(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
   }
