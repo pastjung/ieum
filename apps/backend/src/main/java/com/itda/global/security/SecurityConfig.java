@@ -119,6 +119,9 @@ public class SecurityConfig {
 
   private static final String LECTURE_PROBLEMS_PATH = "/lectures/{lectureId}/problems";
 
+  private static final String LECTURE_CURRENT_PROBLEM_PATH =
+      "/lectures/{lectureId}/current-problem";
+
   private static final String LECTURE_PARTICIPATIONS_PATH = "/lecture-participations";
 
   /**
@@ -173,6 +176,7 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(
                     HttpMethod.PUT, LECTURE_PARTICIPANT_SPEAKING_PATH),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, LECTURE_PROBLEMS_PATH),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, LECTURE_CURRENT_PROBLEM_PATH),
                 PathPatternRequestMatcher.pathPattern(
                     HttpMethod.POST, LECTURE_PARTICIPATIONS_PATH)))
         .addFilterBefore(

@@ -11,8 +11,13 @@ public interface LiveRoomGateway {
 
   IssuedMediaToken issueToken(MediaTokenRequest request);
 
-  /** 방을 만들고(이미 있으면 그대로) metadata를 OPEN으로 설정한다. 여러 번 불러도 결과가 같다. */
-  void openRoom(String roomName);
+  /**
+   * 방을 만들고(이미 있으면 그대로) metadata를 {@code {"status":"OPEN","currentProblemId":"<id>"}}로 설정한다. 현재 문제가
+   * 없으면 {@code currentProblemId}를 넣지 않는다. 여러 번 불러도 결과가 같다 (API 명세 8.5·8.5.2절).
+   *
+   * @param currentProblemId 현재 문제의 problems.id, 없으면 null
+   */
+  void openRoom(String roomName, Long currentProblemId);
 
   /** 방을 삭제한다. 이미 없으면 성공으로 본다. 참가자는 ROOM_DELETED 사유로 연결이 끊긴다. */
   void deleteRoom(String roomName);

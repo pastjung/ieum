@@ -214,4 +214,22 @@ class LectureServiceTest {
         .extracting("errorCode")
         .isEqualTo(ErrorCode.LECTURE_NOT_FOUND);
   }
+
+  @Test
+  void 시작하면_현재_문제를_방_metadata에_싣는다() {
+    Lecture lecture = lecture(7L);
+    given(problemQuery.instructor(lecture))
+        .willAnswer(
+            call ->
+                LectureSnapshot.ofInstructor(
+                    lecture,
+                    new com.itda.problem.service.LinkedProblem(
+                        26578L, "ㄱ", "초성 ㄱ", com.itda.problem.domain.Level.CONSONANT, List.of(8)),
+                    List.of()));
+
+    service.changeStatus(
+        new AuthenticatedUser(7L, UserRole.INSTRUCTOR), LECTURE_ID, LectureStatus.OPEN);
+
+    assertThat(gateway.openedCurrentProblemIds).containsExactly(26578L);
+  }
 }

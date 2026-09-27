@@ -11,6 +11,10 @@ import java.util.List;
 class RecordingLiveRoomGateway implements LiveRoomGateway {
 
   final List<String> openedRooms = new ArrayList<>();
+
+  /** openRoom마다 받은 현재 문제 id(없으면 null). openedRooms와 같은 순서다. */
+  final List<Long> openedCurrentProblemIds = new ArrayList<>();
+
   final List<String> deletedRooms = new ArrayList<>();
   final List<MediaTokenRequest> issuedRequests = new ArrayList<>();
   final List<SpeakingChange> speakingChanges = new ArrayList<>();
@@ -26,9 +30,10 @@ class RecordingLiveRoomGateway implements LiveRoomGateway {
   }
 
   @Override
-  public void openRoom(String roomName) {
+  public void openRoom(String roomName, Long currentProblemId) {
     failIfRequested();
     openedRooms.add(roomName);
+    openedCurrentProblemIds.add(currentProblemId);
   }
 
   @Override

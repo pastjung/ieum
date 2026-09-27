@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import livekit.LivekitModels.ParticipantInfo;
 import livekit.LivekitModels.ParticipantPermission;
+import livekit.LivekitModels.Room;
 import livekit.LivekitModels.TrackSource;
 import okhttp3.ResponseBody;
 import org.junit.jupiter.api.Test;
@@ -203,6 +204,51 @@ class LiveKitRoomGatewayTest {
     given(roomClient.updateParticipant(any(), any(), any(), any(), any(), any())).willReturn(call);
 
     assertThatThrownBy(() -> speakingGateway.setSpeaking("lecture-42", "user-8", false))
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
+  }
+
+  // ---------- 방 metadata (API 명세 8.5.2절) ----------
+
+  @SuppressWarnings("unchecked")
+  private static Call<Room> roomCall(Response<Room> response) throws IOException {
+    Call<Room> call = mock(Call.class);
+    given(call.execute()).willReturn(response);
+    return call;
+  }
+
+  @Test
+  void 현재_문제가_있으면_방_metadata에_문제_id를_싣는다() throws Exception {
+    Call<Room> ok = roomCall(Response.success(Room.getDefaultInstance()));
+    given(roomClient.createRoom(any(), any(), any(), any(), any())).willReturn(ok);
+    given(roomClient.updateRoomMetadata(any(), any())).willReturn(ok);
+
+    speakingGateway.openRoom("lecture-42", 26578L);
+
+    String expected = "{\"status\":\"OPEN\",\"currentProblemId\":\"26578\"}";
+    verify(roomClient).createRoom(eq("lecture-42"), eq(600), isNull(), isNull(), eq(expected));
+    verify(roomClient).updateRoomMetadata("lecture-42", expected);
+  }
+
+  @Test
+  void 현재_문제가_없으면_status만_싣는다() throws Exception {
+    Call<Room> ok = roomCall(Response.success(Room.getDefaultInstance()));
+    given(roomClient.createRoom(any(), any(), any(), any(), any())).willReturn(ok);
+    given(roomClient.updateRoomMetadata(any(), any())).willReturn(ok);
+
+    speakingGateway.openRoom("lecture-42", null);
+
+    verify(roomClient).updateRoomMetadata("lecture-42", "{\"status\":\"OPEN\"}");
+  }
+
+  @Test
+  void metadata_쓰기가_실패하면_503이다() throws Exception {
+    Call<Room> created = roomCall(Response.success(Room.getDefaultInstance()));
+    Call<Room> failed = roomCall(Response.error(500, ResponseBody.create("", null)));
+    given(roomClient.createRoom(any(), any(), any(), any(), any())).willReturn(created);
+    given(roomClient.updateRoomMetadata(any(), any())).willReturn(failed);
+
+    assertThatThrownBy(() -> speakingGateway.openRoom("lecture-42", 26578L))
         .extracting("errorCode")
         .isEqualTo(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
   }

@@ -285,4 +285,139 @@ class LectureProblemApiIntegrationTest {
 
     assertThat(view).containsEntry("currentProblem", null).containsEntry("myResult", null);
   }
+
+  // ---------- 출제 (API 명세 8.2·8.5.2절) ----------
+
+  private record Live(String lectureId, long problemId) {}
+
+  /** 학습자가 입장하고 강사가 시작한 수업에 낱말 문제 하나를 연결한다. 출제는 하지 않는다. */
+  private Live openLectureWithLinkedWord(List<Integer> cells) {
+    String lectureId = createLecture();
+    join(lectureId, this.learner);
+    changeStatus(lectureId, "OPEN");
+    Problem word = seedWord(cells);
+    assertThat(register(lectureId, word.getTargetText(), this.instructor).statusCode())
+        .isEqualTo(201);
+    return new Live(lectureId, word.getId());
+  }
+
+  private HttpResponse<String> deliver(String lectureId, long problemId, Account who) {
+    return send(
+        "PUT",
+        "/lectures/" + lectureId + "/current-problem",
+        "{\"problemId\":\"" + problemId + "\"}",
+        who);
+  }
+
+  private long metadataWrites(Live live) {
+    String entry = "lecture-" + live.lectureId() + "/" + live.problemId();
+    return this.gateway.openedMetadata.stream().filter(entry::equals).count();
+  }
+
+  @Test
+  void 강사가_출제하면_현재_문제가_바뀌고_방_metadata에_실린다() {
+    Live live = openLectureWithLinkedWord(List.of(8, 3));
+
+    HttpResponse<String> delivered = deliver(live.lectureId(), live.problemId(), this.instructor);
+
+    assertThat(delivered.statusCode()).isEqualTo(200);
+    assertThat(map(HttpTestClient.json(delivered).get("currentProblem")))
+        .containsEntry("problemId", String.valueOf(live.problemId()))
+        .containsEntry("expectedPattern", List.of(8, 3));
+    assertThat(metadataWrites(live)).isEqualTo(1);
+
+    Map<String, Object> instructorView =
+        HttpTestClient.json(send("GET", "/lectures/" + live.lectureId(), null, this.instructor));
+    assertThat(map(instructorView.get("currentProblem")))
+        .containsEntry("problemId", String.valueOf(live.problemId()))
+        .containsEntry("expectedPattern", List.of(8, 3));
+
+    Map<String, Object> learnerView =
+        HttpTestClient.json(send("GET", "/lectures/" + live.lectureId(), null, this.learner));
+    Map<String, Object> current = map(learnerView.get("currentProblem"));
+    assertThat(current)
+        .containsEntry("problemId", String.valueOf(live.problemId()))
+        .containsEntry("problemType", "WORD")
+        .containsEntry("cellCount", 2)
+        .containsEntry("submitted", false)
+        .doesNotContainKey("expectedPattern");
+    assertThat(learnerView).containsEntry("myResult", null);
+  }
+
+  @Test
+  void 같은_문제를_다시_출제해도_200이고_metadata를_다시_쓴다() {
+    Live live = openLectureWithLinkedWord(List.of(1));
+
+    assertThat(deliver(live.lectureId(), live.problemId(), this.instructor).statusCode())
+        .isEqualTo(200);
+    assertThat(deliver(live.lectureId(), live.problemId(), this.instructor).statusCode())
+        .isEqualTo(200);
+
+    assertThat(metadataWrites(live)).isEqualTo(2);
+  }
+
+  @Test
+  void 연결하지_않은_문제는_출제할_수_없다() {
+    Live live = openLectureWithLinkedWord(List.of(1));
+
+    assertError(
+        deliver(live.lectureId(), seedWord(List.of(2)).getId(), this.instructor),
+        404,
+        "PROBLEM_NOT_FOUND");
+  }
+
+  @Test
+  void 시작_전_수업에서는_출제할_수_없다() {
+    String lectureId = createLecture();
+    Problem word = seedWord(List.of(1));
+    register(lectureId, word.getTargetText(), this.instructor);
+
+    assertError(deliver(lectureId, word.getId(), this.instructor), 409, "INVALID_LECTURE_STATE");
+  }
+
+  @Test
+  void 담당이_아닌_강사에게는_출제_대상_수업을_숨긴다() {
+    Live live = openLectureWithLinkedWord(List.of(1));
+
+    assertError(
+        deliver(live.lectureId(), live.problemId(), accountFor(UserRole.INSTRUCTOR)),
+        404,
+        "LECTURE_NOT_FOUND");
+  }
+
+  @Test
+  void metadata_쓰기가_실패하면_503이지만_출제는_저장되고_다시_누르면_복구된다() {
+    Live live = openLectureWithLinkedWord(List.of(1));
+    this.gateway.failRoomOperations = true;
+    try {
+      assertError(
+          deliver(live.lectureId(), live.problemId(), this.instructor),
+          503,
+          "MEDIA_SERVER_UNAVAILABLE");
+    } finally {
+      this.gateway.failRoomOperations = false;
+    }
+
+    Map<String, Object> view =
+        HttpTestClient.json(send("GET", "/lectures/" + live.lectureId(), null, this.instructor));
+    assertThat(map(view.get("currentProblem")))
+        .containsEntry("problemId", String.valueOf(live.problemId()));
+
+    assertThat(deliver(live.lectureId(), live.problemId(), this.instructor).statusCode())
+        .isEqualTo(200);
+    assertThat(metadataWrites(live)).isEqualTo(1);
+  }
+
+  @Test
+  void 강사가_음성_토큰을_받으면_현재_문제를_metadata에_다시_싣는다() {
+    Live live = openLectureWithLinkedWord(List.of(1));
+    deliver(live.lectureId(), live.problemId(), this.instructor);
+
+    assertThat(
+            send("POST", "/lectures/" + live.lectureId() + "/media-tokens", null, this.instructor)
+                .statusCode())
+        .isEqualTo(201);
+
+    assertThat(metadataWrites(live)).isEqualTo(2);
+  }
 }

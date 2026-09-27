@@ -39,8 +39,6 @@ public class LiveKitRoomGateway implements LiveRoomGateway {
    */
   private static final int EMPTY_TIMEOUT_SECONDS = 600;
 
-  static final String OPEN_METADATA = "{\"status\":\"OPEN\"}";
-
   private static final int NOT_FOUND = 404;
 
   /** 참가자 속성 규약 (API 명세 8.5.1절). 웹·앱이 같은 키·값을 읽는다. */
@@ -91,15 +89,22 @@ public class LiveKitRoomGateway implements LiveRoomGateway {
   }
 
   @Override
-  public void openRoom(String roomName) {
+  public void openRoom(String roomName, Long currentProblemId) {
+    String metadata = openMetadata(currentProblemId);
     // 학습자가 SCHEDULED에서 먼저 접속하면 LiveKit이 metadata 없는 방을 자동 생성해 둔다.
     // 그 경우 createRoom은 기존 방을 돌려줄 뿐 metadata를 바꾸지 않으므로 갱신을 항상 함께 부른다.
     execute(
-        roomServiceClient.createRoom(roomName, EMPTY_TIMEOUT_SECONDS, null, null, OPEN_METADATA),
+        roomServiceClient.createRoom(roomName, EMPTY_TIMEOUT_SECONDS, null, null, metadata),
         "createRoom",
         false);
-    execute(
-        roomServiceClient.updateRoomMetadata(roomName, OPEN_METADATA), "updateRoomMetadata", false);
+    execute(roomServiceClient.updateRoomMetadata(roomName, metadata), "updateRoomMetadata", false);
+  }
+
+  /** 방 metadata 규약 (API 명세 8.5.2절). id는 숫자라 JSON 이스케이프가 필요 없다. 현재 문제가 없으면 키를 넣지 않는다. */
+  static String openMetadata(Long currentProblemId) {
+    return currentProblemId == null
+        ? "{\"status\":\"OPEN\"}"
+        : "{\"status\":\"OPEN\",\"currentProblemId\":\"" + currentProblemId + "\"}";
   }
 
   @Override

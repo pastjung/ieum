@@ -2,6 +2,8 @@ package com.itda.lecture.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.itda.global.error.BusinessException;
+import com.itda.global.error.ErrorCode;
 import com.itda.lecture.media.LiveRoomGateway;
 import com.itda.support.web.HttpTestClient;
 import com.itda.support.web.WebApiTest;
@@ -364,6 +366,13 @@ class LectureAuthenticatedApiIntegrationTest {
   static class FakeLiveRoomGateway implements LiveRoomGateway {
 
     final List<String> openedRooms = new CopyOnWriteArrayList<>();
+
+    /** {@code "{room}/{currentProblemId}"} — 현재 문제가 없으면 {@code "null"}. */
+    final List<String> openedMetadata = new CopyOnWriteArrayList<>();
+
+    /** true면 방 조작이 503으로 실패한다. context를 공유하므로 쓴 테스트가 finally에서 되돌린다. */
+    volatile boolean failRoomOperations;
+
     final List<String> deletedRooms = new CopyOnWriteArrayList<>();
 
     /** {@code "{room}/{identity}/{allowed}"}. 같은 context를 여러 테스트가 공유하므로 고유한 수업 ID로 찾는다. */
@@ -376,8 +385,12 @@ class LectureAuthenticatedApiIntegrationTest {
     }
 
     @Override
-    public void openRoom(String roomName) {
+    public void openRoom(String roomName, Long currentProblemId) {
+      if (this.failRoomOperations) {
+        throw new BusinessException(ErrorCode.MEDIA_SERVER_UNAVAILABLE);
+      }
       this.openedRooms.add(roomName);
+      this.openedMetadata.add(roomName + "/" + currentProblemId);
     }
 
     @Override

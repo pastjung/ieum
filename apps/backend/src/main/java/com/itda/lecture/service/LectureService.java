@@ -118,7 +118,8 @@ public class LectureService {
             tx -> problemQuery.instructor(transition(user, lectureId, target)));
     String room = LectureRoom.nameOf(lectureId);
     if (target == LectureStatus.OPEN) {
-      liveRoomGateway.openRoom(room);
+      // 같은 OPEN 재요청으로 방을 복구할 때 현재 문제도 되살린다 (API 명세 8.5.2절).
+      liveRoomGateway.openRoom(room, snapshot.currentProblemId());
     } else {
       liveRoomGateway.deleteRoom(room);
     }
