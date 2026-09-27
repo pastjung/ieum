@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -88,6 +90,21 @@ public class GlobalExceptionHandler {
       return ErrorHttpResponseFactory.create(request, ErrorCode.INVALID_REQUEST_PARAMETER);
     }
     return ErrorHttpResponseFactory.withoutBody(HttpStatusCode.valueOf(e.getErrorCode()));
+  }
+
+  /**
+   * multipart 한도(파일 10MB, API 명세 12절) 초과. 413은 승인된 공통 code가 없으므로 상태만 유지하고 body를 비운다 (api.md 「오류 상태
+   * 보존과 body 생략」). 처리하지 않으면 마지막 처리기가 500으로 덮는다.
+   */
+  @ExceptionHandler(MaxUploadSizeExceededException.class)
+  public ResponseEntity<ErrorResponse> handleUploadTooLarge() {
+    return ErrorHttpResponseFactory.withoutBody(HttpStatus.CONTENT_TOO_LARGE);
+  }
+
+  /** multipart 본문을 해석하지 못했다(boundary 없음·깨진 파트). 요청 파라미터 파싱 실패와 같은 400이다. */
+  @ExceptionHandler(MultipartException.class)
+  public ResponseEntity<ErrorResponse> handleUnreadableMultipart(HttpServletRequest request) {
+    return ErrorHttpResponseFactory.create(request, ErrorCode.INVALID_REQUEST_PARAMETER);
   }
 
   @ExceptionHandler(HttpMediaTypeNotSupportedException.class)

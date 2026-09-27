@@ -88,6 +88,15 @@ public enum ErrorCode {
   INVALID_ANSWER_CELLS(HttpStatus.UNPROCESSABLE_CONTENT, "답안 점자 칸을 확인해 주세요."),
   MEDIA_SERVER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "음성 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."),
 
+  // voice (docs/product/api-spec.md 12절)
+  /** {@code CARTESIA_API_KEY} 미설정 또는 사용량 저장소 장애. 앱은 "목소리 기능을 쓸 수 없어요" 안내로 바꾼다. */
+  VOICE_SYNTHESIS_UNAVAILABLE(
+      HttpStatus.SERVICE_UNAVAILABLE, "목소리 기능을 지금 쓸 수 없어요. 잠시 후 다시 시도해 주세요."),
+  /** 학습자별 1분 30회(두 음성 API 합산)를 넘었다. */
+  VOICE_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많아요. 잠시 후 다시 시도해 주세요."),
+  /** Cartesia 오류·시간 초과. Cartesia 응답 원문은 message에 넣지 않는다. */
+  VOICE_SYNTHESIS_FAILED(HttpStatus.BAD_GATEWAY, "목소리를 만들지 못했어요. 잠시 후 다시 시도해 주세요."),
+
   // braille
   PATTERN_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "패턴 값이 허용 범위(0~63)를 벗어났습니다."),
 

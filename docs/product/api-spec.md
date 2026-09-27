@@ -1,14 +1,14 @@
 # I:EUM API 명세서 V2
 
-> 갱신일: 2026-09-09  
+> 갱신일: 2026-09-27  
 > 상태: 현행 MVP 기준 · 외부 연동·운영 세부는 후속 계약
 > 기준: [기능 V2](./feature-spec.md), [ERD V2](./erd.md) · 설계 결정 기록은 로컬 별도 참고 자료로 보관한다.
 
 ## 1. 이 문서의 확정 범위
 
-이 문서는 계정·개인 학습·문제·수업의 HTTP 요청·응답·권한·오류·멱등 계약을 정의한다. 공개 HTTP는 /api/v1, 수업 알림은 /ws/v1을 사용한다. AI의 두 내부 HTTP API도 /api/v1이지만 외부 Backend와 호스트·리스너를 분리한다. 문서 버전 V2는 URL 버전 변경을 뜻하지 않는다.
+이 문서는 계정·개인 학습·문제·수업·음성 합성의 HTTP 요청·응답·권한·오류·멱등 계약을 정의한다. 공개 HTTP는 /api/v1, 수업 알림은 /ws/v1을 사용한다. AI의 두 내부 HTTP API도 /api/v1이지만 외부 Backend와 호스트·리스너를 분리한다. 문서 버전 V2는 URL 버전 변경을 뜻하지 않는다.
 
-개인 학습 6개, 계정·인증 10개, 문제·기준 정보 5개, 수업 12개의 공개 HTTP와 2개의 AI 내부 HTTP 계약을 다룬다. A-01~A-22는 업무 추적 번호이므로 endpoint 개수와 다르다. OpenVidu의 버전 의존 접속 API와 BLE 통신 상수는 후속 계약이며 임의 경로·필드를 만들지 않는다.
+개인 학습 6개, 계정·인증 10개, 문제·기준 정보 5개, 수업 12개, 음성 합성 2개의 공개 HTTP와 2개의 AI 내부 HTTP 계약을 다룬다. A-01~A-22는 업무 추적 번호이므로 endpoint 개수와 다르다. OpenVidu의 버전 의존 접속 API와 BLE 통신 상수는 후속 계약이며 임의 경로·필드를 만들지 않는다.
 
 ## 2. 저장소 문서에 맞춘 공통 규칙
 
@@ -1315,3 +1315,33 @@ contentMode는 배정 구성에서 파생하는 기존 응답이다. 기본 문�
 각 endpoint의 정상·실패·타인 권한·멱등 재전송·상태 경쟁을 검증한다. 개인 세션 생성/최초 수준 설정, 답안/Cell/요소 평가, 완료 분석은 정해진 트랜잭션 경계를 지킨다. 수업 답안·변경은 HTTP, WebSocket은 알림 전용이다. 분석 대기·수업 연결 유실·기기 오류에서 확정 데이터를 복원하고 부분 성공을 정상으로 표시하지 않는다.
 
 모든 BIGINT ID는 10진수 문자열, API 필드는 camelCase, DB 컬럼·배정 JSON은 snake_case로 구분한다. 상세 컬럼 대응은 [ERD](./erd.md), 기능 식별자는 [기능 명세](./feature-spec.md), 사용자 복구 흐름은 [Flow](./user-flow.md)를 함께 검수한다.
+
+## 12. 음성 합성 대리 호출
+
+학습자 앱의 "내 목소리"는 Cartesia 음성 복제·합성을 쓴다. Cartesia API 키를 앱(APK)에 넣지 않기 위해 Backend가 대신 호출한다. Backend는 녹음·voiceId·문장·합성 결과를 저장하지 않는다 — voiceId와 합성 결과 캐시는 앱이 보관한다.
+
+| method·path | 성공 | 권한·동작 |
+| --- | --- | --- |
+| `POST /api/v1/voice/clones` | 201 | LEARNER. `multipart/form-data`: `clip`(WAV 파일, 필수, 최대 10MB), `name`(선택, 앞뒤 공백 제거 후 최대 50자, 없거나 비면 `내 목소리`). Cartesia 목소리 복제 결과를 `{"voiceId":"..."}` 로 돌려준다 |
+| `POST /api/v1/voice/speech` | 200 | LEARNER. JSON `{"voiceId":"...","text":"..."}`. `voiceId` 1~100자, `text` 앞뒤 공백 제거 후 1~300자(제거한 문장을 합성한다). body는 MP3 바이트, `Content-Type: audio/mpeg` |
+
+- 판정 순서: 인증(401) → 역할(403) → 키 설정(503) → 입력(400) → 사용량(429) → Cartesia 호출(502).
+- 사용량: 학습자별 UTC 분(epoch minute) 단위 30회, 두 API가 한도를 공유한다. Redis 키 `voice:rate:{userId}:{epochMinute}`, TTL 120초. 입력 오류로 거절한 요청은 세지 않고, Cartesia 호출이 실패한 요청은 센다.
+- 설정: `CARTESIA_API_KEY` 는 Backend 설정에만 둔다. 비어 있어도 Backend는 기동하며 두 API가 503을 돌려준다.
+- Cartesia 호출 제한 시간: 복제 60초, 합성 20초. 앱의 요청 제한 시간은 이보다 길어야 한다.
+- Cartesia의 오류 응답·예외 원문은 응답·로그에 넣지 않는다. 로그에는 호출 경로와 HTTP 상태만 남긴다.
+- `voiceId` 는 소유자와 묶이지 않는다 — Backend는 이를 저장하지 않고, Cartesia가 발급하는 예측 불가능한 문자열이므로 다른 학습자의 값을 넣어도 서버가 소유권을 확인하지 않는다.
+
+| HTTP | code | 조건 |
+| --- | --- | --- |
+| 400 | INVALID_REQUEST_PARAMETER | `clip` 없음·빈 파일·WAV 아님, `name` 50자 초과, `voiceId`·`text` 길이 위반, multipart 본문 해석 실패 |
+| 400 | MALFORMED_REQUEST_BODY | `speech` 의 JSON 본문이 문법적으로 깨짐(공통 처리기 — 요청 DTO로 읽지 못함) |
+| 401 | UNAUTHORIZED | 인증되지 않음·유효하지 않은 Access JWT |
+| 403 | LEARNER_ACCESS_REQUIRED | 요청자가 LEARNER가 아님 |
+| 413 | (body 없음) | `clip` 10MB 초과 — 공통 code가 없는 상태이므로 상태만 유지한다 (2.2절) |
+| 415 | UNSUPPORTED_CONTENT_TYPE | 잘못된 `Content-Type`(`clones` 에 `multipart/form-data` 가 아닌 요청, `speech` 에 `application/json` 이 아닌 요청) |
+| 429 | VOICE_RATE_LIMITED | 이번 분의 사용량 30회를 넘음 |
+| 502 | VOICE_SYNTHESIS_FAILED | Cartesia 오류 응답·시간 초과·연결 실패·빈 결과 |
+| 503 | VOICE_SYNTHESIS_UNAVAILABLE | `CARTESIA_API_KEY` 미설정, 사용량 저장소(Redis) 장애 |
+
+413·415·`MALFORMED_REQUEST_BODY`·multipart 해석 실패는 프레임워크(Tomcat·Spring MVC)가 컨트롤러에 닿기 전에 판정하므로, 서비스의 역할(403) 판정보다 먼저 응답된다.
